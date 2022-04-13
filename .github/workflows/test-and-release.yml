@@ -91,9 +91,9 @@ jobs:
           - os: macos-latest
             platform: darwin
             target: x86_64-apple-darwin
-          - os: ubuntu-latest
-            platform: linux
-            target: aarch64-unknown-linux-musl
+          # - os: ubuntu-latest
+          #   platform: linux
+          #   target: aarch64-unknown-linux-musl
           - os: macos-latest
             platform: darwin
             target: aarch64-apple-darwin
