@@ -4,6 +4,7 @@ pub mod plugin;
 pub mod vm {
     tonic::include_proto!("vm");
 }
+#[allow(unused_imports)]
 use vm::vm_server::Vm;
 
 pub mod metrics {

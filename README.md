@@ -1,5 +1,5 @@
 
-![Github Actions](https://github.com/gyuho/mini-kvvm-rs/actions/workflows/test-and-release.yml/badge.svg)
+![Github Actions](https://github.com/ava-labs/mini-kvvm-rs/actions/workflows/test-and-release.yml/badge.svg)
 
 # mini-kvvm-rs
 
