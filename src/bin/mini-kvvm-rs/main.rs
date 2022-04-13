@@ -1,5 +1,9 @@
+use std::io;
+
 use clap::{crate_version, Arg, Command};
 use log::info;
+
+use mini_kvvm_rs::genesis;
 
 pub const APP_NAME: &str = "mini-kvvm-rs";
 
@@ -19,6 +23,7 @@ fn main() {
                 .allow_invalid_utf8(false)
                 .default_value("info"),
         )
+        .subcommands(vec![command_genesis()])
         .get_matches();
 
     let log_level = matches.value_of("LOG_LEVEL").unwrap_or("info").to_string();
@@ -28,5 +33,58 @@ fn main() {
         env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, log_level),
     );
 
+    if let Some(("genesis", sub_matches)) = matches.subcommand() {
+        let author = sub_matches.value_of("AUTHOR").unwrap_or("");
+        let msg = sub_matches.value_of("WELCOME_MESSAGE").unwrap_or("");
+        let p = sub_matches.value_of("GENESIS_FILE_PATH").unwrap_or("");
+        execute_genesis(author, msg, p).unwrap();
+        return;
+    }
+
     info!("starting mini-kvvm-rs");
+    // TODO
+}
+
+pub fn command_genesis() -> Command<'static> {
+    Command::new("genesis")
+        .about("Generates the genesis file")
+        .arg(
+            Arg::new("AUTHOR")
+                .long("author")
+                .short('a')
+                .help("author of the genesis")
+                .required(true)
+                .takes_value(true)
+                .allow_invalid_utf8(false)
+                .default_value("subnet creator"),
+        )
+        .arg(
+            Arg::new("WELCOME_MESSAGE")
+                .long("welcome-message")
+                .short('m')
+                .help("message field in genesis")
+                .required(true)
+                .takes_value(true)
+                .allow_invalid_utf8(false)
+                .default_value("hi"),
+        )
+        .arg(
+            Arg::new("GENESIS_FILE_PATH")
+                .long("genesis-file-path")
+                .short('p')
+                .help("file path to save genesis file")
+                .required(true)
+                .takes_value(true)
+                .allow_invalid_utf8(false),
+        )
+}
+
+pub fn execute_genesis(author: &str, msg: &str, p: &str) -> io::Result<()> {
+    let g = genesis::Genesis {
+        author: String::from(author),
+        welcome_message: String::from(msg),
+    };
+    g.sync(p)?;
+
+    Ok(())
 }
