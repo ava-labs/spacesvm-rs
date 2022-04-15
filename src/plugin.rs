@@ -52,6 +52,8 @@ where
     let (mut health_reporter, health_svc) = health_reporter();
     health_reporter.set_serving::<Plugin>().await;
 
+    // TODO: Add support for abstract unix sockets once supported by tonic.
+    // ref. https://github.com/hyperium/tonic/issues/966
     // avalanchego currently only supports plugins listening on IP address.
     let listener = TcpListener::bind("127.0.0.1:0").await?;
     let addr = listener.local_addr()?;
