@@ -1,12 +1,9 @@
-use std::{
-    io::{self, Error, ErrorKind},
-    path::Path,
-};
+use std::io::{self, Error, ErrorKind};
 
 use crate::vm::vm_server::{Vm, VmServer};
 use log::info;
-use tokio::{fs::create_dir_all, net::UnixListener};
-use tokio_stream::wrappers::UnixListenerStream;
+use tokio::net::TcpListener;
+use tokio_stream::wrappers::TcpListenerStream;
 use tonic::transport::{server::NamedService, Server};
 use tonic_health::server::health_reporter;
 
@@ -14,8 +11,6 @@ use tonic_health::server::health_reporter;
 pub const PROTOCOL_VERSION: u8 = 12;
 pub const MAGIC_COOKIE_KEY: &str = "VM_PLUGIN";
 pub const MAGIC_COOKIE_VALUE: &str = "dynamic";
-
-pub const UNIX_SOCKET_PATH: &str = "/var/run/mini-kvvm-rs.sock";
 
 /// ref. https://github.com/ava-labs/avalanchego/blob/v1.7.10/vms/rpcchainvm/vm.go
 #[derive(Debug)]
@@ -51,39 +46,28 @@ pub async fn serve<V>(vm: V, handshake_config: &HandshakeConfig) -> io::Result<(
 where
     V: Vm,
 {
-    create_dir_all(Path::new(UNIX_SOCKET_PATH).parent().unwrap())
-        .await
-        .map_err(|e| {
-            Error::new(
-                ErrorKind::Other,
-                format!("failed tokio::fs::create_dir_all '{}'", e),
-            )
-        })?;
-
     // "go-plugin requires the gRPC Health Checking Service to be registered on your server"
     // ref. https://github.com/hashicorp/go-plugin/blob/master/docs/guide-plugin-write-non-go.md
     // ref. https://github.com/hyperium/tonic/blob/v0.7.1/examples/src/health/server.rs
     let (mut health_reporter, health_svc) = health_reporter();
     health_reporter.set_serving::<Plugin>().await;
 
+    // TODO: Add support for abstract unix sockets once supported by tonic.
+    // ref. https://github.com/hyperium/tonic/issues/966
+    // avalanchego currently only supports plugins listening on IP address.
+    let listener = TcpListener::bind("127.0.0.1:0").await?;
+    let addr = listener.local_addr()?;
+    info!("plugin listening on address {:?}", addr);
+
     // ref. https://github.com/hashicorp/go-plugin/blob/master/docs/guide-plugin-write-non-go.md#4-output-handshake-information
-    let handshake_msg = format!(
-        "1|{}|unix|{}|grpc|",
-        handshake_config.protocol_version, UNIX_SOCKET_PATH,
-    );
+    let handshake_msg = format!("1|{}|tcp|{}|grpc|", handshake_config.protocol_version, addr);
     info!("handshake message: {}", handshake_msg);
     println!("{}", handshake_msg);
-
-    // ref. https://github.com/hyperium/tonic/blob/v0.7.1/examples/src/uds/server.rs
-    let listener = UnixListener::bind(UNIX_SOCKET_PATH)?;
-
-    let socket_addr = listener.local_addr()?;
-    info!("plugin listening on socket address {:?}", socket_addr);
 
     Server::builder()
         .add_service(health_svc)
         .add_service(VmServer::new(vm))
-        .serve_with_incoming(UnixListenerStream::new(listener))
+        .serve_with_incoming(TcpListenerStream::new(listener))
         .await
         .map_err(|e| {
             Error::new(

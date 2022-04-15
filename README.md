@@ -5,6 +5,10 @@
 
 Mini key-value store VM in Rust for Avalanche
 
+## Rust Version
+
+`mini-kvvm-rs` currently works on Rust `1.60+` and requires support for the `2021` edition.
+
 ```bash
 cd ${HOME}/go/src/github.com/ava-labs/subnet-cli
 go install -v .
