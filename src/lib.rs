@@ -1,10 +1,9 @@
 pub mod engine;
-pub mod error;
 pub mod genesis;
 pub mod kvvm;
 pub mod plugin;
 
-pub(crate) mod vm {
+pub mod vmpb {
     tonic::include_proto!("vm");
 }
 

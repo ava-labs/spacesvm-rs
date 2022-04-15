@@ -4,6 +4,8 @@ use clap::{crate_version, Arg, Command};
 use log::info;
 
 use mini_kvvm_rs::genesis;
+use mini_kvvm_rs::{engine::*, plugin};
+
 
 pub const APP_NAME: &str = "mini-kvvm-rs";
 
@@ -42,7 +44,10 @@ fn main() {
     }
 
     info!("starting mini-kvvm-rs");
-    // TODO
+    
+    // plugin::serve()
+    // .await?;
+    // Ok(())
 }
 
 pub fn command_genesis() -> Command<'static> {
