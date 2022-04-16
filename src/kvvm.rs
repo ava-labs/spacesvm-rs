@@ -102,7 +102,7 @@ impl VM for MiniKVVM {
             // server_addr: String::from("127.0.0.1:2379"),
             lock_options: 0,
         };
-        handler.insert(String::from("/cool"), s);
+        handler.insert(String::from("/rpc"), s);
         Ok(handler)
     }
 }
