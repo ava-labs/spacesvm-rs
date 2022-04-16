@@ -1,9 +1,9 @@
 #![allow(dead_code)]
 #![allow(unused_imports)]
 
-use std::io::{self, Error, ErrorKind};
 use avalanche_types::ids;
 use std::collections::HashMap;
+use std::io::{self, Error, ErrorKind};
 use std::sync::{Arc, Mutex};
 use std::time;
 
@@ -16,7 +16,6 @@ pub type MessageChannel = ();
 pub type Fx = ();
 pub type AppSender = ();
 pub type Block = ();
-
 
 /// snow.common.HTTPHandler
 /// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/snow/engine/common#HTTPHandler
@@ -61,11 +60,7 @@ pub trait AppHandler {
         request: &[u8],
     ) -> Result<(), Error>;
     fn app_request_failed(node_id: &ids::ShortId, request_id: u32) -> Result<(), Error>;
-    fn app_response(
-        node_id: &ids::ShortId,
-        request_id: u32,
-        response: &[u8],
-    ) -> Result<(), Error>;
+    fn app_response(node_id: &ids::ShortId, request_id: u32, response: &[u8]) -> Result<(), Error>;
     fn app_gossip(node_id: &ids::ShortId, msg: &[u8]) -> Result<(), Error>;
 }
 
@@ -110,9 +105,7 @@ pub struct VMServer<C> {
 
 impl<C: ChainVM> VMServer<C> {
     pub fn new(chain_vm: C) -> Self {
-        Self {
-            vm: chain_vm,
-        }
+        Self { vm: chain_vm }
     }
 }
 
