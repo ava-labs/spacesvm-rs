@@ -3,6 +3,9 @@ fn main() {
     tonic_build::configure()
         .build_server(true)
         .build_client(false)
-        .compile(&["proto/metrics.proto", "proto/vm.proto"], &["proto"])
+        .compile(
+            &["proto/metrics.proto", "proto/vm.proto", "proto/http.proto"],
+            &["proto"],
+        )
         .unwrap();
 }

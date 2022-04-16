@@ -18,6 +18,7 @@ path = "src/bin/mini-kvvm-rs/main.rs"
 avalanche-types = { git = "https://github.com/ava-labs/avalanche-ops", version = "0.0" } 
 clap = { version = "3.1.8", features = ["cargo", "derive"] }
 env_logger = "0.9.0"
+jsonrpc-http-server = "18.0"
 log = "0.4.16"
 prost = "0.10.0"
 prost-types = "0.10.0"

@@ -21,7 +21,7 @@ pub type Block = ();
 /// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/snow/engine/common#HTTPHandler
 pub struct HTTPHandler {
     pub lock_options: u32,
-    pub server_addr: String,
+    // pub server_addr: String,
     // TODO pub handler
 }
 
@@ -113,7 +113,7 @@ impl<C: ChainVM> VMServer<C> {
 impl<C: ChainVM + Send + Sync + 'static> vmpb::vm_server::Vm for VMServer<C> {
     async fn initialize(
         &self,
-        request: tonic::Request<vmpb::InitializeRequest>,
+        _request: tonic::Request<vmpb::InitializeRequest>,
     ) -> Result<tonic::Response<vmpb::InitializeResponse>, tonic::Status> {
         Err(tonic::Status::unimplemented("initialize"))
     }
@@ -135,8 +135,8 @@ impl<C: ChainVM + Send + Sync + 'static> vmpb::vm_server::Vm for VMServer<C> {
             let handler = vmpb::Handler {
                 prefix: prefix,
                 lock_options: h.lock_options,
-                server_addr: h.server_addr,
-                // TODO: add handler
+                // TODO: address of rpc server
+                server_addr: String::from("127.0.0.1:2379"),
             };
             resp.push(handler);
         }
@@ -154,14 +154,14 @@ impl<C: ChainVM + Send + Sync + 'static> vmpb::vm_server::Vm for VMServer<C> {
 
     async fn connected(
         &self,
-        request: tonic::Request<vmpb::ConnectedRequest>,
+        _request: tonic::Request<vmpb::ConnectedRequest>,
     ) -> Result<tonic::Response<()>, tonic::Status> {
         Err(tonic::Status::unimplemented("connected"))
     }
 
     async fn disconnected(
         &self,
-        request: tonic::Request<vmpb::DisconnectedRequest>,
+        _request: tonic::Request<vmpb::DisconnectedRequest>,
     ) -> Result<tonic::Response<()>, tonic::Status> {
         Err(tonic::Status::unimplemented("disconnected"))
     }
@@ -175,21 +175,21 @@ impl<C: ChainVM + Send + Sync + 'static> vmpb::vm_server::Vm for VMServer<C> {
 
     async fn parse_block(
         &self,
-        request: tonic::Request<vmpb::ParseBlockRequest>,
+        _request: tonic::Request<vmpb::ParseBlockRequest>,
     ) -> Result<tonic::Response<vmpb::ParseBlockResponse>, tonic::Status> {
         Err(tonic::Status::unimplemented("parse_block"))
     }
 
     async fn get_block(
         &self,
-        request: tonic::Request<vmpb::GetBlockRequest>,
+        _request: tonic::Request<vmpb::GetBlockRequest>,
     ) -> Result<tonic::Response<vmpb::GetBlockResponse>, tonic::Status> {
         Err(tonic::Status::unimplemented("get_block"))
     }
 
     async fn set_state(
         &self,
-        request: tonic::Request<vmpb::SetStateRequest>,
+        _request: tonic::Request<vmpb::SetStateRequest>,
     ) -> Result<tonic::Response<()>, tonic::Status> {
         Err(tonic::Status::unimplemented("set_state"))
     }
@@ -203,21 +203,21 @@ impl<C: ChainVM + Send + Sync + 'static> vmpb::vm_server::Vm for VMServer<C> {
 
     async fn get_block_id_at_height(
         &self,
-        request: tonic::Request<vmpb::GetBlockIdAtHeightRequest>,
+        _request: tonic::Request<vmpb::GetBlockIdAtHeightRequest>,
     ) -> Result<tonic::Response<vmpb::GetBlockIdAtHeightResponse>, tonic::Status> {
         Err(tonic::Status::unimplemented("get_block_id_at_height"))
     }
 
     async fn set_preference(
         &self,
-        request: tonic::Request<vmpb::SetPreferenceRequest>,
+        _request: tonic::Request<vmpb::SetPreferenceRequest>,
     ) -> Result<tonic::Response<()>, tonic::Status> {
         Err(tonic::Status::unimplemented("set_preference"))
     }
 
     async fn health(
         &self,
-        request: tonic::Request<(vmpb::HealthRequest)>,
+        _request: tonic::Request<(vmpb::HealthRequest)>,
     ) -> Result<tonic::Response<vmpb::HealthResponse>, tonic::Status> {
         Err(tonic::Status::unimplemented("health"))
     }
@@ -231,62 +231,62 @@ impl<C: ChainVM + Send + Sync + 'static> vmpb::vm_server::Vm for VMServer<C> {
 
     async fn app_request(
         &self,
-        request: tonic::Request<vmpb::AppRequestMsg>,
+        _request: tonic::Request<vmpb::AppRequestMsg>,
     ) -> Result<tonic::Response<()>, tonic::Status> {
         Err(tonic::Status::unimplemented("app_request"))
     }
 
     async fn app_request_failed(
         &self,
-        request: tonic::Request<vmpb::AppRequestFailedMsg>,
+        _request: tonic::Request<vmpb::AppRequestFailedMsg>,
     ) -> Result<tonic::Response<()>, tonic::Status> {
         Err(tonic::Status::unimplemented("app_request_failed"))
     }
 
     async fn app_response(
         &self,
-        request: tonic::Request<vmpb::AppResponseMsg>,
+        _request: tonic::Request<vmpb::AppResponseMsg>,
     ) -> Result<tonic::Response<()>, tonic::Status> {
         Err(tonic::Status::unimplemented("app_response"))
     }
 
     async fn app_gossip(
         &self,
-        request: tonic::Request<vmpb::AppGossipMsg>,
+        _request: tonic::Request<vmpb::AppGossipMsg>,
     ) -> Result<tonic::Response<()>, tonic::Status> {
         Err(tonic::Status::unimplemented("app_gossip"))
     }
 
     async fn block_verify(
         &self,
-        request: tonic::Request<vmpb::BlockVerifyRequest>,
+        _request: tonic::Request<vmpb::BlockVerifyRequest>,
     ) -> Result<tonic::Response<vmpb::BlockVerifyResponse>, tonic::Status> {
         Err(tonic::Status::unimplemented("block_verify"))
     }
 
     async fn block_accept(
         &self,
-        request: tonic::Request<vmpb::BlockAcceptRequest>,
+        _request: tonic::Request<vmpb::BlockAcceptRequest>,
     ) -> Result<tonic::Response<()>, tonic::Status> {
         Err(tonic::Status::unimplemented("block_accept"))
     }
     async fn block_reject(
         &self,
-        request: tonic::Request<vmpb::BlockRejectRequest>,
+        _request: tonic::Request<vmpb::BlockRejectRequest>,
     ) -> Result<tonic::Response<()>, tonic::Status> {
         Err(tonic::Status::unimplemented("block_reject"))
     }
 
     async fn get_ancestors(
         &self,
-        request: tonic::Request<vmpb::GetAncestorsRequest>,
+        _request: tonic::Request<vmpb::GetAncestorsRequest>,
     ) -> Result<tonic::Response<vmpb::GetAncestorsResponse>, tonic::Status> {
         Err(tonic::Status::unimplemented("get_ancestors"))
     }
 
     async fn batched_parse_block(
         &self,
-        request: tonic::Request<vmpb::BatchedParseBlockRequest>,
+        _request: tonic::Request<vmpb::BatchedParseBlockRequest>,
     ) -> Result<tonic::Response<vmpb::BatchedParseBlockResponse>, tonic::Status> {
         Err(tonic::Status::unimplemented("batched_parse_block"))
     }

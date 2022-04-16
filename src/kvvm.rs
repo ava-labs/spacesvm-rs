@@ -2,6 +2,8 @@
 #![allow(unused_imports)]
 
 use avalanche_types::ids;
+use jsonrpc_http_server::jsonrpc_core::{IoHandler, Params, Value};
+use jsonrpc_http_server::ServerBuilder;
 use std::collections::HashMap;
 use std::io::{self, Error, ErrorKind};
 use std::sync::{Arc, Mutex};
@@ -10,52 +12,52 @@ use std::time;
 use crate::engine::*;
 
 #[derive(Debug)]
-pub struct Handler {
-    db: Db,
-}
-
-#[derive(Debug, Clone)]
-struct Db {
-    shared: Arc<Shared>,
-}
-
-#[derive(Debug)]
-struct Shared {
-    state: Mutex<State>,
-}
-
-#[derive(Debug)]
-struct State {
+pub struct MiniKVVM {
     bootstrapped: bool,
 }
 
-pub struct MiniKVVM;
+impl MiniKVVM {
+    pub fn new() -> Self {
+        MiniKVVM {
+            bootstrapped: false,
+        }
+    }
+}
 
+// This VM doesn't (currently) have any app-specific messages
 impl AppHandler for MiniKVVM {
     fn app_request(
-        node_id: &ids::ShortId,
-        request_id: u32,
-        deadline: time::Instant,
-        request: &[u8],
+        _node_id: &ids::ShortId,
+        _request_id: u32,
+        _deadline: time::Instant,
+        _request: &[u8],
     ) -> Result<(), Error> {
         Ok(())
     }
-    fn app_request_failed(node_id: &ids::ShortId, request_id: u32) -> Result<(), Error> {
+
+    fn app_request_failed(_node_id: &ids::ShortId, _request_id: u32) -> Result<(), Error> {
         Ok(())
     }
-    fn app_response(node_id: &ids::ShortId, request_id: u32, response: &[u8]) -> Result<(), Error> {
+
+    fn app_response(
+        _node_id: &ids::ShortId,
+        _request_id: u32,
+        _response: &[u8],
+    ) -> Result<(), Error> {
         Ok(())
     }
-    fn app_gossip(node_id: &ids::ShortId, msg: &[u8]) -> Result<(), Error> {
+
+    fn app_gossip(_node_id: &ids::ShortId, _msg: &[u8]) -> Result<(), Error> {
         Ok(())
     }
 }
 
+// This VM doesn't implement Connector these methods are noop.
 impl Connector for MiniKVVM {
-    fn connected(id: &ids::ShortId) -> Result<(), Error> {
+    fn connected(_id: &ids::ShortId) -> Result<(), Error> {
         Ok(())
     }
-    fn disconnected(id: &ids::ShortId) -> Result<(), Error> {
+    fn disconnected(_id: &ids::ShortId) -> Result<(), Error> {
         Ok(())
     }
 }
@@ -97,7 +99,7 @@ impl VM for MiniKVVM {
     fn create_handlers() -> Result<HashMap<String, HTTPHandler>, Error> {
         let mut handler: HashMap<String, HTTPHandler> = HashMap::new();
         let s = HTTPHandler {
-            server_addr: String::from("127.0.0.1:2379"),
+            // server_addr: String::from("127.0.0.1:2379"),
             lock_options: 0,
         };
         handler.insert(String::from("/cool"), s);
@@ -127,4 +129,16 @@ impl ChainVM for MiniKVVM {
     fn last_accepted() -> Result<ids::Id, Error> {
         Ok(ids::Id::default())
     }
+}
+
+// TODO: remove this is just a test for rpc server
+pub fn new_test_handler() -> IoHandler {
+    let mut handler = IoHandler::default();
+    handler.add_sync_method("hello", |params: Params| {
+        match params.parse::<(String,)>() {
+            Ok((msg,)) => Ok(Value::String(format!("hello {}", msg))),
+            _ => Ok(Value::String("world".into())),
+        }
+    });
+    handler
 }
