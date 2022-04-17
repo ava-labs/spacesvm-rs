@@ -2,6 +2,7 @@
 #![allow(unused_imports)]
 
 use avalanche_types::ids;
+use jsonrpc_http_server::jsonrpc_core::IoHandler;
 use std::collections::HashMap;
 use std::io::{self, Error, ErrorKind};
 use std::sync::{Arc, Mutex};
@@ -27,8 +28,7 @@ pub type Block = ();
 /// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/snow/engine/common#HTTPHandler
 pub struct HTTPHandler {
     pub lock_options: u32,
-    // pub server_addr: String,
-    // TODO pub handler
+    pub handler: IoHandler,
 }
 
 /// health.Checkable
@@ -143,7 +143,7 @@ impl<C: ChainVM + Send + Sync + 'static> vmpb::vm_server::Vm for VMServer<C> {
             let server_addr = listener.local_addr().unwrap().to_string();
             tokio::spawn(async move {
                 Server::builder()
-                    .add_service(HttpServer::new(http::Server::new(kvvm::new_test_handler())))
+                    .add_service(HttpServer::new(http::Server::new(h.handler)))
                     .serve_with_incoming(TcpListenerStream::new(listener))
                     .await
                     .unwrap();

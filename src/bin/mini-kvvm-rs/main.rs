@@ -1,6 +1,6 @@
 use clap::{crate_version, Arg, Command};
 use log::info;
-use mini_kvvm_rs::{engine, genesis, http, kvvm, plugin};
+use mini_kvvm_rs::{engine, genesis, kvvm, plugin};
 use std::io;
 
 pub const APP_NAME: &str = "mini-kvvm-rs";
@@ -43,7 +43,6 @@ async fn main() -> io::Result<()> {
 
     plugin::serve(
         engine::VMServer::new(kvvm::MiniKVVM::new()),
-        http::Server::new(kvvm::new_test_handler()),
         &plugin::HandshakeConfig::default(),
     )
     .await?;

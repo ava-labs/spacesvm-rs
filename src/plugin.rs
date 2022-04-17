@@ -43,10 +43,9 @@ impl NamedService for Plugin {
     const NAME: &'static str = "plugin";
 }
 
-pub async fn serve<V, H>(vm: V, handler: H, handshake_config: &HandshakeConfig) -> io::Result<()>
+pub async fn serve<V>(vm: V, handshake_config: &HandshakeConfig) -> io::Result<()>
 where
     V: Vm,
-    H: Http,
 {
     // "go-plugin requires the gRPC Health Checking Service to be registered on your server"
     // ref. https://github.com/hashicorp/go-plugin/blob/master/docs/guide-plugin-write-non-go.md
@@ -69,7 +68,6 @@ where
     Server::builder()
         .add_service(health_svc)
         .add_service(VmServer::new(vm))
-        .add_service(HttpServer::new(handler))
         .serve_with_incoming(TcpListenerStream::new(listener))
         .await
         .map_err(|e| {

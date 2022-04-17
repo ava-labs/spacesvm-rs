@@ -98,9 +98,19 @@ impl VM for MiniKVVM {
     }
     fn create_handlers() -> Result<HashMap<String, HTTPHandler>, Error> {
         let mut handler: HashMap<String, HTTPHandler> = HashMap::new();
+        let mut io_handler = IoHandler::default();
+
+        // TODO: remove simple RPC test
+        io_handler.add_sync_method("hello", |params: Params| {
+            match params.parse::<(String,)>() {
+                Ok((msg,)) => Ok(Value::String(format!("hello {}", msg))),
+                _ => Ok(Value::String("world".into())),
+            }
+        });
+
         let s = HTTPHandler {
-            // server_addr: String::from("127.0.0.1:2379"),
             lock_options: 0,
+            handler: io_handler,
         };
         handler.insert(String::from("/rpc"), s);
         Ok(handler)
@@ -129,16 +139,4 @@ impl ChainVM for MiniKVVM {
     fn last_accepted() -> Result<ids::Id, Error> {
         Ok(ids::Id::default())
     }
-}
-
-// TODO: remove this is just a test for rpc server
-pub fn new_test_handler() -> IoHandler {
-    let mut handler = IoHandler::default();
-    handler.add_sync_method("hello", |params: Params| {
-        match params.parse::<(String,)>() {
-            Ok((msg,)) => Ok(Value::String(format!("hello {}", msg))),
-            _ => Ok(Value::String("world".into())),
-        }
-    });
-    handler
 }
