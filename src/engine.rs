@@ -6,7 +6,13 @@ use std::collections::HashMap;
 use std::io::{self, Error, ErrorKind};
 use std::sync::{Arc, Mutex};
 use std::time;
+use tokio_stream::wrappers::TcpListenerStream;
+use tonic::transport::Server;
 
+use crate::http;
+use crate::httppb::http_server::HttpServer;
+use crate::kvvm;
+use crate::util::Grpc;
 use crate::vmpb;
 
 // FIXME: dummies
@@ -129,19 +135,29 @@ impl<C: ChainVM + Send + Sync + 'static> vmpb::vm_server::Vm for VMServer<C> {
         &self,
         _request: tonic::Request<()>,
     ) -> Result<tonic::Response<vmpb::CreateHandlersResponse>, tonic::Status> {
-        let handlers = C::create_handlers().expect("failed to get handlers");
-        let mut resp = std::vec::Vec::new();
-        for (prefix, h) in handlers {
+        let chain_handlers = C::create_handlers().expect("failed to get handlers");
+        let mut handlers = std::vec::Vec::new();
+
+        for (prefix, h) in chain_handlers {
+            let listener = Grpc::new_listener().await;
+            let server_addr = listener.local_addr().unwrap().to_string();
+            tokio::spawn(async move {
+                Server::builder()
+                    .add_service(HttpServer::new(http::Server::new(kvvm::new_test_handler())))
+                    .serve_with_incoming(TcpListenerStream::new(listener))
+                    .await
+                    .unwrap();
+            });
+
             let handler = vmpb::Handler {
                 prefix: prefix,
                 lock_options: h.lock_options,
-                // TODO: address of rpc server
-                server_addr: String::from("127.0.0.1:2379"),
+                server_addr: server_addr,
             };
-            resp.push(handler);
+            handlers.push(handler);
         }
 
-        let resp = vmpb::CreateHandlersResponse { handlers: resp };
+        let resp = vmpb::CreateHandlersResponse { handlers: handlers };
         Ok(tonic::Response::new(resp))
     }
 
