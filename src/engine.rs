@@ -13,7 +13,7 @@ use tonic::transport::Server;
 use crate::http;
 use crate::httppb::http_server::HttpServer;
 use crate::kvvm;
-use crate::util::Grpc;
+use crate::util;
 use crate::vmpb;
 
 // FIXME: dummies
@@ -139,7 +139,7 @@ impl<C: ChainVM + Send + Sync + 'static> vmpb::vm_server::Vm for VMServer<C> {
         let mut handlers = std::vec::Vec::new();
 
         for (prefix, h) in chain_handlers {
-            let listener = Grpc::new_listener().await;
+            let listener = util::new_listener().await;
             let server_addr = listener.local_addr().unwrap().to_string();
             tokio::spawn(async move {
                 Server::builder()
