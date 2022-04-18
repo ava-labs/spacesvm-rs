@@ -2,8 +2,10 @@
 #![allow(unused_imports)]
 
 use avalanche_types::ids;
-use jsonrpc_http_server::jsonrpc_core::{IoHandler, Params, Value};
+use jsonrpc_derive::rpc;
+use jsonrpc_http_server::jsonrpc_core::{BoxFuture, IoHandler, Params, Result as RpcResult, Value};
 use jsonrpc_http_server::ServerBuilder;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{self, Error, ErrorKind};
 use std::sync::{Arc, Mutex};
@@ -100,13 +102,8 @@ impl VM for MiniKVVM {
         let mut handler: HashMap<String, HTTPHandler> = HashMap::new();
         let mut io_handler = IoHandler::default();
 
-        // TODO: remove simple RPC test
-        io_handler.add_sync_method("hello", |params: Params| {
-            match params.parse::<(String,)>() {
-                Ok((msg,)) => Ok(Value::String(format!("hello {}", msg))),
-                _ => Ok(Value::String("world".into())),
-            }
-        });
+        let ping = PingApiImp;
+        io_handler.extend_with(ping.to_delegate());
 
         let s = HTTPHandler {
             lock_options: 0,
@@ -138,5 +135,32 @@ impl ChainVM for MiniKVVM {
     }
     fn last_accepted() -> Result<ids::Id, Error> {
         Ok(ids::Id::default())
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PingReply {
+    success: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PingSuccess {
+    success: bool,
+}
+
+#[rpc(server)]
+pub trait PingApi {
+    #[rpc(name = "ping", alias("subnet.ping"))]
+    fn ping(&self) -> BoxFuture<RpcResult<PingReply>>;
+}
+
+pub struct PingApiImp;
+
+impl PingApi for PingApiImp {
+    fn ping(&self) -> BoxFuture<RpcResult<PingReply>> {
+        Box::pin(async move {
+            log::info!("Ping");
+            Ok(PingReply { success: true })
+        })
     }
 }

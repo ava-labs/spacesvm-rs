@@ -4,6 +4,7 @@ use tonic::{Request, Response, Status};
 
 use httppb::http_server::HttpServer;
 use jsonrpc_http_server::jsonrpc_core::{IoHandler, Params, Value};
+use log::info;
 
 use crate::httppb;
 
@@ -29,9 +30,6 @@ impl httppb::http_server::Http for Server {
     ) -> Result<Response<httppb::HandleSimpleHttpResponse>, Status> {
         let body = String::from_utf8(req.into_inner().body)
             .expect("failed to convert request body to utf8 string");
-
-        // TODO: debug
-        log::info!("http body: {}", body.as_str());
 
         let handler_resp = self
             .http_handler
