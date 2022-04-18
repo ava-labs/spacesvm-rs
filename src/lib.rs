@@ -3,6 +3,7 @@ pub mod genesis;
 pub mod http;
 pub mod kvvm;
 pub mod plugin;
+pub mod service;
 pub mod util;
 
 pub mod vmpb {
