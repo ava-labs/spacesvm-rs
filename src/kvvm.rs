@@ -91,8 +91,8 @@ impl VM for MiniKVVM {
         upgrade_bytes: &[u8],
         config_bytes: &[u8],
         to_engine: MessageChannel,
-        _fxs: &[Fx],
-        _app_sender: &AppSender,
+        fxs: &[Fx],
+        app_sender: &AppSender,
     ) -> Result<(), Error> {
         Ok(())
     }
