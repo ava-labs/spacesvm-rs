@@ -3,26 +3,37 @@
 
 use avalanche_types::ids;
 use jsonrpc_http_server::jsonrpc_core::IoHandler;
+use semver::Version;
 use std::collections::HashMap;
 use std::io::{self, Error, ErrorKind};
 use std::sync::{Arc, Mutex};
 use std::time;
 use tokio_stream::wrappers::TcpListenerStream;
+use tonic::transport::Channel;
 use tonic::transport::Server;
 
 use crate::http;
-use crate::httppb::http_server::HttpServer;
 use crate::kvvm;
 use crate::util;
+
+use crate::aliasreaderpb::alias_reader_client::AliasReaderClient;
+use crate::appsenderpb::app_sender_client::AppSenderClient;
+use crate::keystorepb::keystore_client::KeystoreClient;
+use crate::messengerpb::messenger_client::MessengerClient;
+use crate::rpcdbpb::database_client::DatabaseClient;
+use crate::sharedmemorypb::shared_memory_client::SharedMemoryClient;
+use crate::subnetlookuppb::subnet_lookup_client::SubnetLookupClient;
+
+use crate::httppb::http_server::HttpServer;
 use crate::vmpb;
 
 // FIXME: dummies
 pub type Health = ();
-pub type DBManager = ();
 pub type MessageChannel = ();
 pub type Fx = ();
 pub type AppSender = ();
 pub type Block = ();
+pub type DbManager = HashMap<Version, DatabaseClient<Channel>>;
 
 /// snow.common.HTTPHandler
 /// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/snow/engine/common#HTTPHandler
@@ -54,6 +65,12 @@ pub struct Context {
 
     pub x_chain_id: ids::Id,
     pub avax_asset_id: ids::Id,
+
+    pub keystore: KeystoreClient<Channel>,
+    pub shared_memory: SharedMemoryClient<Channel>,
+    pub bc_lookup: AliasReaderClient<Channel>,
+    pub sn_lookup: SubnetLookupClient<Channel>,
+    // TODO metrics
 }
 
 /// snow.engine.common.AppHandler
@@ -75,7 +92,7 @@ pub trait AppHandler {
 pub trait VM: AppHandler + Checkable + Connector {
     fn initialize(
         ctx: &Context,
-        db_manager: &DBManager,
+        db_manager: &HashMap<Version, DatabaseClient<Channel>>,
         genesis_bytes: &[u8],
         upgrade_bytes: &[u8],
         config_bytes: &[u8],
@@ -119,9 +136,67 @@ impl<C: ChainVM> VMServer<C> {
 impl<C: ChainVM + Send + Sync + 'static> vmpb::vm_server::Vm for VMServer<C> {
     async fn initialize(
         &self,
-        _request: tonic::Request<vmpb::InitializeRequest>,
+        req: tonic::Request<vmpb::InitializeRequest>,
     ) -> Result<tonic::Response<vmpb::InitializeResponse>, tonic::Status> {
-        Err(tonic::Status::unimplemented("initialize"))
+        let req = req.into_inner();
+
+        // TODO: handle errors
+        let subnet_id = ids::Id::from_slice(&req.subnet_id);
+        let chain_id = ids::Id::from_slice(&req.chain_id);
+        let node_id = ids::ShortId::from_slice(&req.node_id);
+        let x_chain_id = ids::Id::from_slice(&req.x_chain_id);
+        let avax_asset_id = ids::Id::from_slice(&req.avax_asset_id);
+        let server_addr = req.server_addr;
+
+        let client_conn = util::dial(&server_addr).await;
+
+        // Create gRPC clients
+        let msg_client = MessengerClient::new(client_conn);
+        let keystore_client = KeystoreClient::new(client_conn);
+        let shared_memory_client = SharedMemoryClient::new(client_conn);
+        let bc_lookup_client = AliasReaderClient::new(client_conn);
+        let sn_lookup_client = SubnetLookupClient::new(client_conn);
+        let app_sender_client = AppSenderClient::new(client_conn);
+
+        let network_id = req.network_id;
+
+        let ctx = &Context {
+            network_id: req.network_id,
+            subnet_id: subnet_id,
+            chain_id: chain_id,
+            node_id: node_id,
+
+            x_chain_id: x_chain_id,
+            avax_asset_id: avax_asset_id,
+
+            keystore: keystore_client,
+            shared_memory: shared_memory_client,
+            bc_lookup: bc_lookup_client,
+            sn_lookup: sn_lookup_client,
+        };
+
+        let mut db_clients: DbManager = HashMap::new();
+        for db_server in req.db_servers.iter() {
+            let semver = db_server.version.trim_start_matches('v');
+            let version = Version::parse(semver).expect("failed to parse semver");
+            let client_conn = util::dial(&db_server.server_addr).await;
+            let db_client = DatabaseClient::new(client_conn);
+            db_clients.insert(version, db_client);
+        }
+
+        Ok(C::initialize(
+            ctx,
+            &db_clients,
+            &req.genesis_bytes,
+            &req.upgrade_bytes,
+            &req.config_bytes,
+            &app_sender_client,
+            &app_sender_client,
+            &app_sender_client,
+        ));
+
+        let resp = vmpb::InitializeResponse { handlers: handlers };
+        Ok(tonic::Response::new(resp));
     }
 
     async fn shutdown(

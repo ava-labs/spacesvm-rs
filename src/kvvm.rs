@@ -13,6 +13,19 @@ use std::time;
 
 use crate::engine::*;
 
+const DATA_LEN: u32 = 32;
+const CODEC_VERSION: u32 = 0;
+
+// http call: name.endpoint
+const NAME: &str = "kvvm";
+
+// control how many tx before we build a block
+// with current value 2, every time we have >=2 pending tx in mempool, we start building a new block
+const TX_BATCH_SIZE: u32 = 2;
+
+// time for periodic flush of pending transaction in the mempool
+const TX_BATCH_TIME: time::Duration = time::Duration::from_secs(5);
+
 #[derive(Debug)]
 pub struct MiniKVVM {
     bootstrapped: bool,
@@ -73,13 +86,13 @@ impl Checkable for MiniKVVM {
 impl VM for MiniKVVM {
     fn initialize(
         ctx: &Context,
-        db_manager: &DBManager,
+        db_manager: &DbManager,
         genesis_bytes: &[u8],
         upgrade_bytes: &[u8],
         config_bytes: &[u8],
         to_engine: MessageChannel,
-        fxs: &[Fx],
-        app_sender: &AppSender,
+        _fxs: &[Fx],
+        _app_sender: &AppSender,
     ) -> Result<(), Error> {
         Ok(())
     }
@@ -92,6 +105,8 @@ impl VM for MiniKVVM {
     fn shutdown() -> Result<(), Error> {
         Ok(())
     }
+
+    /// Returns this VM's version
     fn version() -> Result<String, Error> {
         Ok("".to_string())
     }
