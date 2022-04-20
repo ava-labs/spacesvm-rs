@@ -1,4 +1,5 @@
 pub mod genesis;
+pub mod http;
 pub mod kvvm;
 pub mod plugin;
 
