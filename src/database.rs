@@ -19,6 +19,7 @@ impl crate::rpcdbpb::database_server::Database for Database {
     async fn get(&mut self, key: Vec<u8>) -> Result<Option<Vec<u8>>, Status> {
         let req = GetRequest { key };
         let resp = self.client.get(req).await?.into_inner();
+        info!("db get response {:?}", resp);
         // TODO: handle db error
         Ok(Some(resp.value))
     }
@@ -26,7 +27,7 @@ impl crate::rpcdbpb::database_server::Database for Database {
     async fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<(), Status> {
         let req = PutRequest { key, value };
         let resp = self.client.put(req).await?.into_inner();
-        info!("db response {:?}", resp);
+        info!("db put response {:?}", resp);
         // TODO: handle errors
         Ok(())
     }
@@ -34,7 +35,7 @@ impl crate::rpcdbpb::database_server::Database for Database {
     async fn delete(&mut self, key: Vec<u8>) -> Result<(), Status> {
         let req = DeleteRequest { key };
         let resp = self.client.delete(req).await?.into_inner();
-        info!("db response {:?}", resp);
+        info!("db delete response {:?}", resp);
         // TODO: handle errors
         Ok(())
     }

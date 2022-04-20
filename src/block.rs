@@ -1,15 +1,21 @@
 use avalanche_types::ids;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::AtomicU64;
+use utils::rfc3339;
+
+pub const DATA_LEN: usize = 32;
 
 #[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Block {
     parent_id: ids::Id,
     height: u64,
-    timestamp: AtomicU64,
+    #[serde(with = "rfc3339::serde_format")]
+    timestamp: DateTime<Utc>,
 
     id: ids::Id,
-    bytes: [u8; 32],
+    bytes: [u8; DATA_LEN],
 }
 
 /// snow/consensus/snowman/Block
@@ -35,7 +41,7 @@ impl Block {
         self.height
     }
 
-    pub fn timestamp(&self) -> &AtomicU64 {
+    pub fn timestamp(&self) -> &DateTime<Utc> {
         &self.timestamp
     }
 }

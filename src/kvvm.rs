@@ -11,9 +11,9 @@ use std::io::{self, Error, ErrorKind};
 use std::sync::{Arc, Mutex};
 use std::time;
 
+use crate::block::Block;
 use crate::engine::*;
 
-const DATA_LEN: u32 = 32;
 const CODEC_VERSION: u32 = 0;
 
 // http call: name.endpoint
