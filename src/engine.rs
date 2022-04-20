@@ -12,6 +12,7 @@ use tokio_stream::wrappers::TcpListenerStream;
 use tonic::transport::{Channel, Server};
 use tonic::{Request, Response, Status};
 
+use crate::block::Block;
 use crate::http;
 use crate::kvvm;
 use crate::util;
@@ -32,7 +33,6 @@ pub type Health = ();
 pub type MessageChannel = ();
 pub type Fx = ();
 pub type AppSender = ();
-pub type Block = ();
 pub type DbManager = HashMap<Version, DatabaseClient<Channel>>;
 
 /// snow.common.HTTPHandler
@@ -196,15 +196,17 @@ impl<C: ChainVM + Send + Sync + 'static> vmpb::vm_server::Vm for VMServer<C> {
         ));
 
         let last_accepted = C::last_accepted().unwrap();
-        let block = C::get_block(last_accepted);
+        let block = C::get_block(last_accepted).unwrap();
+        let status = u32::MIN; // bogus
 
+        // TODO: fix block is not correct
         Ok(Response::new(vmpb::InitializeResponse {
             last_accepted_id: Vec::from(last_accepted),
-            last_accepted_parent_id: Vec::from(block.parent_id().as_ref()),
-            bytes: Vec::from(block.data()),
+            last_accepted_parent_id: Vec::from(block.parent().as_ref()),
+            bytes: Vec::from(block.bytes()),
             height: block.height(),
-            timestamp: Vec::from(block.timestamp().bytes()),
-            status: u32status,
+            timestamp: Vec::from(block.timestamp()),
+            status: status,
         }))
     }
 

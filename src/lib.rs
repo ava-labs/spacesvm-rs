@@ -1,3 +1,4 @@
+pub mod block;
 pub mod database;
 pub mod engine;
 pub mod genesis;
