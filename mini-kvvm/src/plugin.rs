@@ -7,6 +7,8 @@ use tokio_stream::wrappers::TcpListenerStream;
 use tonic::transport::{server::NamedService, Server};
 use tonic_health::server::health_reporter;
 
+use crate::lib;
+
 /// ref. https://github.com/ava-labs/avalanchego/blob/v1.7.10/vms/rpcchainvm/vm.go
 pub const PROTOCOL_VERSION: u8 = 12;
 pub const MAGIC_COOKIE_KEY: &str = "VM_PLUGIN";
@@ -52,6 +54,11 @@ where
     let (mut health_reporter, health_svc) = health_reporter();
     health_reporter.set_serving::<Plugin>().await;
 
+    let reflection_service = tonic_reflection::server::Builder::configure()
+        .register_encoded_file_descriptor_set(lib::FILE_DESCRIPTOR_SET)
+        .build()
+        .expect("failed to create gRPC reflection service");
+
     // TODO: Add support for abstract unix sockets once supported by tonic.
     // ref. https://github.com/hyperium/tonic/issues/966
     // avalanchego currently only supports plugins listening on IP address.
@@ -66,6 +73,7 @@ where
 
     Server::builder()
         .add_service(health_svc)
+        .add_service(reflection_service)
         .add_service(VmServer::new(vm))
         .serve_with_incoming(TcpListenerStream::new(listener))
         .await
