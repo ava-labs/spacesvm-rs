@@ -31,9 +31,7 @@ use crate::kvvm::ChainVMInterior;
 
 // FIXME: dummies
 pub type Health = ();
-pub type MessageChannel = ();
 pub type Fx = ();
-pub type AppSender = ();
 
 pub type DbManager = HashMap<Version, DatabaseClient<Channel>>;
 
@@ -151,7 +149,7 @@ impl<C: ChainVM + Send + Sync + 'static> vmpb::vm_server::Vm for VMServer<C> {
         req: Request<vmpb::InitializeRequest>,
     ) -> Result<Response<vmpb::InitializeResponse>, Status> {
         let req = req.into_inner();
-        let client_conn = Endpoint::from_shared(req.server_addr)
+        let client_conn = Endpoint::from_shared(format!("http://{}", req.server_addr))
             .unwrap()
             .connect()
             .await
@@ -192,7 +190,7 @@ impl<C: ChainVM + Send + Sync + 'static> vmpb::vm_server::Vm for VMServer<C> {
             let version =
                 Version::parse(semver).map_err(|e| tonic::Status::unknown(e.to_string()))?;
             let server_addr = db_server.server_addr.clone();
-            let client_conn = Endpoint::from_shared(server_addr)
+            let client_conn = Endpoint::from_shared(format!("http://{}", server_addr))
                 .unwrap()
                 .connect()
                 .await
@@ -213,9 +211,7 @@ impl<C: ChainVM + Send + Sync + 'static> vmpb::vm_server::Vm for VMServer<C> {
             &[()],
             &app_sender_client,
         )
-        .map_err(|e| {
-            tonic::Status::unknown(format!("MiniKVVM::initialize failed: {}", e.to_string()))
-        })?;
+        .map_err(|e| tonic::Status::unknown(format!("VM::initialize failed: {}", e.to_string())))?;
 
         let last_accepted = C::last_accepted().unwrap();
         let block = C::get_block(last_accepted.to_string()).unwrap();
