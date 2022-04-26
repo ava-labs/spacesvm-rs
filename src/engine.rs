@@ -7,24 +7,22 @@ use semver::Version;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::Error;
+use std::net::SocketAddr;
+use std::sync::RwLock;
 use std::sync::{Arc, Mutex};
 use std::time;
 use tokio_stream::wrappers::TcpListenerStream;
 use tonic::transport::{Channel, Endpoint, Server};
 use tonic::{Request, Response, Status};
-// use tokio::sync::RwLock;
-use std::net::SocketAddr;
-use std::sync::RwLock;
 
-use crate::aliasreaderpb::alias_reader_client::AliasReaderClient;
-use crate::appsenderpb::app_sender_client::AppSenderClient;
-use crate::httppb::http_server::HttpServer;
-use crate::keystorepb::keystore_client::KeystoreClient;
-use crate::messengerpb::messenger_client::MessengerClient;
-use crate::rpcdbpb::database_client::DatabaseClient;
-use crate::sharedmemorypb::shared_memory_client::SharedMemoryClient;
-use crate::subnetlookuppb::subnet_lookup_client::SubnetLookupClient;
-use crate::vmpb;
+use crate::proto::{
+    aliasreaderpb::alias_reader_client::AliasReaderClient,
+    appsenderpb::app_sender_client::AppSenderClient, httppb::http_server::HttpServer,
+    keystorepb::keystore_client::KeystoreClient, messengerpb::messenger_client::MessengerClient,
+    rpcdbpb::database_client::DatabaseClient,
+    sharedmemorypb::shared_memory_client::SharedMemoryClient,
+    subnetlookuppb::subnet_lookup_client::SubnetLookupClient, vmpb, vmpb::vm_server::Vm,
+};
 
 use crate::block::Block;
 use crate::kvvm::ChainVMInterior;

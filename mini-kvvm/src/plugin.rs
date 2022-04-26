@@ -55,7 +55,7 @@ where
     health_reporter.set_serving::<Plugin>().await;
 
     let reflection_service = tonic_reflection::server::Builder::configure()
-        .register_encoded_file_descriptor_set(lib::FILE_DESCRIPTOR_SET)
+        .register_encoded_file_descriptor_set(crate::proto::FILE_DESCRIPTOR_SET)
         .build()
         .expect("failed to create gRPC reflection service");
 
