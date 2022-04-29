@@ -14,7 +14,7 @@ name = "mini-kvvm"
 path = "src/bin/mini-kvvm/main.rs"
 
 [dependencies]
-proto = { path = "../proto" }
+avalanche-proto = { path = "../proto" }
 clap = { version = "3.1.8", features = ["cargo", "derive"] }
 env_logger = "0.9.0"
 log = "0.4.16"
