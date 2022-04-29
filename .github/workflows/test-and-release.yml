@@ -18,7 +18,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v2
+        with:
+          submodules: recursive
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
@@ -40,7 +42,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v2
+        with:
+          submodules: recursive
+      - name: Install Buf
+        uses: bufbuild/buf-setup-action@v1.3.1
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
@@ -53,6 +59,21 @@ jobs:
       - uses: Swatinem/rust-cache@v1
         with:
           cache-on-failure: true
+      - name: Install protoc-gen-prost
+        uses: actions-rs/install@v0.1
+        with:
+          crate: protoc-gen-prost
+          version: latest
+      - name: Install protoc-gen-tonic
+        uses: actions-rs/install@v0.1
+        with:
+          crate: protoc-gen-tonic
+          version: latest
+      - name: Install protoc-gen-prost-crate
+        uses: actions-rs/install@v0.1
+        with:
+          crate: protoc-gen-prost-crate
+          version: latest
       - name: Check unused Cargo dependencies
         shell: bash
         run: scripts/cargo.unused.sh
@@ -62,7 +83,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v2
+        with:
+          submodules: recursive
+      - name: Install Buf
+        uses: bufbuild/buf-setup-action@v1.4.0
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
@@ -74,6 +99,21 @@ jobs:
       - uses: Swatinem/rust-cache@v1
         with:
           cache-on-failure: true
+      - name: Install protoc-gen-prost
+        uses: actions-rs/install@v0.1
+        with:
+          crate: protoc-gen-prost
+          version: latest
+      - name: Install protoc-gen-tonic
+        uses: actions-rs/install@v0.1
+        with:
+          crate: protoc-gen-tonic
+          version: latest
+      - name: Install protoc-gen-prost-crate
+        uses: actions-rs/install@v0.1
+        with:
+          crate: protoc-gen-prost-crate
+          version: latest
       - name: Run unit tests
         run: scripts/tests.unit.sh
 
@@ -100,8 +140,11 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
-
+        uses: actions/checkout@v2
+        with:
+          submodules: recursive
+      - name: Install Buf
+        uses: bufbuild/buf-setup-action@v1.4.0
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
@@ -115,6 +158,21 @@ jobs:
       - uses: Swatinem/rust-cache@v1
         with:
           cache-on-failure: true
+      - name: Install protoc-gen-prost
+        uses: actions-rs/install@v0.1
+        with:
+          crate: protoc-gen-prost
+          version: latest
+      - name: Install protoc-gen-tonic
+        uses: actions-rs/install@v0.1
+        with:
+          crate: protoc-gen-tonic
+          version: latest
+      - name: Install protoc-gen-prost-crate
+        uses: actions-rs/install@v0.1
+        with:
+          crate: protoc-gen-prost-crate
+          version: latest
 
       # ref. https://github.com/gakonst/foundry/blob/master/.github/workflows/cross-platform.yml
       - name: Apple M1 setup
@@ -143,7 +201,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: build
-          args: --release --bin mini-kvvm-rs --target ${{ matrix.job.target }}
+          args: --release --bin mini-kvvm --target ${{ matrix.job.target }}
 
       - name: Compress binaries
         id: release_artifacts
@@ -154,18 +212,18 @@ jobs:
         run: |
           if [ "$PLATFORM_NAME" == "linux" ]; then
 
-            ./target/${TARGET}/release/mini-kvvm-rs
-            cp ./target/${TARGET}/release/mini-kvvm-rs mini-kvvm-rs.${TARGET}
-            echo "::set-output name=file_name_mini-kvvm-rs::mini-kvvm-rs.${TARGET}"
-            tar -czvf mini-kvvm-rs_${TARGET}.tar.gz -C ./target/${TARGET}/release mini-kvvm-rs
-            echo "::set-output name=file_name_mini-kvvm-rs_tar_gz::mini-kvvm-rs_${TARGET}.tar.gz"
+            ./target/${TARGET}/release/mini-kvvm
+            cp ./target/${TARGET}/release/mini-kvvm mini-kvvm.${TARGET}
+            echo "::set-output name=file_name_mini-kvvm::mini-kvvm.${TARGET}"
+            tar -czvf mini-kvvm_${TARGET}.tar.gz -C ./target/${TARGET}/release mini-kvvm
+            echo "::set-output name=file_name_mini-kvvm_tar_gz::mini-kvvm_${TARGET}.tar.gz"
 
           elif [ "$PLATFORM_NAME" == "darwin" ]; then
 
-            cp ./target/${TARGET}/release/mini-kvvm-rs mini-kvvm-rs.${TARGET}
-            echo "::set-output name=file_name_mini-kvvm-rs::mini-kvvm-rs.${TARGET}"
-            gtar -czvf mini-kvvm-rs_${TARGET}.tar.gz -C ./target/${TARGET}/release mini-kvvm-rs
-            echo "::set-output name=file_name_mini-kvvm-rs_tar_gz::mini-kvvm-rs_${TARGET}.tar.gz"
+            cp ./target/${TARGET}/release/mini-kvvm mini-kvvm.${TARGET}
+            echo "::set-output name=file_name_mini-kvvm::mini-kvvm.${TARGET}"
+            gtar -czvf mini-kvvm_${TARGET}.tar.gz -C ./target/${TARGET}/release mini-kvvm
+            echo "::set-output name=file_name_mini-kvvm_tar_gz::mini-kvvm_${TARGET}.tar.gz"
 
           else
 
@@ -185,8 +243,8 @@ jobs:
           prerelease: true
           body: Latest builds from the last commit.
           files: |
-            ${{ steps.release_artifacts.outputs.file_name_mini-kvvm-rs }}
-            ${{ steps.release_artifacts.outputs.file_name_mini-kvvm-rs_tar_gz }}
+            ${{ steps.release_artifacts.outputs.file_name_mini-kvvm }}
+            ${{ steps.release_artifacts.outputs.file_name_mini-kvvm_tar_gz }}
 
       # release only for tags
       # https://github.com/softprops/action-gh-release
@@ -201,5 +259,5 @@ jobs:
           prerelease: true
           body: Release builds for ${{ github.ref_name }}.
           files: |
-            ${{ steps.release_artifacts.outputs.file_name_mini-kvvm-rs }}
-            ${{ steps.release_artifacts.outputs.file_name_mini-kvvm-rs_tar_gz }}
+            ${{ steps.release_artifacts.outputs.file_name_mini-kvvm }}
+            ${{ steps.release_artifacts.outputs.file_name_mini-kvvm_tar_gz }}

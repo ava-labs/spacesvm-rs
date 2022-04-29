@@ -3,7 +3,7 @@ use std::io;
 use clap::{crate_version, Arg, Command};
 use log::info;
 
-use mini_kvvm_rs::genesis;
+use mini_kvvm::genesis;
 
 pub const APP_NAME: &str = "mini-kvvm-rs";
 

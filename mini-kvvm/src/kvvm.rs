@@ -3,7 +3,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use crate::vm::vm_server::Vm;
+use avalanche_proto::vm::vm_server::Vm;
 
 #[derive(Debug)]
 pub struct Handler {

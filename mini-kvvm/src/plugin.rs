@@ -1,6 +1,6 @@
 use std::io::{self, Error, ErrorKind};
 
-use crate::vm::vm_server::{Vm, VmServer};
+use avalanche_proto::vm::vm_server::{Vm, VmServer};
 use log::info;
 use tokio::net::TcpListener;
 use tokio_stream::wrappers::TcpListenerStream;
