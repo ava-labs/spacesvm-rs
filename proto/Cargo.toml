@@ -37,3 +37,8 @@ tonic = { version = "0.7", features = ["compression"] }
 [build-dependencies]
 protoc-gen-prost = "0.1.3"
 protoc-gen-tonic = "0.1.0"
+
+# Prevent cargo-udeps failing with the build dependencies. Without the protoc
+# plugins it will fail to compile tonic-health and possibly others.
+[package.metadata.cargo-udeps.ignore]
+build = ["protoc-gen-prost","protoc-gen-tonic"]
