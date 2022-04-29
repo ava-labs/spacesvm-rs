@@ -1,7 +1,7 @@
 use std::io::{self, Error, ErrorKind};
 
-use log::info;
 use avalanche_proto::vm::vm_server::{Vm, VmServer};
+use log::info;
 use tokio::net::TcpListener;
 use tokio_stream::wrappers::TcpListenerStream;
 use tonic::transport::{server::NamedService, Server};
