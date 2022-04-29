@@ -1,0 +1,3 @@
+[submodule "proto/avalanchego"]
+	path = proto/avalanchego
+	url = https://github.com/ava-labs/avalanchego.git
