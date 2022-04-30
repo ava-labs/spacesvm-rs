@@ -219,8 +219,8 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
         // TODO: block data is mocked
         Ok(Response::new(vm::InitializeResponse {
             last_accepted_id: prost::bytes::Bytes::default(),// TODO
-            last_accepted_parent_id: prost::bytes::Bytes::from(block.parent().as_ref()),
-            bytes: prost::bytes::Bytes::from(block.bytes()),
+            last_accepted_parent_id: prost::bytes::Bytes::default(),// TODO
+            bytes: prost::bytes::Bytes::default(),// TODO
             height: block.height(),
             timestamp: prost::bytes::Bytes::default(), // TODO
             status: status,

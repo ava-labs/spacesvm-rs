@@ -7,8 +7,6 @@ use tokio_stream::wrappers::TcpListenerStream;
 use tonic::transport::{server::NamedService, Server};
 use tonic_health::server::health_reporter;
 
-use crate::lib;
-
 /// ref. https://github.com/ava-labs/avalanchego/blob/v1.7.10/vms/rpcchainvm/vm.go
 pub const PROTOCOL_VERSION: u8 = 12;
 pub const MAGIC_COOKIE_KEY: &str = "VM_PLUGIN";
@@ -55,7 +53,8 @@ where
     health_reporter.set_serving::<Plugin>().await;
 
     let reflection_service = tonic_reflection::server::Builder::configure()
-        .register_encoded_file_descriptor_set(crate::proto::FILE_DESCRIPTOR_SET)
+        .register_encoded_file_descriptor_set(avalanche_proto::rpcdb::FILE_DESCRIPTOR_SET)
+        .register_encoded_file_descriptor_set(avalanche_proto::vm::FILE_DESCRIPTOR_SET)
         .build()
         .expect("failed to create gRPC reflection service");
 
