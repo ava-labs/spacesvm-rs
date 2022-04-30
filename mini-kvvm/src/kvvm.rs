@@ -14,9 +14,9 @@ use tonic::transport::Channel;
 // use tokio::sync::RwLock;
 
 use avalanche_proto::{
-    vm::vm_server::Vm,
     appsender::app_sender_client::AppSenderClient,
-    messenger::messenger_client::MessengerClient,
+    messenger::messenger_client::MessengerClient, 
+    vm::vm_server::Vm,
 };
 
 use crate::block::Block;

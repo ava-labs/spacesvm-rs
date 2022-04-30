@@ -15,14 +15,15 @@ use tokio_stream::wrappers::TcpListenerStream;
 use tonic::transport::{Channel, Endpoint, Server};
 use tonic::{Request, Response, Status};
 
-use crate::proto::{
-    aliasreaderpb::alias_reader_client::AliasReaderClient,
-    appsenderpb::app_sender_client::AppSenderClient, httppb::http_server::HttpServer,
-    keystorepb::keystore_client::KeystoreClient, messengerpb::messenger_client::MessengerClient,
-    rpcdbpb::database_client::DatabaseClient,
-    sharedmemorypb::shared_memory_client::SharedMemoryClient,
-    subnetlookuppb::subnet_lookup_client::SubnetLookupClient, vmpb, vmpb::vm_server::Vm,
+use avalanche_proto::{
+    aliasreader::alias_reader_client::AliasReaderClient,
+    appsender::app_sender_client::AppSenderClient, http::http_server::HttpServer,
+    keystore::keystore_client::KeystoreClient, messenger::messenger_client::MessengerClient,
+    rpcdb::database_client::DatabaseClient,
+    sharedmemory::shared_memory_client::SharedMemoryClient,
+    subnetlookup::subnet_lookup_client::SubnetLookupClient, vm, vm::vm_server::Vm,
 };
+use pbjson_types::Empty;
 
 use crate::block::Block;
 use crate::kvvm::ChainVMInterior;
@@ -141,11 +142,11 @@ impl<C: ChainVM> VMServer<C> {
 }
 
 #[tonic::async_trait]
-impl<C: ChainVM + Send + Sync + 'static> vmpb::vm_server::Vm for VMServer<C> {
+impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
     async fn initialize(
         &self,
-        req: Request<vmpb::InitializeRequest>,
-    ) -> Result<Response<vmpb::InitializeResponse>, Status> {
+        req: Request<vm::InitializeRequest>,
+    ) -> Result<Response<vm::InitializeResponse>, Status> {
         let req = req.into_inner();
         let client_conn = Endpoint::from_shared(format!("http://{}", req.server_addr))
             .unwrap()
@@ -216,179 +217,179 @@ impl<C: ChainVM + Send + Sync + 'static> vmpb::vm_server::Vm for VMServer<C> {
         let status = u32::MIN; // bogus
 
         // TODO: block data is mocked
-        Ok(Response::new(vmpb::InitializeResponse {
-            last_accepted_id: Vec::from([]),
-            last_accepted_parent_id: Vec::from(block.parent().as_ref()),
-            bytes: Vec::from(block.bytes()),
+        Ok(Response::new(vm::InitializeResponse {
+            last_accepted_id: prost::bytes::Bytes::default(),// TODO
+            last_accepted_parent_id: prost::bytes::Bytes::from(block.parent().as_ref()),
+            bytes: prost::bytes::Bytes::from(block.bytes()),
             height: block.height(),
-            timestamp: Vec::from([]),
+            timestamp: prost::bytes::Bytes::default(), // TODO
             status: status,
         }))
     }
 
-    async fn shutdown(&self, _request: Request<()>) -> Result<Response<()>, Status> {
+    async fn shutdown(&self, _request: Request<Empty>) -> Result<Response<Empty>, Status> {
         Err(Status::unimplemented("shutdown"))
     }
 
     async fn create_handlers(
         &self,
-        _request: Request<()>,
-    ) -> Result<Response<vmpb::CreateHandlersResponse>, Status> {
+        _request: Request<Empty>,
+    ) -> Result<Response<vm::CreateHandlersResponse>, Status> {
         Err(Status::unimplemented("create_static_handlers"))
     }
 
     async fn create_static_handlers(
         &self,
-        _request: Request<()>,
-    ) -> Result<Response<vmpb::CreateStaticHandlersResponse>, Status> {
+        _request: Request<Empty>,
+    ) -> Result<Response<vm::CreateStaticHandlersResponse>, Status> {
         Err(Status::unimplemented("create_static_handlers"))
     }
 
     async fn connected(
         &self,
-        _request: Request<vmpb::ConnectedRequest>,
-    ) -> Result<Response<()>, Status> {
+        _request: Request<vm::ConnectedRequest>,
+    ) -> Result<Response<Empty>, Status> {
         Err(Status::unimplemented("connected"))
     }
 
     async fn disconnected(
         &self,
-        _request: Request<vmpb::DisconnectedRequest>,
-    ) -> Result<Response<()>, Status> {
+        _request: Request<vm::DisconnectedRequest>,
+    ) -> Result<Response<Empty>, Status> {
         Err(Status::unimplemented("disconnected"))
     }
 
     async fn build_block(
         &self,
-        _request: Request<()>,
-    ) -> Result<Response<vmpb::BuildBlockResponse>, Status> {
+        _request: Request<Empty>,
+    ) -> Result<Response<vm::BuildBlockResponse>, Status> {
         Err(Status::unimplemented("build_block"))
     }
 
     async fn parse_block(
         &self,
-        _request: Request<vmpb::ParseBlockRequest>,
-    ) -> Result<Response<vmpb::ParseBlockResponse>, Status> {
+        _request: Request<vm::ParseBlockRequest>,
+    ) -> Result<Response<vm::ParseBlockResponse>, Status> {
         Err(Status::unimplemented("parse_block"))
     }
 
     async fn get_block(
         &self,
-        _request: Request<vmpb::GetBlockRequest>,
-    ) -> Result<Response<vmpb::GetBlockResponse>, Status> {
+        _request: Request<vm::GetBlockRequest>,
+    ) -> Result<Response<vm::GetBlockResponse>, Status> {
         Err(Status::unimplemented("get_block"))
     }
 
     async fn set_state(
         &self,
-        _request: Request<vmpb::SetStateRequest>,
-    ) -> Result<Response<()>, Status> {
+        _request: Request<vm::SetStateRequest>,
+    ) -> Result<Response<Empty>, Status> {
         Err(Status::unimplemented("set_state"))
     }
 
     async fn verify_height_index(
         &self,
-        _request: Request<()>,
-    ) -> Result<Response<vmpb::VerifyHeightIndexResponse>, Status> {
+        _request: Request<Empty>,
+    ) -> Result<Response<vm::VerifyHeightIndexResponse>, Status> {
         Err(Status::unimplemented("verify_height_index"))
     }
 
     async fn get_block_id_at_height(
         &self,
-        _request: Request<vmpb::GetBlockIdAtHeightRequest>,
-    ) -> Result<Response<vmpb::GetBlockIdAtHeightResponse>, Status> {
+        _request: Request<vm::GetBlockIdAtHeightRequest>,
+    ) -> Result<Response<vm::GetBlockIdAtHeightResponse>, Status> {
         Err(Status::unimplemented("get_block_id_at_height"))
     }
 
     async fn set_preference(
         &self,
-        _request: Request<vmpb::SetPreferenceRequest>,
-    ) -> Result<Response<()>, Status> {
+        _request: Request<vm::SetPreferenceRequest>,
+    ) -> Result<Response<Empty>, Status> {
         Err(Status::unimplemented("set_preference"))
     }
 
     async fn health(
         &self,
-        _request: Request<vmpb::HealthRequest>,
-    ) -> Result<Response<vmpb::HealthResponse>, Status> {
-        Ok(Response::new(vmpb::HealthResponse {
+        _request: Request<vm::HealthRequest>,
+    ) -> Result<Response<vm::HealthResponse>, Status> {
+        Ok(Response::new(vm::HealthResponse {
             details: "mini-kvvm is healthy".to_string(),
         }))
     }
 
     async fn version(
         &self,
-        _request: Request<()>,
-    ) -> Result<Response<vmpb::VersionResponse>, Status> {
+        _request: Request<Empty>,
+    ) -> Result<Response<vm::VersionResponse>, Status> {
         Err(Status::unimplemented("version"))
     }
 
     async fn app_request(
         &self,
-        _request: Request<vmpb::AppRequestMsg>,
-    ) -> Result<Response<()>, Status> {
+        _request: Request<vm::AppRequestMsg>,
+    ) -> Result<Response<Empty>, Status> {
         Err(Status::unimplemented("app_request"))
     }
 
     async fn app_request_failed(
         &self,
-        _request: Request<vmpb::AppRequestFailedMsg>,
-    ) -> Result<Response<()>, Status> {
+        _request: Request<vm::AppRequestFailedMsg>,
+    ) -> Result<Response<Empty>, Status> {
         Err(Status::unimplemented("app_request_failed"))
     }
 
     async fn app_response(
         &self,
-        _request: Request<vmpb::AppResponseMsg>,
-    ) -> Result<Response<()>, Status> {
+        _request: Request<vm::AppResponseMsg>,
+    ) -> Result<Response<Empty>, Status> {
         Err(Status::unimplemented("app_response"))
     }
 
     async fn app_gossip(
         &self,
-        _request: Request<vmpb::AppGossipMsg>,
-    ) -> Result<Response<()>, Status> {
+        _request: Request<vm::AppGossipMsg>,
+    ) -> Result<Response<Empty>, Status> {
         Err(Status::unimplemented("app_gossip"))
     }
 
     async fn block_verify(
         &self,
-        _request: Request<vmpb::BlockVerifyRequest>,
-    ) -> Result<Response<vmpb::BlockVerifyResponse>, Status> {
+        _request: Request<vm::BlockVerifyRequest>,
+    ) -> Result<Response<vm::BlockVerifyResponse>, Status> {
         Err(Status::unimplemented("block_verify"))
     }
 
     async fn block_accept(
         &self,
-        _request: Request<vmpb::BlockAcceptRequest>,
-    ) -> Result<Response<()>, Status> {
+        _request: Request<vm::BlockAcceptRequest>,
+    ) -> Result<Response<Empty>, Status> {
         Err(Status::unimplemented("block_accept"))
     }
     async fn block_reject(
         &self,
-        _request: Request<vmpb::BlockRejectRequest>,
-    ) -> Result<Response<()>, Status> {
+        _request: Request<vm::BlockRejectRequest>,
+    ) -> Result<Response<Empty>, Status> {
         Err(Status::unimplemented("block_reject"))
     }
 
     async fn get_ancestors(
         &self,
-        _request: Request<vmpb::GetAncestorsRequest>,
-    ) -> Result<Response<vmpb::GetAncestorsResponse>, Status> {
+        _request: Request<vm::GetAncestorsRequest>,
+    ) -> Result<Response<vm::GetAncestorsResponse>, Status> {
         Err(Status::unimplemented("get_ancestors"))
     }
 
     async fn batched_parse_block(
         &self,
-        _request: Request<vmpb::BatchedParseBlockRequest>,
-    ) -> Result<Response<vmpb::BatchedParseBlockResponse>, Status> {
+        _request: Request<vm::BatchedParseBlockRequest>,
+    ) -> Result<Response<vm::BatchedParseBlockResponse>, Status> {
         Err(Status::unimplemented("batched_parse_block"))
     }
 
     async fn gather(
         &self,
-        _request: Request<()>,
-    ) -> Result<Response<vmpb::GatherResponse>, Status> {
+        _request: Request<Empty>,
+    ) -> Result<Response<vm::GatherResponse>, Status> {
         Err(Status::unimplemented("gather"))
     }
 }
