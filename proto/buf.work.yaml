@@ -1,4 +1,4 @@
 version: v1
 directories:
   - protos/avalanchego/proto
-  - protos/google/proto
+  - protos/google/protobuf

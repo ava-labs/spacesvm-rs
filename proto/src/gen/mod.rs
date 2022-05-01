@@ -11,6 +11,22 @@ pub mod appsender {
     include!("appsender.rs");
     // @@protoc_insertion_point(appsender)
 }
+pub mod google {
+    pub mod protobuf {
+        #[cfg(feature = "google_protobuf_empty")]
+        // @@protoc_insertion_point(attribute:google.protobuf.empty)
+        pub mod empty {
+            include!("google.protobuf.empty.rs");
+            // @@protoc_insertion_point(google.protobuf.empty)
+        }
+        #[cfg(feature = "google_protobuf_timestamp")]
+        // @@protoc_insertion_point(attribute:google.protobuf.timestamp)
+        pub mod timestamp {
+            include!("google.protobuf.timestamp.rs");
+            // @@protoc_insertion_point(google.protobuf.timestamp)
+        }
+    }
+}
 #[cfg(feature = "http")]
 // @@protoc_insertion_point(attribute:http)
 pub mod http {
