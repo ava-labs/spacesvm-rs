@@ -1,5 +1,6 @@
 [workspace]
 members = [
     "mini-kvvm",
-    "proto"
+    "proto",
+    "tests/e2e"
 ]

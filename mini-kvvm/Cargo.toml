@@ -15,14 +15,14 @@ path = "src/bin/mini-kvvm/main.rs"
 
 [dependencies]
 avalanche-proto = { path = "../proto" }
-clap = { version = "3.1.8", features = ["cargo", "derive"] }
+clap = { version = "3.1.16", features = ["cargo", "derive"] }
 env_logger = "0.9.0"
-log = "0.4.16"
-prost = "0.10.0"
-serde = { version = "1.0.136", features = ["derive"] }
-serde_json = "1.0.79"
-serde_yaml = "0.8.23"
-tokio = { version = "1.17.0", features = ["fs", "rt-multi-thread"] }
+log = "0.4.17"
+prost = "0.10.3"
+serde = { version = "1.0.137", features = ["derive"] }
+serde_json = "1.0.81"
+serde_yaml = "0.8.24"
+tokio = { version = "1.18.1", features = ["fs", "rt-multi-thread"] }
 tokio-stream = { version = "0.1.8", features = ["net"] }
 tonic = { version = "0.7", features = ["compression"] }
 tonic-health = "0.6"
