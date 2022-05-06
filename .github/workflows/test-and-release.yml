@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   static_analysis:
-    name: Static analysis
+    name: Static analysis (lint)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -38,7 +38,7 @@ jobs:
         run: scripts/static-analysis.sh
 
   check_cargo_unused:
-    name: Check Cargo unused
+    name: Check Cargo unused (lint)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -117,10 +117,30 @@ jobs:
       - name: Run unit tests
         run: scripts/tests.unit.sh
 
+  e2e_tests:
+    name: E2E tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+      - name: Check Rust version
+        run: rustc --version
+      - uses: Swatinem/rust-cache@v1
+        with:
+          cache-on-failure: true
+      - name: Run unit tests
+        run: scripts/tests.e2e.sh 1.7.10
+
   release:
     name: Release ${{ matrix.job.target }} (${{ matrix.job.os }})
     runs-on: ${{ matrix.job.os }}
-    needs: [static_analysis, check_cargo_unused, unit_tests]
+    needs: [static_analysis, check_cargo_unused, unit_tests, e2e_tests]
     strategy:
       matrix:
         job:
