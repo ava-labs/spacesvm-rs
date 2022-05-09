@@ -98,8 +98,8 @@ pub mod conn_client {
         }
         pub async fn close(
             &mut self,
-            request: impl tonic::IntoRequest<::pbjson_types::Empty>,
-        ) -> Result<tonic::Response<::pbjson_types::Empty>, tonic::Status> {
+            request: impl tonic::IntoRequest<()>,
+        ) -> Result<tonic::Response<()>, tonic::Status> {
             self.inner
                 .ready()
                 .await
@@ -116,7 +116,7 @@ pub mod conn_client {
         pub async fn set_deadline(
             &mut self,
             request: impl tonic::IntoRequest<super::SetDeadlineRequest>,
-        ) -> Result<tonic::Response<::pbjson_types::Empty>, tonic::Status> {
+        ) -> Result<tonic::Response<()>, tonic::Status> {
             self.inner
                 .ready()
                 .await
@@ -135,7 +135,7 @@ pub mod conn_client {
         pub async fn set_read_deadline(
             &mut self,
             request: impl tonic::IntoRequest<super::SetDeadlineRequest>,
-        ) -> Result<tonic::Response<::pbjson_types::Empty>, tonic::Status> {
+        ) -> Result<tonic::Response<()>, tonic::Status> {
             self.inner
                 .ready()
                 .await
@@ -154,7 +154,7 @@ pub mod conn_client {
         pub async fn set_write_deadline(
             &mut self,
             request: impl tonic::IntoRequest<super::SetDeadlineRequest>,
-        ) -> Result<tonic::Response<::pbjson_types::Empty>, tonic::Status> {
+        ) -> Result<tonic::Response<()>, tonic::Status> {
             self.inner
                 .ready()
                 .await
@@ -189,20 +189,20 @@ pub mod conn_server {
         ) -> Result<tonic::Response<super::WriteResponse>, tonic::Status>;
         async fn close(
             &self,
-            request: tonic::Request<::pbjson_types::Empty>,
-        ) -> Result<tonic::Response<::pbjson_types::Empty>, tonic::Status>;
+            request: tonic::Request<()>,
+        ) -> Result<tonic::Response<()>, tonic::Status>;
         async fn set_deadline(
             &self,
             request: tonic::Request<super::SetDeadlineRequest>,
-        ) -> Result<tonic::Response<::pbjson_types::Empty>, tonic::Status>;
+        ) -> Result<tonic::Response<()>, tonic::Status>;
         async fn set_read_deadline(
             &self,
             request: tonic::Request<super::SetDeadlineRequest>,
-        ) -> Result<tonic::Response<::pbjson_types::Empty>, tonic::Status>;
+        ) -> Result<tonic::Response<()>, tonic::Status>;
         async fn set_write_deadline(
             &self,
             request: tonic::Request<super::SetDeadlineRequest>,
-        ) -> Result<tonic::Response<::pbjson_types::Empty>, tonic::Status>;
+        ) -> Result<tonic::Response<()>, tonic::Status>;
     }
     #[derive(Debug)]
     pub struct ConnServer<T: Conn> {
@@ -338,17 +338,13 @@ pub mod conn_server {
                 "/net.conn.Conn/Close" => {
                     #[allow(non_camel_case_types)]
                     struct CloseSvc<T: Conn>(pub Arc<T>);
-                    impl<T: Conn> tonic::server::UnaryService<::pbjson_types::Empty>
-                    for CloseSvc<T> {
-                        type Response = ::pbjson_types::Empty;
+                    impl<T: Conn> tonic::server::UnaryService<()> for CloseSvc<T> {
+                        type Response = ();
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
                         >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<::pbjson_types::Empty>,
-                        ) -> Self::Future {
+                        fn call(&mut self, request: tonic::Request<()>) -> Self::Future {
                             let inner = self.0.clone();
                             let fut = async move { (*inner).close(request).await };
                             Box::pin(fut)
@@ -376,7 +372,7 @@ pub mod conn_server {
                     struct SetDeadlineSvc<T: Conn>(pub Arc<T>);
                     impl<T: Conn> tonic::server::UnaryService<super::SetDeadlineRequest>
                     for SetDeadlineSvc<T> {
-                        type Response = ::pbjson_types::Empty;
+                        type Response = ();
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
@@ -414,7 +410,7 @@ pub mod conn_server {
                     struct SetReadDeadlineSvc<T: Conn>(pub Arc<T>);
                     impl<T: Conn> tonic::server::UnaryService<super::SetDeadlineRequest>
                     for SetReadDeadlineSvc<T> {
-                        type Response = ::pbjson_types::Empty;
+                        type Response = ();
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
@@ -452,7 +448,7 @@ pub mod conn_server {
                     struct SetWriteDeadlineSvc<T: Conn>(pub Arc<T>);
                     impl<T: Conn> tonic::server::UnaryService<super::SetDeadlineRequest>
                     for SetWriteDeadlineSvc<T> {
-                        type Response = ::pbjson_types::Empty;
+                        type Response = ();
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,

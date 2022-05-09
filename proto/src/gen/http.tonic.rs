@@ -65,7 +65,7 @@ pub mod http_client {
         pub async fn handle(
             &mut self,
             request: impl tonic::IntoRequest<super::HttpRequest>,
-        ) -> Result<tonic::Response<::pbjson_types::Empty>, tonic::Status> {
+        ) -> Result<tonic::Response<()>, tonic::Status> {
             self.inner
                 .ready()
                 .await
@@ -108,7 +108,7 @@ pub mod http_server {
         async fn handle(
             &self,
             request: tonic::Request<super::HttpRequest>,
-        ) -> Result<tonic::Response<::pbjson_types::Empty>, tonic::Status>;
+        ) -> Result<tonic::Response<()>, tonic::Status>;
         async fn handle_simple(
             &self,
             request: tonic::Request<super::HandleSimpleHttpRequest>,
@@ -178,7 +178,7 @@ pub mod http_server {
                     struct HandleSvc<T: Http>(pub Arc<T>);
                     impl<T: Http> tonic::server::UnaryService<super::HttpRequest>
                     for HandleSvc<T> {
-                        type Response = ::pbjson_types::Empty;
+                        type Response = ();
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
