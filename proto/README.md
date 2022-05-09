@@ -15,6 +15,22 @@ use avalanche_proto::{
 };
 ```
 
+## deps
+
+- buf v1.4.0
+  - https://docs.buf.build/installation
+
+### protoc plugins
+
+- protoc-gen-prost: 
+  - cargo install protoc-gen-prost --version 0.1.3
+
+- protoc-gen-tonic:
+  - cargo install protoc-gen-tonic --version 0.1.0
+
+- protoc-gen-prost:
+  - cargo install protoc-gen-prost-crate --version 0.1.5
+
 ## note
 
 Support for avalanchego >= 1.7.11 
