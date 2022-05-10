@@ -12,19 +12,17 @@ pub mod appsender {
     // @@protoc_insertion_point(appsender)
 }
 pub mod google {
+    #[cfg(feature = "google_api")]
+    // @@protoc_insertion_point(attribute:google.api)
+    pub mod api {
+        include!("google.api.rs");
+        // @@protoc_insertion_point(google.api)
+    }
+    #[cfg(feature = "google_protobuf")]
+    // @@protoc_insertion_point(attribute:google.protobuf)
     pub mod protobuf {
-        #[cfg(feature = "google_protobuf_empty")]
-        // @@protoc_insertion_point(attribute:google.protobuf.empty)
-        pub mod empty {
-            include!("google.protobuf.empty.rs");
-            // @@protoc_insertion_point(google.protobuf.empty)
-        }
-        #[cfg(feature = "google_protobuf_timestamp")]
-        // @@protoc_insertion_point(attribute:google.protobuf.timestamp)
-        pub mod timestamp {
-            include!("google.protobuf.timestamp.rs");
-            // @@protoc_insertion_point(google.protobuf.timestamp)
-        }
+        include!("google.protobuf.rs");
+        // @@protoc_insertion_point(google.protobuf)
     }
 }
 #[cfg(feature = "http")]
@@ -92,6 +90,12 @@ pub mod plugin {
 pub mod rpcdb {
     include!("rpcdb.rs");
     // @@protoc_insertion_point(rpcdb)
+}
+#[cfg(feature = "rpcpb")]
+// @@protoc_insertion_point(attribute:rpcpb)
+pub mod rpcpb {
+    include!("rpcpb.rs");
+    // @@protoc_insertion_point(rpcpb)
 }
 #[cfg(feature = "sharedmemory")]
 // @@protoc_insertion_point(attribute:sharedmemory)

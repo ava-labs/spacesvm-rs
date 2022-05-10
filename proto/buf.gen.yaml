@@ -4,18 +4,18 @@ plugins:
     out: src/gen
     opt:
       - bytes=.
+      # https://docs.rs/prost-build/latest/prost_build/struct.Config.html#method.compile_well_known_types
       - compile_well_known_types
-      - extern_path=.google.protobuf=::pbjson_types
+      # https://github.com/neoeinstein/protoc-gen-prost/blob/main/protoc-gen-prost/README.md#protoc-gen-prost
       - file_descriptor_set
   - name: tonic
     out: src/gen
     opt:
+      # https://docs.rs/prost-build/latest/prost_build/struct.Config.html#method.compile_well_known_types
       - compile_well_known_types
-      - extern_path=.google.protobuf=::pbjson_types
   - name: prost-crate
     out: .
     strategy: all
     opt:
       - include_file=src/gen/mod.rs
       - gen_crate
-

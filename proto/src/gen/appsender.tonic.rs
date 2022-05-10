@@ -67,7 +67,10 @@ pub mod app_sender_client {
         pub async fn send_app_request(
             &mut self,
             request: impl tonic::IntoRequest<super::SendAppRequestMsg>,
-        ) -> Result<tonic::Response<::pbjson_types::Empty>, tonic::Status> {
+        ) -> Result<
+                tonic::Response<super::super::google::protobuf::Empty>,
+                tonic::Status,
+            > {
             self.inner
                 .ready()
                 .await
@@ -87,7 +90,10 @@ pub mod app_sender_client {
         pub async fn send_app_response(
             &mut self,
             request: impl tonic::IntoRequest<super::SendAppResponseMsg>,
-        ) -> Result<tonic::Response<::pbjson_types::Empty>, tonic::Status> {
+        ) -> Result<
+                tonic::Response<super::super::google::protobuf::Empty>,
+                tonic::Status,
+            > {
             self.inner
                 .ready()
                 .await
@@ -107,7 +113,10 @@ pub mod app_sender_client {
         pub async fn send_app_gossip(
             &mut self,
             request: impl tonic::IntoRequest<super::SendAppGossipMsg>,
-        ) -> Result<tonic::Response<::pbjson_types::Empty>, tonic::Status> {
+        ) -> Result<
+                tonic::Response<super::super::google::protobuf::Empty>,
+                tonic::Status,
+            > {
             self.inner
                 .ready()
                 .await
@@ -127,7 +136,10 @@ pub mod app_sender_client {
         pub async fn send_app_gossip_specific(
             &mut self,
             request: impl tonic::IntoRequest<super::SendAppGossipSpecificMsg>,
-        ) -> Result<tonic::Response<::pbjson_types::Empty>, tonic::Status> {
+        ) -> Result<
+                tonic::Response<super::super::google::protobuf::Empty>,
+                tonic::Status,
+            > {
             self.inner
                 .ready()
                 .await
@@ -156,22 +168,34 @@ pub mod app_sender_server {
         async fn send_app_request(
             &self,
             request: tonic::Request<super::SendAppRequestMsg>,
-        ) -> Result<tonic::Response<::pbjson_types::Empty>, tonic::Status>;
+        ) -> Result<
+                tonic::Response<super::super::google::protobuf::Empty>,
+                tonic::Status,
+            >;
         ///
         async fn send_app_response(
             &self,
             request: tonic::Request<super::SendAppResponseMsg>,
-        ) -> Result<tonic::Response<::pbjson_types::Empty>, tonic::Status>;
+        ) -> Result<
+                tonic::Response<super::super::google::protobuf::Empty>,
+                tonic::Status,
+            >;
         ///
         async fn send_app_gossip(
             &self,
             request: tonic::Request<super::SendAppGossipMsg>,
-        ) -> Result<tonic::Response<::pbjson_types::Empty>, tonic::Status>;
+        ) -> Result<
+                tonic::Response<super::super::google::protobuf::Empty>,
+                tonic::Status,
+            >;
         ///
         async fn send_app_gossip_specific(
             &self,
             request: tonic::Request<super::SendAppGossipSpecificMsg>,
-        ) -> Result<tonic::Response<::pbjson_types::Empty>, tonic::Status>;
+        ) -> Result<
+                tonic::Response<super::super::google::protobuf::Empty>,
+                tonic::Status,
+            >;
     }
     ///
     #[derive(Debug)]
@@ -240,7 +264,7 @@ pub mod app_sender_server {
                         T: AppSender,
                     > tonic::server::UnaryService<super::SendAppRequestMsg>
                     for SendAppRequestSvc<T> {
-                        type Response = ::pbjson_types::Empty;
+                        type Response = super::super::google::protobuf::Empty;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
@@ -280,7 +304,7 @@ pub mod app_sender_server {
                         T: AppSender,
                     > tonic::server::UnaryService<super::SendAppResponseMsg>
                     for SendAppResponseSvc<T> {
-                        type Response = ::pbjson_types::Empty;
+                        type Response = super::super::google::protobuf::Empty;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
@@ -320,7 +344,7 @@ pub mod app_sender_server {
                         T: AppSender,
                     > tonic::server::UnaryService<super::SendAppGossipMsg>
                     for SendAppGossipSvc<T> {
-                        type Response = ::pbjson_types::Empty;
+                        type Response = super::super::google::protobuf::Empty;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
@@ -360,7 +384,7 @@ pub mod app_sender_server {
                         T: AppSender,
                     > tonic::server::UnaryService<super::SendAppGossipSpecificMsg>
                     for SendAppGossipSpecificSvc<T> {
-                        type Response = ::pbjson_types::Empty;
+                        type Response = super::super::google::protobuf::Empty;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,

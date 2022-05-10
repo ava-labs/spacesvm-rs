@@ -84,7 +84,10 @@ pub mod writer_client {
         pub async fn write_header(
             &mut self,
             request: impl tonic::IntoRequest<super::WriteHeaderRequest>,
-        ) -> Result<tonic::Response<::pbjson_types::Empty>, tonic::Status> {
+        ) -> Result<
+                tonic::Response<super::super::super::google::protobuf::Empty>,
+                tonic::Status,
+            > {
             self.inner
                 .ready()
                 .await
@@ -102,8 +105,13 @@ pub mod writer_client {
         }
         pub async fn flush(
             &mut self,
-            request: impl tonic::IntoRequest<::pbjson_types::Empty>,
-        ) -> Result<tonic::Response<::pbjson_types::Empty>, tonic::Status> {
+            request: impl tonic::IntoRequest<
+                super::super::super::google::protobuf::Empty,
+            >,
+        ) -> Result<
+                tonic::Response<super::super::super::google::protobuf::Empty>,
+                tonic::Status,
+            > {
             self.inner
                 .ready()
                 .await
@@ -121,7 +129,9 @@ pub mod writer_client {
         }
         pub async fn hijack(
             &mut self,
-            request: impl tonic::IntoRequest<::pbjson_types::Empty>,
+            request: impl tonic::IntoRequest<
+                super::super::super::google::protobuf::Empty,
+            >,
         ) -> Result<tonic::Response<super::HijackResponse>, tonic::Status> {
             self.inner
                 .ready()
@@ -154,14 +164,20 @@ pub mod writer_server {
         async fn write_header(
             &self,
             request: tonic::Request<super::WriteHeaderRequest>,
-        ) -> Result<tonic::Response<::pbjson_types::Empty>, tonic::Status>;
+        ) -> Result<
+                tonic::Response<super::super::super::google::protobuf::Empty>,
+                tonic::Status,
+            >;
         async fn flush(
             &self,
-            request: tonic::Request<::pbjson_types::Empty>,
-        ) -> Result<tonic::Response<::pbjson_types::Empty>, tonic::Status>;
+            request: tonic::Request<super::super::super::google::protobuf::Empty>,
+        ) -> Result<
+                tonic::Response<super::super::super::google::protobuf::Empty>,
+                tonic::Status,
+            >;
         async fn hijack(
             &self,
-            request: tonic::Request<::pbjson_types::Empty>,
+            request: tonic::Request<super::super::super::google::protobuf::Empty>,
         ) -> Result<tonic::Response<super::HijackResponse>, tonic::Status>;
     }
     #[derive(Debug)]
@@ -266,7 +282,7 @@ pub mod writer_server {
                         T: Writer,
                     > tonic::server::UnaryService<super::WriteHeaderRequest>
                     for WriteHeaderSvc<T> {
-                        type Response = ::pbjson_types::Empty;
+                        type Response = super::super::super::google::protobuf::Empty;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
@@ -302,16 +318,21 @@ pub mod writer_server {
                 "/http.responsewriter.Writer/Flush" => {
                     #[allow(non_camel_case_types)]
                     struct FlushSvc<T: Writer>(pub Arc<T>);
-                    impl<T: Writer> tonic::server::UnaryService<::pbjson_types::Empty>
-                    for FlushSvc<T> {
-                        type Response = ::pbjson_types::Empty;
+                    impl<
+                        T: Writer,
+                    > tonic::server::UnaryService<
+                        super::super::super::google::protobuf::Empty,
+                    > for FlushSvc<T> {
+                        type Response = super::super::super::google::protobuf::Empty;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<::pbjson_types::Empty>,
+                            request: tonic::Request<
+                                super::super::super::google::protobuf::Empty,
+                            >,
                         ) -> Self::Future {
                             let inner = self.0.clone();
                             let fut = async move { (*inner).flush(request).await };
@@ -338,8 +359,11 @@ pub mod writer_server {
                 "/http.responsewriter.Writer/Hijack" => {
                     #[allow(non_camel_case_types)]
                     struct HijackSvc<T: Writer>(pub Arc<T>);
-                    impl<T: Writer> tonic::server::UnaryService<::pbjson_types::Empty>
-                    for HijackSvc<T> {
+                    impl<
+                        T: Writer,
+                    > tonic::server::UnaryService<
+                        super::super::super::google::protobuf::Empty,
+                    > for HijackSvc<T> {
                         type Response = super::HijackResponse;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
@@ -347,7 +371,9 @@ pub mod writer_server {
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<::pbjson_types::Empty>,
+                            request: tonic::Request<
+                                super::super::super::google::protobuf::Empty,
+                            >,
                         ) -> Self::Future {
                             let inner = self.0.clone();
                             let fut = async move { (*inner).hijack(request).await };
