@@ -24,7 +24,7 @@ use avalanche_proto::{
     rpcdb::database_client::DatabaseClient, sharedmemory::shared_memory_client::SharedMemoryClient,
     subnetlookup::subnet_lookup_client::SubnetLookupClient, vm, vm::vm_server::Vm,
 };
-use pbjson_types::Empty;
+use avalanche_proto::google::protobuf::{Empty, Timestamp};
 
 use crate::block::Block;
 use crate::kvvm::ChainVMInterior;
