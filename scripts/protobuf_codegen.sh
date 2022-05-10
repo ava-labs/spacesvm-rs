@@ -1,5 +1,15 @@
 #!/usr/bin/env bash
 
+# buf is required see:https://docs.buf.build/installation
+#
+# protoc plugins required
+# cargo install protoc-gen-prost-crate --version 0.1.5
+# cargo install protoc-gen-tonic --version 0.1.0
+# cargo install protoc-gen-prost-crate --version 0.1.5
+#
+# TODO:(hexfusion) add version checks
+# https://github.com/neoeinstein/protoc-gen-prost/issues/5
+
 BUF_VERSION='1.4.0'
 
 if ! [[ "$0" =~ scripts/protobuf_codegen.sh ]]; then
@@ -31,8 +41,6 @@ TARGET=$PWD/proto
 if [ -n "$1" ]; then 
   TARGET="$1"
 fi
-
-
 
 # move to proto dir
 cd $TARGET
