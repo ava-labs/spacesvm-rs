@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -e
 
+# created a new VMID from mini-kvvm-rs
+VMID="qBnAKQDqmduYcZYPj7GzQCeSXKkTZjb6ffygd3sU6kq4Z1LK9"
+VM_NAME="mini-kvvm-rs"
+VM_GENESIS_PATH="/tmp/mini-kvvm.genesis.json"
+
 # ./scripts/tests.e2e.sh 1.7.10
 if ! [[ "$0" =~ scripts/tests.e2e.sh ]]; then
   echo "must be run from repository root"
@@ -47,11 +52,24 @@ find /tmp/avalanchego-v${AVALANCHEGO_VERSION}
 AVALANCHEGO_PATH=/tmp/avalanchego-v${AVALANCHEGO_VERSION}/avalanchego
 AVALANCHEGO_PLUGIN_DIR=/tmp/avalanchego-v${AVALANCHEGO_VERSION}/plugins
 
+echo "compile mini-kvvm and install to plugin dir"
+cargo build --release --bin mini-kvvm
+mv ./target/release/mini-kvvm "${AVALANCHEGO_PLUGIN_DIR}/${VMID}"
+
+cat <<EOF > ${VM_GENESIS_PATH}
+{
+  "author": "foo",
+  "welcome_message": "bar"
+}
+EOF
+
+cat ${VM_GENESIS_PATH}
+
 #################################
 # download avalanche-network-runner
 # https://github.com/ava-labs/avalanche-network-runner
 # TODO: use "go install -v github.com/ava-labs/avalanche-network-runner/cmd/avalanche-network-runner@v${NETWORK_RUNNER_VERSION}"
-NETWORK_RUNNER_VERSION=1.0.12
+NETWORK_RUNNER_VERSION=1.0.13
 DOWNLOAD_PATH=/tmp/avalanche-network-runner.tar.gz
 DOWNLOAD_URL=https://github.com/ava-labs/avalanche-network-runner/releases/download/v${NETWORK_RUNNER_VERSION}/avalanche-network-runner_${NETWORK_RUNNER_VERSION}_linux_amd64.tar.gz
 if [[ ${GOOS} == "darwin" ]]; then
@@ -83,6 +101,9 @@ NETWORK_RUNNER_PID=${!}
 echo "running e2e tests"
 NETWORK_RUNNER_GRPC_ENDPOINT=http://127.0.0.1:12342 \
 NETWORK_RUNNER_AVALANCHEGO_PATH=${AVALANCHEGO_PATH} \
+NETWORK_RUNNER_WHITELISTED_SUBNETS=${VMID} \
+NETWORK_RUNNER_PLUGIN_DIR_PATH=${AVALANCHEGO_PLUGIN_DIR} \
+NETWORK_RUNNER_CUSTOM_VM="${VM_NAME}=${VM_GENESIS_PATH}" \
 RUST_LOG=debug \
 cargo test --all-features --package e2e -- --show-output --nocapture
 
