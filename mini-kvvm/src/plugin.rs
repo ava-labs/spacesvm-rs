@@ -1,6 +1,9 @@
 use std::io::{self, Error, ErrorKind};
 
-use avalanche_proto::vm::vm_server::{Vm, VmServer};
+use avalanche_proto::{
+    grpcutil,
+    vm::vm_server::{Vm, VmServer},
+};
 use log::info;
 use tokio::net::TcpListener;
 use tokio_stream::wrappers::TcpListenerStream;
@@ -8,7 +11,7 @@ use tonic::transport::{server::NamedService, Server};
 use tonic_health::server::health_reporter;
 
 /// ref. https://github.com/ava-labs/avalanchego/blob/v1.7.10/vms/rpcchainvm/vm.go
-pub const PROTOCOL_VERSION: u8 = 12;
+pub const PROTOCOL_VERSION: u8 = 14;
 pub const MAGIC_COOKIE_KEY: &str = "VM_PLUGIN";
 pub const MAGIC_COOKIE_VALUE: &str = "dynamic";
 
@@ -55,7 +58,13 @@ where
     let reflection_service = tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(avalanche_proto::rpcdb::FILE_DESCRIPTOR_SET)
         .register_encoded_file_descriptor_set(avalanche_proto::vm::FILE_DESCRIPTOR_SET)
-        .register_encoded_file_descriptor_set(tonic_health::proto::GRPC_HEALTH_V1_FILE_DESCRIPTOR_SET)
+        .register_encoded_file_descriptor_set(avalanche_proto::google::FILE_DESCRIPTOR_SET)
+        .register_encoded_file_descriptor_set(
+            avalanche_proto::io::prometheus::client::FILE_DESCRIPTOR_SET,
+        )
+        .register_encoded_file_descriptor_set(
+            tonic_health::proto::GRPC_HEALTH_V1_FILE_DESCRIPTOR_SET,
+        )
         .build()
         .expect("failed to create gRPC reflection service");
 
@@ -71,7 +80,7 @@ where
     info!("handshake message: {}", handshake_msg);
     println!("{}", handshake_msg);
 
-    Server::builder()
+    grpcutil::default_server()
         .add_service(health_svc)
         .add_service(reflection_service)
         .add_service(VmServer::new(vm))

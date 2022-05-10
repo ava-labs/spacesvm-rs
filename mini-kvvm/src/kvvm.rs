@@ -5,18 +5,17 @@ use avalanche_types::ids;
 use jsonrpc_derive::rpc;
 use jsonrpc_http_server::jsonrpc_core::{BoxFuture, IoHandler, Params, Result as RpcResult, Value};
 use jsonrpc_http_server::ServerBuilder;
+use semver::Version;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{self, Error, ErrorKind};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time;
 use tonic::transport::Channel;
-// use tokio::sync::RwLock;
 
 use avalanche_proto::{
-    appsender::app_sender_client::AppSenderClient,
-    messenger::messenger_client::MessengerClient, 
-    vm::vm_server::Vm,
+    appsender::app_sender_client::AppSenderClient, messenger::messenger_client::MessengerClient,
+    rpcdb::database_client::DatabaseClient, vm::vm_server::Vm,
 };
 
 use crate::block::Block;
@@ -26,6 +25,7 @@ use crate::engine::*;
 pub struct ChainVMInterior {
     pub ctx: Option<Context>,
     pub bootstrapped: bool,
+    pub version: Version,
 }
 
 impl ChainVMInterior {
@@ -33,6 +33,7 @@ impl ChainVMInterior {
         Self {
             ctx: None,
             bootstrapped: false,
+            version: Version::new(0, 0, 1),
         }
     }
 }
@@ -85,7 +86,7 @@ impl VM for ChainVMInterior {
     fn initialize(
         vm_inner: &Arc<RwLock<ChainVMInterior>>,
         ctx: Option<Context>,
-        _db_manager: &DbManager,
+        db_manager: &DbManager,
         _genesis_bytes: &[u8],
         _upgrade_bytes: &[u8],
         _config_bytes: &[u8],
@@ -93,8 +94,17 @@ impl VM for ChainVMInterior {
         _fxs: &[Fx],
         _app_sender: &AppSenderClient<Channel>,
     ) -> Result<(), Error> {
-        let mut writable_interior = vm_inner.write().unwrap();
-        writable_interior.ctx = ctx;
+        let mut interior = vm_inner.write().unwrap();
+        interior.ctx = ctx;
+
+        let current_db = &db_manager[0].database;
+        let mut db = crate::state::Interior::new(current_db);
+
+        // TODO: just testing
+        let bytes = vec![0x41, 0x42, 0x43];
+
+        let out = crate::state::State::put(&mut db, ids::Id::default(), bytes);
+
         Ok(())
     }
     fn bootstrapping() -> Result<(), Error> {
@@ -104,6 +114,13 @@ impl VM for ChainVMInterior {
         Ok(())
     }
     fn shutdown() -> Result<(), Error> {
+        Ok(())
+    }
+
+    fn set_state(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<(), Error> {
+        let mut interior = inner.write().unwrap();
+        // TODO: correctly implement
+        interior.bootstrapped = true;
         Ok(())
     }
 

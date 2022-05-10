@@ -1,8 +1,10 @@
 #![allow(dead_code)]
 #![allow(unused_imports)]
 
+use avalanche_proto::grpcutil;
 use avalanche_types::ids;
 use jsonrpc_http_server::jsonrpc_core::IoHandler;
+use prost::bytes::Bytes;
 use semver::Version;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -19,8 +21,7 @@ use avalanche_proto::{
     aliasreader::alias_reader_client::AliasReaderClient,
     appsender::app_sender_client::AppSenderClient, http::http_server::HttpServer,
     keystore::keystore_client::KeystoreClient, messenger::messenger_client::MessengerClient,
-    rpcdb::database_client::DatabaseClient,
-    sharedmemory::shared_memory_client::SharedMemoryClient,
+    rpcdb::database_client::DatabaseClient, sharedmemory::shared_memory_client::SharedMemoryClient,
     subnetlookup::subnet_lookup_client::SubnetLookupClient, vm, vm::vm_server::Vm,
 };
 use pbjson_types::Empty;
@@ -32,7 +33,12 @@ use crate::kvvm::ChainVMInterior;
 pub type Health = ();
 pub type Fx = ();
 
-pub type DbManager = HashMap<Version, DatabaseClient<Channel>>;
+pub type DbManager = Vec<VersionedDatabase>;
+
+pub struct VersionedDatabase {
+    pub database: DatabaseClient<Channel>,
+    version: Version,
+}
 
 /// snow.common.HTTPHandler
 /// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/snow/engine/common#HTTPHandler
@@ -92,7 +98,7 @@ pub trait VM: AppHandler + Checkable + Connector {
     fn initialize(
         vm_inner: &Arc<RwLock<ChainVMInterior>>,
         ctx: Option<Context>,
-        db_manager: &HashMap<Version, DatabaseClient<Channel>>,
+        db_manager: &DbManager,
         genesis_bytes: &[u8],
         upgrade_bytes: &[u8],
         config_bytes: &[u8],
@@ -107,6 +113,7 @@ pub trait VM: AppHandler + Checkable + Connector {
     fn version() -> Result<String, Error>;
     fn create_static_handlers() -> Result<HashMap<String, HTTPHandler>, Error>;
     fn create_handlers() -> Result<HashMap<String, HTTPHandler>, Error>;
+    fn set_state(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<(), Error>;
 }
 
 pub trait Getter {
@@ -136,6 +143,7 @@ impl<C: ChainVM> VMServer<C> {
             interior: Arc::new(RwLock::new(ChainVMInterior {
                 ctx: None,
                 bootstrapped: false,
+                version: Version::new(0, 0, 1),
             })),
         }
     }
@@ -183,7 +191,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
             sn_lookup: sn_lookup_client,
         });
 
-        let mut db_clients: DbManager = HashMap::new();
+        let mut db_clients = DbManager::with_capacity(req.db_servers.len());
         for db_server in req.db_servers.iter() {
             let semver = db_server.version.trim_start_matches('v');
             let version =
@@ -194,8 +202,12 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
                 .connect()
                 .await
                 .unwrap();
+
             let db_client = DatabaseClient::new(client_conn);
-            db_clients.insert(version, db_client);
+            db_clients.push(VersionedDatabase {
+                database: db_client,
+                version: version,
+            });
         }
 
         // Initialize ChainVM
@@ -214,21 +226,23 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
 
         let last_accepted = C::last_accepted().unwrap();
         let block = C::get_block(last_accepted.to_string()).unwrap();
-        let status = u32::MIN; // bogus
 
-        // TODO: block data is mocked
+        let parent_id = Vec::from(block.parent().as_ref());
+        let id = Vec::from(block.id().as_ref());
+        let bytes = Vec::from(block.bytes());
+        let timestamp = grpcutil::timestamp_from_time(block.timestamp());
+
         Ok(Response::new(vm::InitializeResponse {
-            last_accepted_id: prost::bytes::Bytes::default(),// TODO
-            last_accepted_parent_id: prost::bytes::Bytes::default(),// TODO
-            bytes: prost::bytes::Bytes::default(),// TODO
+            last_accepted_id: Bytes::from(id),
+            last_accepted_parent_id: Bytes::from(parent_id),
+            bytes: Bytes::from(bytes),
             height: block.height(),
-            timestamp: prost::bytes::Bytes::default(), // TODO
-            status: status,
+            timestamp: Some(timestamp),
         }))
     }
 
     async fn shutdown(&self, _request: Request<Empty>) -> Result<Response<Empty>, Status> {
-        Err(Status::unimplemented("shutdown"))
+        Ok(Response::new(Empty {}))
     }
 
     async fn create_handlers(
@@ -247,9 +261,14 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
 
     async fn connected(
         &self,
-        _request: Request<vm::ConnectedRequest>,
+        req: Request<vm::ConnectedRequest>,
     ) -> Result<Response<Empty>, Status> {
-        Err(Status::unimplemented("connected"))
+        let req = req.into_inner();
+        let id = String::from_utf8_lossy(&req.node_id);
+        // TODO: finish
+        let node_id = ids::vm_id_from_str(&id);
+
+        Ok(Response::new(Empty {}))
     }
 
     async fn disconnected(
@@ -268,9 +287,23 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
 
     async fn parse_block(
         &self,
-        _request: Request<vm::ParseBlockRequest>,
+        req: Request<vm::ParseBlockRequest>,
     ) -> Result<Response<vm::ParseBlockResponse>, Status> {
-        Err(Status::unimplemented("parse_block"))
+        let req = req.into_inner();
+
+        let block = C::parse_block(req.bytes.as_ref()).unwrap();
+        let parent_id = Vec::from(block.parent().as_ref());
+        let timestamp = grpcutil::timestamp_from_time(block.timestamp());
+        let status = block.status() as u32;
+        let id = Vec::from(block.id().as_ref());
+
+        Ok(Response::new(vm::ParseBlockResponse {
+            id: Bytes::from(id),
+            parent_id: Bytes::from(parent_id),
+            status: status,
+            height: block.height(),
+            timestamp: Some(timestamp),
+        }))
     }
 
     async fn get_block(
@@ -283,8 +316,25 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
     async fn set_state(
         &self,
         _request: Request<vm::SetStateRequest>,
-    ) -> Result<Response<Empty>, Status> {
-        Err(Status::unimplemented("set_state"))
+    ) -> Result<Response<vm::SetStateResponse>, Status> {
+        C::set_state(&self.interior.clone()).map_err(|e| {
+            tonic::Status::unknown(format!("VM::set_state failed: {}", e.to_string()))
+        })?;
+
+        let last_accepted = C::last_accepted().unwrap();
+        let block = C::get_block(last_accepted.to_string()).unwrap();
+        let parent_id = Vec::from(block.parent().as_ref());
+        let id = Vec::from(block.id().as_ref());
+        let bytes = Vec::from(block.bytes());
+        let timestamp = grpcutil::timestamp_from_time(block.timestamp());
+
+        Ok(Response::new(vm::SetStateResponse {
+            last_accepted_id: Bytes::from(id),
+            last_accepted_parent_id: Bytes::from(parent_id),
+            bytes: Bytes::from(bytes),
+            height: block.height(),
+            timestamp: Some(timestamp),
+        }))
     }
 
     async fn verify_height_index(
@@ -321,7 +371,11 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
         &self,
         _request: Request<Empty>,
     ) -> Result<Response<vm::VersionResponse>, Status> {
-        Err(Status::unimplemented("version"))
+        let interior = &self.interior.read().unwrap();
+        log::info!("called version!!");
+        Ok(Response::new(vm::VersionResponse {
+            version: interior.version.to_string(),
+        }))
     }
 
     async fn app_request(
@@ -391,5 +445,47 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
         _request: Request<Empty>,
     ) -> Result<Response<vm::GatherResponse>, Status> {
         Err(Status::unimplemented("gather"))
+    }
+
+    async fn state_sync_enabled(
+        &self,
+        _request: Request<Empty>,
+    ) -> Result<Response<vm::StateSyncEnabledResponse>, Status> {
+        Err(Status::unimplemented("state_sync_enabled"))
+    }
+
+    async fn get_ongoing_sync_state_summary(
+        &self,
+        _request: Request<Empty>,
+    ) -> Result<Response<vm::GetOngoingSyncStateSummaryResponse>, Status> {
+        Err(Status::unimplemented("get_ongoing_sync_state_summary"))
+    }
+
+    async fn parse_state_summary(
+        &self,
+        _request: Request<vm::ParseStateSummaryRequest>,
+    ) -> Result<tonic::Response<vm::ParseStateSummaryResponse>, Status> {
+        Err(Status::unimplemented("parse_state_summary"))
+    }
+
+    async fn get_state_summary(
+        &self,
+        _request: Request<vm::GetStateSummaryRequest>,
+    ) -> Result<Response<vm::GetStateSummaryResponse>, Status> {
+        Err(Status::unimplemented("get_state_summary"))
+    }
+
+    async fn get_last_state_summary(
+        &self,
+        _request: Request<Empty>,
+    ) -> Result<Response<vm::GetLastStateSummaryResponse>, Status> {
+        Err(Status::unimplemented("get_last_state_summary"))
+    }
+
+    async fn state_summary_accept(
+        &self,
+        _request: Request<vm::StateSummaryAcceptRequest>,
+    ) -> Result<tonic::Response<vm::StateSummaryAcceptResponse>, Status> {
+        Err(Status::unimplemented("state_summary_accept"))
     }
 }
