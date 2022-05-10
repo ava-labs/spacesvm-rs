@@ -48,8 +48,6 @@ cd $TARGET
 ## TODO(hexfusion): Remove from avalanchego
 # remove duplicate promethus proto
 rm -f protos/avalanchego/proto/io/prometheus/client/client.proto
-# reset submodule
-git submodule foreach --recursive git reset --hard
 
 echo "Re-generating protobuf..."
 
@@ -59,3 +57,7 @@ if [[ $? -ne 0 ]];  then
     echo "ERROR: protobuf generation failed"
     exit 1
 fi
+
+# reset submodule
+git submodule foreach --recursive git reset --hard 1> /dev/null
+
