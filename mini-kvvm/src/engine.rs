@@ -17,6 +17,7 @@ use tokio_stream::wrappers::TcpListenerStream;
 use tonic::transport::{Channel, Endpoint, Server};
 use tonic::{Request, Response, Status};
 
+use avalanche_proto::google::protobuf::{Empty, Timestamp};
 use avalanche_proto::{
     aliasreader::alias_reader_client::AliasReaderClient,
     appsender::app_sender_client::AppSenderClient, http::http_server::HttpServer,
@@ -24,7 +25,6 @@ use avalanche_proto::{
     rpcdb::database_client::DatabaseClient, sharedmemory::shared_memory_client::SharedMemoryClient,
     subnetlookup::subnet_lookup_client::SubnetLookupClient, vm, vm::vm_server::Vm,
 };
-use avalanche_proto::google::protobuf::{Empty, Timestamp};
 
 use crate::block::Block;
 use crate::kvvm::ChainVMInterior;

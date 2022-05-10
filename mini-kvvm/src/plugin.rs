@@ -58,7 +58,9 @@ where
     let reflection_service = tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(avalanche_proto::rpcdb::FILE_DESCRIPTOR_SET)
         .register_encoded_file_descriptor_set(avalanche_proto::vm::FILE_DESCRIPTOR_SET)
-        .register_encoded_file_descriptor_set(avalanche_proto::google::protobuf::FILE_DESCRIPTOR_SET)
+        .register_encoded_file_descriptor_set(
+            avalanche_proto::google::protobuf::FILE_DESCRIPTOR_SET,
+        )
         .register_encoded_file_descriptor_set(
             avalanche_proto::io::prometheus::client::FILE_DESCRIPTOR_SET,
         )
