@@ -66,8 +66,11 @@ pub mod node_client {
         ///
         pub async fn start(
             &mut self,
-            request: impl tonic::IntoRequest<()>,
-        ) -> Result<tonic::Response<()>, tonic::Status> {
+            request: impl tonic::IntoRequest<super::super::google::protobuf::Empty>,
+        ) -> Result<
+                tonic::Response<super::super::google::protobuf::Empty>,
+                tonic::Status,
+            > {
             self.inner
                 .ready()
                 .await
@@ -84,7 +87,7 @@ pub mod node_client {
         ///
         pub async fn exit_code(
             &mut self,
-            request: impl tonic::IntoRequest<()>,
+            request: impl tonic::IntoRequest<super::super::google::protobuf::Empty>,
         ) -> Result<tonic::Response<super::ExitCodeResponse>, tonic::Status> {
             self.inner
                 .ready()
@@ -102,8 +105,11 @@ pub mod node_client {
         ///
         pub async fn stop(
             &mut self,
-            request: impl tonic::IntoRequest<()>,
-        ) -> Result<tonic::Response<()>, tonic::Status> {
+            request: impl tonic::IntoRequest<super::super::google::protobuf::Empty>,
+        ) -> Result<
+                tonic::Response<super::super::google::protobuf::Empty>,
+                tonic::Status,
+            > {
             self.inner
                 .ready()
                 .await
@@ -129,18 +135,24 @@ pub mod node_server {
         ///
         async fn start(
             &self,
-            request: tonic::Request<()>,
-        ) -> Result<tonic::Response<()>, tonic::Status>;
+            request: tonic::Request<super::super::google::protobuf::Empty>,
+        ) -> Result<
+                tonic::Response<super::super::google::protobuf::Empty>,
+                tonic::Status,
+            >;
         ///
         async fn exit_code(
             &self,
-            request: tonic::Request<()>,
+            request: tonic::Request<super::super::google::protobuf::Empty>,
         ) -> Result<tonic::Response<super::ExitCodeResponse>, tonic::Status>;
         ///
         async fn stop(
             &self,
-            request: tonic::Request<()>,
-        ) -> Result<tonic::Response<()>, tonic::Status>;
+            request: tonic::Request<super::super::google::protobuf::Empty>,
+        ) -> Result<
+                tonic::Response<super::super::google::protobuf::Empty>,
+                tonic::Status,
+            >;
     }
     ///
     #[derive(Debug)]
@@ -205,13 +217,21 @@ pub mod node_server {
                 "/plugin.Node/Start" => {
                     #[allow(non_camel_case_types)]
                     struct StartSvc<T: Node>(pub Arc<T>);
-                    impl<T: Node> tonic::server::UnaryService<()> for StartSvc<T> {
-                        type Response = ();
+                    impl<
+                        T: Node,
+                    > tonic::server::UnaryService<super::super::google::protobuf::Empty>
+                    for StartSvc<T> {
+                        type Response = super::super::google::protobuf::Empty;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
                         >;
-                        fn call(&mut self, request: tonic::Request<()>) -> Self::Future {
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<
+                                super::super::google::protobuf::Empty,
+                            >,
+                        ) -> Self::Future {
                             let inner = self.0.clone();
                             let fut = async move { (*inner).start(request).await };
                             Box::pin(fut)
@@ -237,13 +257,21 @@ pub mod node_server {
                 "/plugin.Node/ExitCode" => {
                     #[allow(non_camel_case_types)]
                     struct ExitCodeSvc<T: Node>(pub Arc<T>);
-                    impl<T: Node> tonic::server::UnaryService<()> for ExitCodeSvc<T> {
+                    impl<
+                        T: Node,
+                    > tonic::server::UnaryService<super::super::google::protobuf::Empty>
+                    for ExitCodeSvc<T> {
                         type Response = super::ExitCodeResponse;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
                         >;
-                        fn call(&mut self, request: tonic::Request<()>) -> Self::Future {
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<
+                                super::super::google::protobuf::Empty,
+                            >,
+                        ) -> Self::Future {
                             let inner = self.0.clone();
                             let fut = async move { (*inner).exit_code(request).await };
                             Box::pin(fut)
@@ -269,13 +297,21 @@ pub mod node_server {
                 "/plugin.Node/Stop" => {
                     #[allow(non_camel_case_types)]
                     struct StopSvc<T: Node>(pub Arc<T>);
-                    impl<T: Node> tonic::server::UnaryService<()> for StopSvc<T> {
-                        type Response = ();
+                    impl<
+                        T: Node,
+                    > tonic::server::UnaryService<super::super::google::protobuf::Empty>
+                    for StopSvc<T> {
+                        type Response = super::super::google::protobuf::Empty;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
                         >;
-                        fn call(&mut self, request: tonic::Request<()>) -> Self::Future {
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<
+                                super::super::google::protobuf::Empty,
+                            >,
+                        ) -> Self::Future {
                             let inner = self.0.clone();
                             let fut = async move { (*inner).stop(request).await };
                             Box::pin(fut)

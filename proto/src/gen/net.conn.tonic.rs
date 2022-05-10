@@ -98,8 +98,13 @@ pub mod conn_client {
         }
         pub async fn close(
             &mut self,
-            request: impl tonic::IntoRequest<()>,
-        ) -> Result<tonic::Response<()>, tonic::Status> {
+            request: impl tonic::IntoRequest<
+                super::super::super::google::protobuf::Empty,
+            >,
+        ) -> Result<
+                tonic::Response<super::super::super::google::protobuf::Empty>,
+                tonic::Status,
+            > {
             self.inner
                 .ready()
                 .await
@@ -116,7 +121,10 @@ pub mod conn_client {
         pub async fn set_deadline(
             &mut self,
             request: impl tonic::IntoRequest<super::SetDeadlineRequest>,
-        ) -> Result<tonic::Response<()>, tonic::Status> {
+        ) -> Result<
+                tonic::Response<super::super::super::google::protobuf::Empty>,
+                tonic::Status,
+            > {
             self.inner
                 .ready()
                 .await
@@ -135,7 +143,10 @@ pub mod conn_client {
         pub async fn set_read_deadline(
             &mut self,
             request: impl tonic::IntoRequest<super::SetDeadlineRequest>,
-        ) -> Result<tonic::Response<()>, tonic::Status> {
+        ) -> Result<
+                tonic::Response<super::super::super::google::protobuf::Empty>,
+                tonic::Status,
+            > {
             self.inner
                 .ready()
                 .await
@@ -154,7 +165,10 @@ pub mod conn_client {
         pub async fn set_write_deadline(
             &mut self,
             request: impl tonic::IntoRequest<super::SetDeadlineRequest>,
-        ) -> Result<tonic::Response<()>, tonic::Status> {
+        ) -> Result<
+                tonic::Response<super::super::super::google::protobuf::Empty>,
+                tonic::Status,
+            > {
             self.inner
                 .ready()
                 .await
@@ -189,20 +203,32 @@ pub mod conn_server {
         ) -> Result<tonic::Response<super::WriteResponse>, tonic::Status>;
         async fn close(
             &self,
-            request: tonic::Request<()>,
-        ) -> Result<tonic::Response<()>, tonic::Status>;
+            request: tonic::Request<super::super::super::google::protobuf::Empty>,
+        ) -> Result<
+                tonic::Response<super::super::super::google::protobuf::Empty>,
+                tonic::Status,
+            >;
         async fn set_deadline(
             &self,
             request: tonic::Request<super::SetDeadlineRequest>,
-        ) -> Result<tonic::Response<()>, tonic::Status>;
+        ) -> Result<
+                tonic::Response<super::super::super::google::protobuf::Empty>,
+                tonic::Status,
+            >;
         async fn set_read_deadline(
             &self,
             request: tonic::Request<super::SetDeadlineRequest>,
-        ) -> Result<tonic::Response<()>, tonic::Status>;
+        ) -> Result<
+                tonic::Response<super::super::super::google::protobuf::Empty>,
+                tonic::Status,
+            >;
         async fn set_write_deadline(
             &self,
             request: tonic::Request<super::SetDeadlineRequest>,
-        ) -> Result<tonic::Response<()>, tonic::Status>;
+        ) -> Result<
+                tonic::Response<super::super::super::google::protobuf::Empty>,
+                tonic::Status,
+            >;
     }
     #[derive(Debug)]
     pub struct ConnServer<T: Conn> {
@@ -338,13 +364,22 @@ pub mod conn_server {
                 "/net.conn.Conn/Close" => {
                     #[allow(non_camel_case_types)]
                     struct CloseSvc<T: Conn>(pub Arc<T>);
-                    impl<T: Conn> tonic::server::UnaryService<()> for CloseSvc<T> {
-                        type Response = ();
+                    impl<
+                        T: Conn,
+                    > tonic::server::UnaryService<
+                        super::super::super::google::protobuf::Empty,
+                    > for CloseSvc<T> {
+                        type Response = super::super::super::google::protobuf::Empty;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
                         >;
-                        fn call(&mut self, request: tonic::Request<()>) -> Self::Future {
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<
+                                super::super::super::google::protobuf::Empty,
+                            >,
+                        ) -> Self::Future {
                             let inner = self.0.clone();
                             let fut = async move { (*inner).close(request).await };
                             Box::pin(fut)
@@ -372,7 +407,7 @@ pub mod conn_server {
                     struct SetDeadlineSvc<T: Conn>(pub Arc<T>);
                     impl<T: Conn> tonic::server::UnaryService<super::SetDeadlineRequest>
                     for SetDeadlineSvc<T> {
-                        type Response = ();
+                        type Response = super::super::super::google::protobuf::Empty;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
@@ -410,7 +445,7 @@ pub mod conn_server {
                     struct SetReadDeadlineSvc<T: Conn>(pub Arc<T>);
                     impl<T: Conn> tonic::server::UnaryService<super::SetDeadlineRequest>
                     for SetReadDeadlineSvc<T> {
-                        type Response = ();
+                        type Response = super::super::super::google::protobuf::Empty;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
@@ -448,7 +483,7 @@ pub mod conn_server {
                     struct SetWriteDeadlineSvc<T: Conn>(pub Arc<T>);
                     impl<T: Conn> tonic::server::UnaryService<super::SetDeadlineRequest>
                     for SetWriteDeadlineSvc<T> {
-                        type Response = ();
+                        type Response = super::super::super::google::protobuf::Empty;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
