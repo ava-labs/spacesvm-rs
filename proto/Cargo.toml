@@ -35,8 +35,6 @@ vm = ["io_prometheus_client", "google_protobuf"]
 bytes = "1.1.0"
 chrono = "0.4.19"
 prost = "0.10.0"
-pbjson = "0.3"
-pbjson-types = "0.3"
 tonic = { version = "0.7", features = ["compression"] }
 
 [build-dependencies]

@@ -1,7 +1,8 @@
 use chrono::{DateTime, Utc};
-use pbjson_types::Timestamp;
 use std::time::Duration;
 use tonic::transport::Server;
+
+use crate::google::protobuf::Timestamp;
 
 pub fn timestamp_from_time(dt: &DateTime<Utc>) -> Timestamp {
     Timestamp {
