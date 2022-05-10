@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -e
 
-# created a new VMID from mini-kvvm-rs
-VMID="qBnAKQDqmduYcZYPj7GzQCeSXKkTZjb6ffygd3sU6kq4Z1LK9"
-VM_NAME="mini-kvvm-rs"
-VM_GENESIS_PATH="/tmp/mini-kvvm.genesis.json"
+# created a new VMID from minikvvm
+VMID="qBnAKUQ2mxiB1JdqsPPU7Ufuj1XmPLpnPTRvZEpkYZBmK6UjE"
+VM_NAME="minikvvm"
+VM_GENESIS_PATH="/tmp/minikvvm.genesis.json"
 
 # ./scripts/tests.e2e.sh 1.7.10
 if ! [[ "$0" =~ scripts/tests.e2e.sh ]]; then
