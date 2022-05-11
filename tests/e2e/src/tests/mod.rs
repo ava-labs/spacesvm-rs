@@ -37,7 +37,7 @@ async fn e2e() {
 
     let (custom_vms, is_set) = crate::get_custom_vms();
     assert!(is_set);
-    info!("custom_vms {:?})", plugin_dir);
+    info!("custom_vms {:?})", custom_vms);
 
     info!("starting...");
     let resp = cli
