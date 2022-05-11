@@ -5,14 +5,17 @@ use num_traits::FromPrimitive;
 use std::io::{Error, ErrorKind};
 use tonic::transport::Channel;
 
+use crate::block::Block;
+
 pub type Database = DatabaseClient<Channel>;
 
 const LAST_ACCEPTED_BLOCK_ID_KEY: &[u8] = b"last_accepted_block_id";
 const STATE_INITIALIZED_KEY: &[u8] = b"state_initialized";
 const STATE_INITIALIZED_VALUE: &[u8] = b"state_has_infact_been_initialized";
-
 const BLOCK_STATE_PREFIX: &[u8] = b"blockStatePrefix";
 const SINGLETON_STATE_PREFIX: &[u8] = b"singleton";
+
+pub const BLOCK_DATA_LEN: usize = 32;
 
 /// snow.engine.common.AppHandler
 /// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/vms/components/state#State
@@ -20,6 +23,7 @@ const SINGLETON_STATE_PREFIX: &[u8] = b"singleton";
 pub trait State<'a> {
     async fn get(&'a self, key: ids::Id) -> Result<Option<Vec<u8>>, Error>;
     async fn put(&'a mut self, key: ids::Id, value: Vec<u8>) -> Result<(), Error>;
+    async fn get_block(&'a mut self, id: ids::Id) -> Result<Option<Block>, Error>;
 }
 
 #[derive(Debug)]
@@ -95,6 +99,16 @@ impl<'a> State<'a> for Interior<'a> {
                 format!("failed to put: {:?}", resp.err),
             )),
         }
+    }
+
+    async fn get_block(&'a mut self, id: ids::Id) -> Result<Option<Block>, Error> {
+        let key = Self::prefix(BLOCK_STATE_PREFIX, id.as_ref());
+        let value = self.get(ids::Id::from_slice(&key)).await?;
+
+        Ok(match value {
+            Some(v) => serde_json::from_slice(&v)?,
+            None => None,
+        })
     }
 }
 
