@@ -44,6 +44,16 @@ impl Genesis {
         Ok(resp)
     }
 
+    pub fn verify(&self) -> Result<(),Error> {
+        if self.author.is_empty() {
+            return Err(Error::new(ErrorKind::InvalidData,format!("invalid author")));
+        }
+        if self.welcome_message.is_empty() {
+            return Err(Error::new(ErrorKind::InvalidData, format!("invalid welcome_message")));
+        }
+        Ok(())
+    }
+
     pub fn sync(&self, file_path: &str) -> io::Result<()> {
         info!("syncing genesis to '{}'", file_path);
         let path = Path::new(file_path);
