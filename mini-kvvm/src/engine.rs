@@ -28,6 +28,7 @@ use avalanche_proto::{
 
 use crate::block::Block;
 use crate::kvvm::ChainVMInterior;
+use crate::genesis::Genesis;
 
 // FIXME: dummies
 pub type Health = ();
@@ -144,6 +145,7 @@ impl<C: ChainVM> VMServer<C> {
                 ctx: None,
                 bootstrapped: false,
                 version: Version::new(0, 0, 1),
+                genesis: Genesis::default(),
             })),
         }
     }
