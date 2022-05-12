@@ -4,9 +4,10 @@
 use std::collections::HashMap;
 use std::future::Future;
 use std::io::{self, Error, ErrorKind};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::Arc;
 use std::time;
 
+use async_trait::async_trait;
 use avalanche_types::ids;
 use jsonrpc_derive::rpc;
 use jsonrpc_http_server::jsonrpc_core::{BoxFuture, IoHandler, Params, Result as RpcResult, Value};
@@ -14,6 +15,8 @@ use jsonrpc_http_server::ServerBuilder;
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use tonic::transport::Channel;
+use tokio::sync::{Mutex, RwLock};
+
 
 use avalanche_proto::{
     appsender::app_sender_client::AppSenderClient, messenger::messenger_client::MessengerClient,
@@ -21,8 +24,8 @@ use avalanche_proto::{
 };
 
 use crate::block::Block;
-use crate::genesis::Genesis;
 use crate::engine::*;
+use crate::genesis::Genesis;
 use crate::state::{Database, State, BLOCK_DATA_LEN};
 
 pub struct ChainVMInterior {
@@ -31,7 +34,7 @@ pub struct ChainVMInterior {
     pub version: Version,
     pub genesis: Genesis,
     pub db: Option<Database>,
-    pub state: Option<State>
+    pub state: Option<State>,
 }
 
 impl ChainVMInterior {
@@ -76,7 +79,7 @@ impl AppHandler for ChainVMInterior {
 }
 
 // This VM doesn't implement Connector these methods are noop.
-impl Connector for ChainVMInterior{
+impl Connector for ChainVMInterior {
     fn connected(_id: &ids::ShortId) -> Result<(), Error> {
         Ok(())
     }
@@ -90,9 +93,9 @@ impl Checkable for ChainVMInterior {
         Ok(())
     }
 }
-
+#[tonic::async_trait]
 impl VM for ChainVMInterior {
-    fn initialize(
+    async fn initialize(
         vm_inner: &Arc<RwLock<ChainVMInterior>>,
         ctx: Option<Context>,
         db_manager: &DbManager,
@@ -103,13 +106,13 @@ impl VM for ChainVMInterior {
         _fxs: &[Fx],
         _app_sender: &AppSenderClient<Channel>,
     ) -> Result<(), Error> {
-        let mut interior = vm_inner.write().unwrap();
+        let mut interior = vm_inner.write().await;
         interior.ctx = ctx;
 
-        let current_db = db_manager[0].database;
+        let current_db = &db_manager[0].database;
         // let mut db = crate::state::Interior::new(current_db);
 
-        interior.db = Some(current_db);
+        interior.db = Some(current_db.clone());
 
         let state = State::new(current_db.clone());
         interior.state = Some(state);
@@ -124,9 +127,9 @@ impl VM for ChainVMInterior {
             Err(e) => eprintln!("failed to verify genesis: {:?}", e),
         }
 
-        // TODO: just testing
-        let bytes = vec![0x41, 0x42, 0x43];
-        let out = crate::state::State::put(&mut db, ids::Id::default(), bytes);
+        // // TODO: just testing
+        // let bytes = vec![0x41, 0x42, 0x43];
+        // let out = crate::state::State::put(&mut db, ids::Id::default(), bytes);
         Ok(())
     }
     fn bootstrapping() -> Result<(), Error> {
@@ -139,8 +142,8 @@ impl VM for ChainVMInterior {
         Ok(())
     }
 
-    fn set_state(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<(), Error> {
-        let mut interior = inner.write().unwrap();
+    async fn set_state(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<(), Error> {
+        let mut interior = inner.write().await;
         // TODO: correctly implement
         interior.bootstrapped = true;
         Ok(())
@@ -173,7 +176,7 @@ impl Parser for ChainVMInterior {
         Ok(Block::default())
     }
 }
-
+#[async_trait]
 impl ChainVM for ChainVMInterior {
     fn build_block() -> Result<Block, Error> {
         Ok(Block::default())
@@ -184,12 +187,12 @@ impl ChainVM for ChainVMInterior {
     fn set_preference(_id: ids::Id) -> Result<(), Error> {
         Ok(())
     }
-    fn last_accepted(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<ids::Id, Error> {
-        let interior = inner.read().unwrap();
-        let mut state = crate::state::State::new(interior.db.unwrap());
+    async fn last_accepted(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<ids::Id, Error> {
+        let interior = inner.read().await;
+        let mut state = crate::state::State::new(interior.db.clone().unwrap());
         // db::get_last_accepted_block_id();
         let out = state.get_last_accepted_block_id();
-        let something = out.unwrap();
+        let something = out.await?.unwrap();
         Ok(something)
     }
 }

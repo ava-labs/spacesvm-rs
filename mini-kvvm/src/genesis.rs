@@ -44,12 +44,18 @@ impl Genesis {
         Ok(resp)
     }
 
-    pub fn verify(&self) -> Result<(),Error> {
+    pub fn verify(&self) -> Result<(), Error> {
         if self.author.is_empty() {
-            return Err(Error::new(ErrorKind::InvalidData,format!("invalid author")));
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                format!("invalid author"),
+            ));
         }
         if self.welcome_message.is_empty() {
-            return Err(Error::new(ErrorKind::InvalidData, format!("invalid welcome_message")));
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                format!("invalid welcome_message"),
+            ));
         }
         log::info!("verify success!");
         Ok(())

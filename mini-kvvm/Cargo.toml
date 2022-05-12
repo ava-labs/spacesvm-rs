@@ -14,7 +14,8 @@ name = "mini-kvvm"
 path = "src/bin/mini-kvvm/main.rs"
 
 [dependencies]
-avalanche-proto = { path = "../proto" } 
+async-trait = "0.1.53"
+avalanche-proto = { path = "../proto" }
 avalanche-types = { git = "https://github.com/ava-labs/avalanche-ops", version = "0.0" }
 chrono = "0.4.19"
 clap = { version = "3.1.8", features = ["cargo", "derive"] }

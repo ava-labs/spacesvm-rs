@@ -1,8 +1,9 @@
+use std::io::{Error, ErrorKind};
+
 use avalanche_proto::rpcdb::{database_client::*, GetRequest, PutRequest};
 use avalanche_types::ids::Id;
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
-use std::io::{Error, ErrorKind};
 use tonic::transport::Channel;
 
 use crate::block::Block;
@@ -110,7 +111,10 @@ impl State {
     }
 
     pub async fn get_last_accepted_block_id(&mut self) -> Result<Option<Id>, Error> {
-        match self.get(Id::from_slice(&self.last_accepted_block_id_key.clone())).await? {
+        match self
+            .get(Id::from_slice(&self.last_accepted_block_id_key.clone()))
+            .await?
+        {
             Some(block_id_bytes) => Ok(Some(Id::from_slice(&block_id_bytes))),
             None => Ok(None),
         }

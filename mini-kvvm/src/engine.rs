@@ -1,23 +1,15 @@
 #![allow(dead_code)]
 #![allow(unused_imports)]
 
-use avalanche_proto::grpcutil;
-use avalanche_types::ids;
-use jsonrpc_http_server::jsonrpc_core::IoHandler;
-use prost::bytes::Bytes;
-use semver::Version;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::Error;
 use std::net::SocketAddr;
-use std::sync::RwLock;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time;
-use tokio_stream::wrappers::TcpListenerStream;
-use tonic::transport::{Channel, Endpoint, Server};
-use tonic::{Request, Response, Status};
 
 use avalanche_proto::google::protobuf::{Empty, Timestamp};
+use avalanche_proto::grpcutil;
 use avalanche_proto::{
     aliasreader::alias_reader_client::AliasReaderClient,
     appsender::app_sender_client::AppSenderClient, http::http_server::HttpServer,
@@ -25,10 +17,18 @@ use avalanche_proto::{
     rpcdb::database_client::DatabaseClient, sharedmemory::shared_memory_client::SharedMemoryClient,
     subnetlookup::subnet_lookup_client::SubnetLookupClient, vm, vm::vm_server::Vm,
 };
+use avalanche_types::ids;
+use jsonrpc_http_server::jsonrpc_core::IoHandler;
+use prost::bytes::Bytes;
+use semver::Version;
+use tokio_stream::wrappers::TcpListenerStream;
+use tokio::sync::{Mutex, RwLock};
+use tonic::transport::{Channel, Endpoint, Server};
+use tonic::{Request, Response, Status};
 
 use crate::block::Block;
-use crate::kvvm::ChainVMInterior;
 use crate::genesis::Genesis;
+use crate::kvvm::ChainVMInterior;
 
 // FIXME: dummies
 pub type Health = ();
@@ -95,8 +95,9 @@ pub trait AppHandler {
 
 /// snow.engine.common.VM
 /// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/snow/engine/common#VM
+#[tonic::async_trait]
 pub trait VM: AppHandler + Checkable + Connector {
-    fn initialize(
+    async fn initialize(
         vm_inner: &Arc<RwLock<ChainVMInterior>>,
         ctx: Option<Context>,
         db_manager: &DbManager,
@@ -114,7 +115,7 @@ pub trait VM: AppHandler + Checkable + Connector {
     fn version() -> Result<String, Error>;
     fn create_static_handlers() -> Result<HashMap<String, HTTPHandler>, Error>;
     fn create_handlers() -> Result<HashMap<String, HTTPHandler>, Error>;
-    fn set_state(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<(), Error>;
+    async fn set_state(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<(), Error>;
 }
 
 pub trait Getter {
@@ -124,12 +125,12 @@ pub trait Getter {
 pub trait Parser {
     fn parse_block(bytes: &[u8]) -> Result<Block, Error>;
 }
-
+#[tonic::async_trait]
 pub trait ChainVM: VM + Getter + Parser {
     fn build_block() -> Result<Block, Error>;
     fn issue_tx() -> Result<Block, Error>;
     fn set_preference(id: ids::Id) -> Result<(), Error>;
-    fn last_accepted(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<ids::Id, Error>;
+    async fn last_accepted(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<ids::Id, Error>;
 }
 
 pub struct VMServer<C> {
@@ -221,9 +222,9 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
             &[()],
             &app_sender_client,
         )
-        .map_err(|e| tonic::Status::unknown(format!("VM::initialize failed: {}", e.to_string())))?;
+        .await.map_err(|e| tonic::Status::unknown(format!("VM::initialize failed: {}", e.to_string())))?;
 
-        let last_accepted = C::last_accepted(&self.interior.clone()).unwrap();
+        let last_accepted = C::last_accepted(&self.interior.clone()).await?;
         let block = C::get_block(last_accepted.to_string()).unwrap();
 
         let parent_id = Vec::from(block.parent().as_ref());
@@ -316,11 +317,11 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
         &self,
         _request: Request<vm::SetStateRequest>,
     ) -> Result<Response<vm::SetStateResponse>, Status> {
-        C::set_state(&self.interior.clone()).map_err(|e| {
+        C::set_state(&self.interior.clone()).await.map_err(|e| {
             tonic::Status::unknown(format!("VM::set_state failed: {}", e.to_string()))
         })?;
 
-        let last_accepted = C::last_accepted(&self.interior.clone()).unwrap();
+        let last_accepted = C::last_accepted(&self.interior.clone()).await?;
         let block = C::get_block(last_accepted.to_string()).unwrap();
         let parent_id = Vec::from(block.parent().as_ref());
         let id = Vec::from(block.id().as_ref());
@@ -370,7 +371,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
         &self,
         _request: Request<Empty>,
     ) -> Result<Response<vm::VersionResponse>, Status> {
-        let interior = &self.interior.read().unwrap();
+        let interior = &self.interior.read().await;
         log::info!("called version!!");
         Ok(Response::new(vm::VersionResponse {
             version: interior.version.to_string(),
