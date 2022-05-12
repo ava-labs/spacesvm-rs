@@ -129,7 +129,7 @@ pub trait ChainVM: VM + Getter + Parser {
     fn build_block() -> Result<Block, Error>;
     fn issue_tx() -> Result<Block, Error>;
     fn set_preference(id: ids::Id) -> Result<(), Error>;
-    fn last_accepted() -> Result<ids::Id, Error>;
+    fn last_accepted(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<ids::Id, Error>;
 }
 
 pub struct VMServer<C> {
@@ -141,12 +141,7 @@ impl<C: ChainVM> VMServer<C> {
     pub fn new(chain_vm: C) -> Self {
         Self {
             vm: chain_vm,
-            interior: Arc::new(RwLock::new(ChainVMInterior {
-                ctx: None,
-                bootstrapped: false,
-                version: Version::new(0, 0, 1),
-                genesis: Genesis::default(),
-            })),
+            interior: Arc::new(RwLock::new(ChainVMInterior::new())),
         }
     }
 }
@@ -157,6 +152,8 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
         &self,
         req: Request<vm::InitializeRequest>,
     ) -> Result<Response<vm::InitializeResponse>, Status> {
+        // log::info!("testChainVM");
+
         let req = req.into_inner();
         let client_conn = Endpoint::from_shared(format!("http://{}", req.server_addr))
             .unwrap()
@@ -226,7 +223,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
         )
         .map_err(|e| tonic::Status::unknown(format!("VM::initialize failed: {}", e.to_string())))?;
 
-        let last_accepted = C::last_accepted().unwrap();
+        let last_accepted = C::last_accepted(&self.interior.clone()).unwrap();
         let block = C::get_block(last_accepted.to_string()).unwrap();
 
         let parent_id = Vec::from(block.parent().as_ref());
@@ -323,7 +320,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
             tonic::Status::unknown(format!("VM::set_state failed: {}", e.to_string()))
         })?;
 
-        let last_accepted = C::last_accepted().unwrap();
+        let last_accepted = C::last_accepted(&self.interior.clone()).unwrap();
         let block = C::get_block(last_accepted.to_string()).unwrap();
         let parent_id = Vec::from(block.parent().as_ref());
         let id = Vec::from(block.id().as_ref());

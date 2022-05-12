@@ -1,5 +1,5 @@
 use avalanche_proto::rpcdb::{database_client::*, GetRequest, PutRequest};
-use avalanche_types::ids;
+use avalanche_types::ids::Id;
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use std::io::{Error, ErrorKind};
@@ -19,23 +19,24 @@ pub const BLOCK_DATA_LEN: usize = 32;
 
 /// snow.engine.common.AppHandler
 /// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/vms/components/state#State
-#[tonic::async_trait]
-pub trait State<'a> {
-    async fn get(&'a self, key: ids::Id) -> Result<Option<Vec<u8>>, Error>;
-    async fn put(&'a mut self, key: ids::Id, value: Vec<u8>) -> Result<(), Error>;
-    async fn get_block(&'a mut self, id: ids::Id) -> Result<Option<Block>, Error>;
-}
+// #[tonic::async_trait]
+// pub trait State<'a> {
+//     async fn get(&'a self, key: Id) -> Result<Option<Vec<u8>>, Error>;
+//     async fn put(&'a mut self, key: Id, value: Vec<u8>) -> Result<(), Error>;
+//     async fn get_block(&'a mut self, id: Id) -> Result<Option<Block>, Error>;
+//     async fn get_last_accepted_block_id(&'a mut self) -> Result<Option<Id>, Error>;
+// }
 
-#[derive(Debug)]
-pub struct Interior<'a> {
-    client: &'a Database,
+// #[derive(Debug)]
+pub struct State {
+    client: Database,
 
     last_accepted_block_id_key: Vec<u8>,
     state_initialized_key: Vec<u8>,
 }
 
-impl<'a> Interior<'a> {
-    pub fn new(client: &'a Database) -> Self {
+impl State {
+    pub fn new(client: Database) -> Self {
         Self {
             client,
             last_accepted_block_id_key: Self::prefix(
@@ -52,11 +53,8 @@ impl<'a> Interior<'a> {
 
         result
     }
-}
 
-#[tonic::async_trait]
-impl<'a> State<'a> for Interior<'a> {
-    async fn get(&'a self, key: ids::Id) -> Result<Option<Vec<u8>>, Error> {
+    pub async fn get(&mut self, key: Id) -> Result<Option<Vec<u8>>, Error> {
         let key = prost::bytes::Bytes::from(Vec::from(key.as_ref()));
         let mut client = self.client.clone();
         let resp = client.get(GetRequest { key }).await.unwrap().into_inner();
@@ -72,7 +70,7 @@ impl<'a> State<'a> for Interior<'a> {
         }
     }
 
-    async fn put(&'a mut self, key: ids::Id, value: Vec<u8>) -> Result<(), Error> {
+    pub async fn put(&mut self, key: Id, value: Vec<u8>) -> Result<(), Error> {
         let key = prost::bytes::Bytes::from(Vec::from(key.as_ref()));
         let value = prost::bytes::Bytes::from(value);
         let mut client = self.client.clone();
@@ -101,14 +99,21 @@ impl<'a> State<'a> for Interior<'a> {
         }
     }
 
-    async fn get_block(&'a mut self, id: ids::Id) -> Result<Option<Block>, Error> {
+    pub async fn get_block(&mut self, id: Id) -> Result<Option<Block>, Error> {
         let key = Self::prefix(BLOCK_STATE_PREFIX, id.as_ref());
-        let value = self.get(ids::Id::from_slice(&key)).await?;
+        let value = self.get(Id::from_slice(&key)).await?;
 
         Ok(match value {
             Some(v) => serde_json::from_slice(&v)?,
             None => None,
         })
+    }
+
+    pub async fn get_last_accepted_block_id(&mut self) -> Result<Option<Id>, Error> {
+        match self.get(Id::from_slice(&self.last_accepted_block_id_key.clone())).await? {
+            Some(block_id_bytes) => Ok(Some(Id::from_slice(&block_id_bytes))),
+            None => Ok(None),
+        }
     }
 }
 

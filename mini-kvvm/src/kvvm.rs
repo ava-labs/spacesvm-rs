@@ -1,16 +1,18 @@
 #![allow(dead_code)]
 #![allow(unused_imports)]
 
+use std::collections::HashMap;
+use std::future::Future;
+use std::io::{self, Error, ErrorKind};
+use std::sync::{Arc, Mutex, RwLock};
+use std::time;
+
 use avalanche_types::ids;
 use jsonrpc_derive::rpc;
 use jsonrpc_http_server::jsonrpc_core::{BoxFuture, IoHandler, Params, Result as RpcResult, Value};
 use jsonrpc_http_server::ServerBuilder;
 use semver::Version;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::io::{self, Error, ErrorKind};
-use std::sync::{Arc, Mutex, RwLock};
-use std::time;
 use tonic::transport::Channel;
 
 use avalanche_proto::{
@@ -19,13 +21,17 @@ use avalanche_proto::{
 };
 
 use crate::block::Block;
+use crate::genesis::Genesis;
 use crate::engine::*;
+use crate::state::{Database, State, BLOCK_DATA_LEN};
 
-// #[derive(Debug)]
 pub struct ChainVMInterior {
     pub ctx: Option<Context>,
     pub bootstrapped: bool,
     pub version: Version,
+    pub genesis: Genesis,
+    pub db: Option<Database>,
+    pub state: Option<State>
 }
 
 impl ChainVMInterior {
@@ -34,6 +40,9 @@ impl ChainVMInterior {
             ctx: None,
             bootstrapped: false,
             version: Version::new(0, 0, 1),
+            genesis: Genesis::default(),
+            db: None,
+            state: None,
         }
     }
 }
@@ -67,7 +76,7 @@ impl AppHandler for ChainVMInterior {
 }
 
 // This VM doesn't implement Connector these methods are noop.
-impl Connector for ChainVMInterior {
+impl Connector for ChainVMInterior{
     fn connected(_id: &ids::ShortId) -> Result<(), Error> {
         Ok(())
     }
@@ -87,7 +96,7 @@ impl VM for ChainVMInterior {
         vm_inner: &Arc<RwLock<ChainVMInterior>>,
         ctx: Option<Context>,
         db_manager: &DbManager,
-        _genesis_bytes: &[u8],
+        genesis_bytes: &[u8],
         _upgrade_bytes: &[u8],
         _config_bytes: &[u8],
         _to_engine: &MessengerClient<Channel>,
@@ -97,14 +106,27 @@ impl VM for ChainVMInterior {
         let mut interior = vm_inner.write().unwrap();
         interior.ctx = ctx;
 
-        let current_db = &db_manager[0].database;
-        let mut db = crate::state::Interior::new(current_db);
+        let current_db = db_manager[0].database;
+        // let mut db = crate::state::Interior::new(current_db);
+
+        interior.db = Some(current_db);
+
+        let state = State::new(current_db.clone());
+        interior.state = Some(state);
+
+        log::info!("testChainVMInterior");
+
+        // store genesis to struct
+        let genesis = Genesis::from_json(genesis_bytes).unwrap();
+        interior.genesis = genesis;
+        match interior.genesis.verify() {
+            Ok(g) => g,
+            Err(e) => eprintln!("failed to verify genesis: {:?}", e),
+        }
 
         // TODO: just testing
         let bytes = vec![0x41, 0x42, 0x43];
-
         let out = crate::state::State::put(&mut db, ids::Id::default(), bytes);
-
         Ok(())
     }
     fn bootstrapping() -> Result<(), Error> {
@@ -162,7 +184,12 @@ impl ChainVM for ChainVMInterior {
     fn set_preference(_id: ids::Id) -> Result<(), Error> {
         Ok(())
     }
-    fn last_accepted() -> Result<ids::Id, Error> {
-        Ok(ids::Id::default())
+    fn last_accepted(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<ids::Id, Error> {
+        let interior = inner.read().unwrap();
+        let mut state = crate::state::State::new(interior.db.unwrap());
+        // db::get_last_accepted_block_id();
+        let out = state.get_last_accepted_block_id();
+        let something = out.unwrap();
+        Ok(something)
     }
 }
