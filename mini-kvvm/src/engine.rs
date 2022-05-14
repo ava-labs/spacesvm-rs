@@ -21,8 +21,8 @@ use avalanche_types::ids;
 use jsonrpc_http_server::jsonrpc_core::IoHandler;
 use prost::bytes::Bytes;
 use semver::Version;
-use tokio_stream::wrappers::TcpListenerStream;
 use tokio::sync::{Mutex, RwLock};
+use tokio_stream::wrappers::TcpListenerStream;
 use tonic::transport::{Channel, Endpoint, Server};
 use tonic::{Request, Response, Status};
 
@@ -222,18 +222,21 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
             &[()],
             &app_sender_client,
         )
-        .await.map_err(|e| tonic::Status::unknown(format!("VM::initialize failed: {}", e.to_string())))?;
+        .await
+        .map_err(|e| tonic::Status::unknown(format!("VM::initialize failed: {}", e.to_string())))?;
 
+        log::info!("initialize ok");
+
+        log::info!("pre last_accepted");
         let last_accepted = C::last_accepted(&self.interior.clone()).await?;
+        log::info!("post last_accepted");
         let block = C::get_block(last_accepted.to_string()).unwrap();
-
         let parent_id = Vec::from(block.parent().as_ref());
-        let id = Vec::from(block.id().as_ref());
         let bytes = Vec::from(block.bytes());
         let timestamp = grpcutil::timestamp_from_time(block.timestamp());
 
         Ok(Response::new(vm::InitializeResponse {
-            last_accepted_id: Bytes::from(id),
+            last_accepted_id: Bytes::from(Vec::from(block.clone().id().unwrap().as_ref())),
             last_accepted_parent_id: Bytes::from(parent_id),
             bytes: Bytes::from(bytes),
             height: block.height(),
@@ -295,7 +298,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
         let parent_id = Vec::from(block.parent().as_ref());
         let timestamp = grpcutil::timestamp_from_time(block.timestamp());
         let status = block.status() as u32;
-        let id = Vec::from(block.id().as_ref());
+        let id = Vec::from(block.id().unwrap().as_ref());
 
         Ok(Response::new(vm::ParseBlockResponse {
             id: Bytes::from(id),
@@ -322,9 +325,12 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
         })?;
 
         let last_accepted = C::last_accepted(&self.interior.clone()).await?;
+        log::info!("last_accepted {:?}", last_accepted);
+
         let block = C::get_block(last_accepted.to_string()).unwrap();
         let parent_id = Vec::from(block.parent().as_ref());
-        let id = Vec::from(block.id().as_ref());
+        let id = Vec::from(block.clone().id().unwrap().as_ref());
+        // let id = block.id().unwrap();
         let bytes = Vec::from(block.bytes());
         let timestamp = grpcutil::timestamp_from_time(block.timestamp());
 

@@ -1,6 +1,9 @@
-use avalanche_types::ids;
+use std::io::{Error, ErrorKind};
+
+use avalanche_types::ids::Id;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use time::{format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset};
 use utils::rfc3339;
 
 pub const DATA_LEN: usize = 32;
@@ -9,8 +12,8 @@ impl Default for Block {
     fn default() -> Self {
         let now = chrono::offset::Utc::now();
         Self {
-            id: ids::Id::default(),
-            parent_id: ids::Id::default(),
+            id: Some(Id::default()),
+            parent_id: Id::default(),
             timestamp: now,
             bytes: [0; DATA_LEN],
             height: 0,
@@ -19,14 +22,14 @@ impl Default for Block {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Debug, Copy, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Block {
-    pub parent_id: ids::Id,
+    pub parent_id: Id,
     height: u64,
     #[serde(with = "rfc3339::serde_format")]
     timestamp: DateTime<Utc>,
-    id: ids::Id,
+    id: Option<Id>,
     bytes: [u8; DATA_LEN],
     status: Status,
 }
@@ -37,12 +40,29 @@ impl Block {
     // TODO: add
     // ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/snow/choices#Decidable
 
-    pub fn parent(&self) -> &ids::Id {
-        &self.parent_id
+    pub fn new(
+        parent_id: Id,
+        height: u64,
+        bytes: [u8; DATA_LEN],
+        timestamp: DateTime<Utc>,
+        status: Status,
+    ) -> Result<Self, Error> {
+        Ok(Self {
+            parent_id,
+            height,
+            timestamp: timestamp,
+            bytes,
+            id: None,
+            status,
+        })
     }
 
-    pub fn id(&self) -> &ids::Id {
-        &self.id
+    pub fn parent(&self) -> Id {
+        self.parent_id
+    }
+
+    pub fn id(&self) -> Option<Id> {
+        self.id
     }
 
     pub fn timestamp(&self) -> &DateTime<Utc> {
@@ -65,6 +85,7 @@ impl Block {
     pub fn status(&self) -> Status {
         self.status
     }
+
 }
 
 /// snow/consensus/snowman/Block

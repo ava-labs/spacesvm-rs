@@ -14,9 +14,8 @@ use jsonrpc_http_server::jsonrpc_core::{BoxFuture, IoHandler, Params, Result as 
 use jsonrpc_http_server::ServerBuilder;
 use semver::Version;
 use serde::{Deserialize, Serialize};
-use tonic::transport::Channel;
 use tokio::sync::{Mutex, RwLock};
-
+use tonic::transport::Channel;
 
 use avalanche_proto::{
     appsender::app_sender_client::AppSenderClient, messenger::messenger_client::MessengerClient,
@@ -119,6 +118,9 @@ impl VM for ChainVMInterior {
 
         log::info!("testChainVMInterior");
 
+        let stuff =  interior.state.as_ref().unwrap().init_genesis(genesis_bytes).await;
+
+        
         // store genesis to struct
         let genesis = Genesis::from_json(genesis_bytes).unwrap();
         interior.genesis = genesis;
@@ -188,11 +190,23 @@ impl ChainVM for ChainVMInterior {
         Ok(())
     }
     async fn last_accepted(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<ids::Id, Error> {
+        log::info!("last_accepted 1");
         let interior = inner.read().await;
+        log::info!("last_accepted 2");
         let mut state = crate::state::State::new(interior.db.clone().unwrap());
-        // db::get_last_accepted_block_id();
-        let out = state.get_last_accepted_block_id();
-        let something = out.await?.unwrap();
-        Ok(something)
+        log::info!("last_accepted 3");
+        let last_accepted_id = state.get_last_accepted_block_id().await;
+        log::info!("last_accepted 4");
+        let next = last_accepted_id.unwrap();
+        log::info!("last_accepted 4: {:?}", next);
+
+        if next.is_none() {
+            return Err(Error::new(
+                ErrorKind::NotFound,
+                format!("last_accepted not found"),
+            ));
+        }
+
+        Ok(next.unwrap())
     }
 }

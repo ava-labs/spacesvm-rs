@@ -69,7 +69,7 @@ cat ${VM_GENESIS_PATH}
 # download avalanche-network-runner
 # https://github.com/ava-labs/avalanche-network-runner
 # TODO: use "go install -v github.com/ava-labs/avalanche-network-runner/cmd/avalanche-network-runner@v${NETWORK_RUNNER_VERSION}"
-NETWORK_RUNNER_VERSION=1.0.13
+NETWORK_RUNNER_VERSION=v1.0.16-beta Latest
 DOWNLOAD_PATH=/tmp/avalanche-network-runner.tar.gz
 DOWNLOAD_URL=https://github.com/ava-labs/avalanche-network-runner/releases/download/v${NETWORK_RUNNER_VERSION}/avalanche-network-runner_${NETWORK_RUNNER_VERSION}_linux_amd64.tar.gz
 if [[ ${GOOS} == "darwin" ]]; then
@@ -93,7 +93,7 @@ echo "launch avalanche-network-runner in the background"
 server \
 --log-level debug \
 --port=":12342" \
---grpc-gateway-port=":12343" &
+--disable-grpc-gateway &
 NETWORK_RUNNER_PID=${!}
 
 #################################
