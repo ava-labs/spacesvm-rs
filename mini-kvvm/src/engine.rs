@@ -17,7 +17,7 @@ use avalanche_proto::{
     rpcdb::database_client::DatabaseClient, sharedmemory::shared_memory_client::SharedMemoryClient,
     subnetlookup::subnet_lookup_client::SubnetLookupClient, vm, vm::vm_server::Vm,
 };
-use avalanche_types::ids;
+use avalanche_types::{ids::short::Id as ShortId, ids::Id};
 use jsonrpc_http_server::jsonrpc_core::IoHandler;
 use prost::bytes::Bytes;
 use semver::Version;
@@ -57,20 +57,21 @@ pub trait Checkable {
 /// snow.validators.Connector
 /// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/snow/validators#Connector
 pub trait Connector {
-    fn connected(id: &ids::ShortId) -> Result<(), Error>;
-    fn disconnected(id: &ids::ShortId) -> Result<(), Error>;
+    fn connected(id: &ShortId) -> Result<(), Error>;
+    fn disconnected(id: &ShortId) -> Result<(), Error>;
 }
 
 /// snow.Context
 /// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/snow#Context
+#[derive(Debug)]
 pub struct Context {
     pub network_id: u32,
-    pub subnet_id: ids::Id,
-    pub chain_id: ids::Id,
-    pub node_id: ids::ShortId,
+    pub subnet_id: Id,
+    pub chain_id: Id,
+    pub node_id: ShortId,
 
-    pub x_chain_id: ids::Id,
-    pub avax_asset_id: ids::Id,
+    pub x_chain_id: Id,
+    pub avax_asset_id: Id,
 
     pub keystore: KeystoreClient<Channel>,
     pub shared_memory: SharedMemoryClient<Channel>,
@@ -83,14 +84,14 @@ pub struct Context {
 /// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/snow/engine/common#AppHandler
 pub trait AppHandler {
     fn app_request(
-        node_id: &ids::ShortId,
+        node_id: &ShortId,
         request_id: u32,
         deadline: time::Instant,
         request: &[u8],
     ) -> Result<(), Error>;
-    fn app_request_failed(node_id: &ids::ShortId, request_id: u32) -> Result<(), Error>;
-    fn app_response(node_id: &ids::ShortId, request_id: u32, response: &[u8]) -> Result<(), Error>;
-    fn app_gossip(node_id: &ids::ShortId, msg: &[u8]) -> Result<(), Error>;
+    fn app_request_failed(node_id: &ShortId, request_id: u32) -> Result<(), Error>;
+    fn app_response(node_id: &ShortId, request_id: u32, response: &[u8]) -> Result<(), Error>;
+    fn app_gossip(node_id: &ShortId, msg: &[u8]) -> Result<(), Error>;
 }
 
 /// snow.engine.common.VM
@@ -118,19 +119,27 @@ pub trait VM: AppHandler + Checkable + Connector {
     async fn set_state(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<(), Error>;
 }
 
+/// snow/engine/snowman/block.Getter
+/// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/snow/engine/snowman/block#Getter
 pub trait Getter {
-    fn get_block(id: String) -> Result<Block, Error>;
+    fn get_block(id: Id) -> Result<Block, Error>;
 }
 
+/// snow/engine/snowman/block.Parser
+/// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/snow/engine/snowman/block#Parser
 pub trait Parser {
     fn parse_block(bytes: &[u8]) -> Result<Block, Error>;
 }
 #[tonic::async_trait]
 pub trait ChainVM: VM + Getter + Parser {
-    fn build_block() -> Result<Block, Error>;
+    async fn build_block(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<Block, Error>;
     fn issue_tx() -> Result<Block, Error>;
-    fn set_preference(id: ids::Id) -> Result<(), Error>;
-    async fn last_accepted(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<ids::Id, Error>;
+    fn set_preference(id: Id) -> Result<(), Error>;
+    async fn last_accepted(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<Id, Error>;
+    async fn initialize_genesis(
+        inner: &Arc<RwLock<ChainVMInterior>>,
+        genesis_bytes: &[u8],
+    ) -> Result<(), Error>;
 }
 
 pub struct VMServer<C> {
@@ -172,11 +181,11 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
         let sn_lookup_client = SubnetLookupClient::new(client_conn.clone());
         let app_sender_client = AppSenderClient::new(client_conn.clone());
 
-        let subnet_id = ids::Id::from_slice(&req.subnet_id);
-        let chain_id = ids::Id::from_slice(&req.chain_id);
-        let node_id = ids::ShortId::from_slice(&req.node_id);
-        let x_chain_id = ids::Id::from_slice(&req.x_chain_id);
-        let avax_asset_id = ids::Id::from_slice(&req.avax_asset_id);
+        let subnet_id = Id::from_slice(&req.subnet_id);
+        let chain_id = Id::from_slice(&req.chain_id);
+        let node_id = ShortId::from_slice(&req.node_id);
+        let x_chain_id = Id::from_slice(&req.x_chain_id);
+        let avax_asset_id = Id::from_slice(&req.avax_asset_id);
 
         let ctx = Some(Context {
             network_id: req.network_id,
@@ -230,7 +239,9 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
         log::info!("pre last_accepted");
         let last_accepted = C::last_accepted(&self.interior.clone()).await?;
         log::info!("post last_accepted");
-        let block = C::get_block(last_accepted.to_string()).unwrap();
+
+        log::info!("get_block key {:?}", last_accepted.to_string());
+        let block = C::get_block(last_accepted).unwrap();
         let parent_id = Vec::from(block.parent().as_ref());
         let bytes = Vec::from(block.bytes());
         let timestamp = grpcutil::timestamp_from_time(block.timestamp());
@@ -250,16 +261,17 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
 
     async fn create_handlers(
         &self,
-        _request: Request<Empty>,
+        req: Request<Empty>,
     ) -> Result<Response<vm::CreateHandlersResponse>, Status> {
-        Err(Status::unimplemented("create_static_handlers"))
+        //TODO
+        Ok(Response::new(vm::CreateHandlersResponse::default()))
     }
 
     async fn create_static_handlers(
         &self,
         _request: Request<Empty>,
     ) -> Result<Response<vm::CreateStaticHandlersResponse>, Status> {
-        Err(Status::unimplemented("create_static_handlers"))
+        Ok(Response::new(vm::CreateStaticHandlersResponse::default()))
     }
 
     async fn connected(
@@ -269,7 +281,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
         let req = req.into_inner();
         let id = String::from_utf8_lossy(&req.node_id);
         // TODO: finish
-        let node_id = ids::vm_id_from_str(&id);
+        let node_id = avalanche_types::ids::encode_vm_name_to_id(&id);
 
         Ok(Response::new(Empty {}))
     }
@@ -285,7 +297,21 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
         &self,
         _request: Request<Empty>,
     ) -> Result<Response<vm::BuildBlockResponse>, Status> {
-        Err(Status::unimplemented("build_block"))
+        let interior = &self.interior;
+        let block = C::build_block(&interior).await.unwrap();
+
+        let block_id = Vec::from(block.clone().id().unwrap().as_ref());
+        let parent_id = Vec::from(block.parent().as_ref());
+        let timestamp = grpcutil::timestamp_from_time(block.timestamp());
+        let bytes = Vec::from(block.bytes());
+
+        Ok(Response::new(vm::BuildBlockResponse {
+            id: Bytes::from(block_id),
+            parent_id: Bytes::from(parent_id),
+            bytes: Bytes::from(bytes),
+            height: block.height(),
+            timestamp: Some(timestamp),
+        }))
     }
 
     async fn parse_block(
@@ -327,7 +353,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
         let last_accepted = C::last_accepted(&self.interior.clone()).await?;
         log::info!("last_accepted {:?}", last_accepted);
 
-        let block = C::get_block(last_accepted.to_string()).unwrap();
+        let block = C::get_block(last_accepted).unwrap();
         let parent_id = Vec::from(block.parent().as_ref());
         let id = Vec::from(block.clone().id().unwrap().as_ref());
         // let id = block.id().unwrap();

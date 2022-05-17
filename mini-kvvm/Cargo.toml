@@ -16,10 +16,12 @@ path = "src/bin/mini-kvvm/main.rs"
 [dependencies]
 async-trait = "0.1.53"
 avalanche-proto = { path = "../proto" }
-avalanche-types = { git = "https://github.com/ava-labs/avalanche-ops", branch="id_copy" }
+avalanche-types = { version = "0.0.1" }
+bytes = "1.1.0"
 chrono = "0.4.19"
 clap = { version = "3.1.8", features = ["cargo", "derive"] }
 env_logger = "0.9.0"
+hmac-sha256 = "1.1"
 jsonrpc-core = "18.0"
 jsonrpc-derive = "18.0"
 jsonrpc-http-server = "18.0"
@@ -37,4 +39,4 @@ tokio-stream = { version = "0.1.8", features = ["net"] }
 tonic = { version = "0.7", features = ["compression"] }
 tonic-health = "0.6"
 tonic-reflection = "0.4.0"
-utils = { git = "https://github.com/ava-labs/avalanche-ops", branch="id_copy" }
+avalanche-utils = { version="0.0.1" }
