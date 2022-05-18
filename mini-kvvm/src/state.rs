@@ -13,8 +13,7 @@ pub type Database = DatabaseClient<Channel>;
 const LAST_ACCEPTED_BLOCK_ID_KEY: &[u8] = b"last_accepted";
 const STATE_INITIALIZED_KEY: &[u8] = b"state_initialized";
 const STATE_INITIALIZED_VALUE: &[u8] = b"state_has_infact_been_initialized";
-// const BLOCK_STATE_PREFIX: &[u8] = b"blockStatePrefix";
-const BLOCK_STATE_PREFIX: &[u8] = b"snowman_accepted";
+const BLOCK_STATE_PREFIX: &[u8] = b"blockStatePrefix";
 const SINGLETON_STATE_PREFIX: &[u8] = b"singleton";
 
 pub const BLOCK_DATA_LEN: usize = 32;
@@ -22,7 +21,6 @@ pub const BLOCK_DATA_LEN: usize = 32;
 #[derive(Debug, Default)]
 pub struct State {
     client: Option<Database>,
-
     last_accepted_block_id_key: Vec<u8>,
     state_initialized_key: Vec<u8>,
 }
