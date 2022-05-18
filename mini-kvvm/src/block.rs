@@ -33,7 +33,6 @@ pub struct Block {
     #[serde(with = "rfc3339::serde_format")]
     timestamp: DateTime<Utc>,
     bytes: Vec<u8>,
-    
     // id is generated not serialized
     #[serde(skip)]
     id: Option<Id>,
