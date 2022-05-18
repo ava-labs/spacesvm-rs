@@ -28,11 +28,12 @@ impl Default for Block {
 #[derive(Serialize, Debug, Clone, Deserialize)]
 pub struct Block {
     pub parent: Id,
+    pub status: Status,
     height: u64,
     #[serde(with = "rfc3339::serde_format")]
     timestamp: DateTime<Utc>,
     bytes: Vec<u8>,
-    pub status: Status,
+    
     // id is generated not serialized
     #[serde(skip)]
     id: Option<Id>,

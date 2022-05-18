@@ -195,12 +195,14 @@ impl VM for ChainVMInterior {
 
 impl Getter for ChainVMInterior {
     fn get_block(_id: Id) -> Result<Block, Error> {
+        // TODO
         Ok(Block::default())
     }
 }
 
 impl Parser for ChainVMInterior {
     fn parse_block(_bytes: &[u8]) -> Result<Block, Error> {
+        // TODO
         Ok(Block::default())
     }
 }
