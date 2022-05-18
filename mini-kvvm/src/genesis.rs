@@ -57,7 +57,6 @@ impl Genesis {
                 format!("invalid welcome_message"),
             ));
         }
-        log::info!("verify success!");
         Ok(())
     }
 

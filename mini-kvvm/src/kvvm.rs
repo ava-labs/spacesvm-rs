@@ -128,7 +128,6 @@ impl VM for ChainVMInterior {
 
         // Check if last accepted block exists
         if vm.state.has_last_accepted_block().await? {
-            log::info!("last accepted block found");
             let last_block_id = vm
                 .state
                 .get_last_accepted_block_id()
@@ -141,7 +140,6 @@ impl VM for ChainVMInterior {
             vm.last_accepted = last_block;
             log::info!("initialized from last accepted block {:?}", last_block_id)
         } else {
-            log::info!("last accepted block NOT found!");
             let genesis_block_vec = genesis_bytes.to_vec();
             let genesis_block_bytes = genesis_block_vec.try_into().unwrap();
 
@@ -254,17 +252,13 @@ impl ChainVM for ChainVMInterior {
         let interior = inner.read().await;
         let mut state = crate::state::State::new(Some(interior.db.clone().unwrap()));
         let last_accepted_id = state.get_last_accepted_block_id().await;
-        let next = last_accepted_id.unwrap();
-
-        log::info!("next value: {:?}", next);
-
-        if next.is_none() {
+        let last_accepted_block = last_accepted_id.unwrap();
+        if last_accepted_block.is_none() {
             return Err(Error::new(
                 ErrorKind::NotFound,
-                format!("last_accepted not found"),
+                format!("last accepted block not found"),
             ));
         }
-
-        Ok(next.unwrap())
+        Ok(last_accepted_block.unwrap())
     }
 }

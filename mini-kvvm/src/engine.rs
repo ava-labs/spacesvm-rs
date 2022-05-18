@@ -226,13 +226,8 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
         .await
         .map_err(|e| tonic::Status::unknown(format!("VM::initialize failed: {}", e.to_string())))?;
 
-        log::info!("initialize ok");
-
-        log::info!("pre last_accepted");
         let last_accepted = C::last_accepted(&self.interior.clone()).await?;
-        log::info!("post last_accepted");
 
-        log::info!("get_block key {:?}", last_accepted.to_string());
         let block = C::get_block(last_accepted).unwrap();
         let parent_id = Vec::from(block.parent().as_ref());
         let bytes = Vec::from(block.bytes());
