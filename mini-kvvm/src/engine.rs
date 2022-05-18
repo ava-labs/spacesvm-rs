@@ -69,10 +69,8 @@ pub struct Context {
     pub subnet_id: Id,
     pub chain_id: Id,
     pub node_id: ShortId,
-
     pub x_chain_id: Id,
     pub avax_asset_id: Id,
-
     pub keystore: KeystoreClient<Channel>,
     pub shared_memory: SharedMemoryClient<Channel>,
     pub bc_lookup: AliasReaderClient<Channel>,
@@ -133,13 +131,9 @@ pub trait Parser {
 #[tonic::async_trait]
 pub trait ChainVM: VM + Getter + Parser {
     async fn build_block(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<Block, Error>;
-    fn issue_tx() -> Result<Block, Error>;
-    fn set_preference(id: Id) -> Result<(), Error>;
+    async fn issue_tx() -> Result<Block, Error>;
+    async fn set_preference(id: Id) -> Result<(), Error>;
     async fn last_accepted(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<Id, Error>;
-    async fn initialize_genesis(
-        inner: &Arc<RwLock<ChainVMInterior>>,
-        genesis_bytes: &[u8],
-    ) -> Result<(), Error>;
 }
 
 pub struct VMServer<C> {
@@ -162,8 +156,6 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
         &self,
         req: Request<vm::InitializeRequest>,
     ) -> Result<Response<vm::InitializeResponse>, Status> {
-        // log::info!("testChainVM");
-
         let req = req.into_inner();
         let client_conn = Endpoint::from_shared(format!("http://{}", req.server_addr))
             .unwrap()
@@ -261,7 +253,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
 
     async fn create_handlers(
         &self,
-        req: Request<Empty>,
+        _req: Request<Empty>,
     ) -> Result<Response<vm::CreateHandlersResponse>, Status> {
         //TODO
         Ok(Response::new(vm::CreateHandlersResponse::default()))
@@ -281,7 +273,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
         let req = req.into_inner();
         let id = String::from_utf8_lossy(&req.node_id);
         // TODO: finish
-        let node_id = avalanche_types::ids::encode_vm_name_to_id(&id);
+        let _node_id = avalanche_types::ids::encode_vm_name_to_id(&id);
 
         Ok(Response::new(Empty {}))
     }

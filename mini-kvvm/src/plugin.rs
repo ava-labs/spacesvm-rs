@@ -7,7 +7,7 @@ use avalanche_proto::{
 use log::info;
 use tokio::net::TcpListener;
 use tokio_stream::wrappers::TcpListenerStream;
-use tonic::transport::{server::NamedService, Server};
+use tonic::transport::server::NamedService;
 use tonic_health::server::health_reporter;
 
 /// ref. https://github.com/ava-labs/avalanchego/blob/v1.7.10/vms/rpcchainvm/vm.go

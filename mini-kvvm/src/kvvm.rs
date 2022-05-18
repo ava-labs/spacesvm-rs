@@ -8,6 +8,10 @@ use std::sync::Arc;
 use std::time;
 
 use async_trait::async_trait;
+use avalanche_proto::{
+    appsender::app_sender_client::AppSenderClient, messenger::messenger_client::MessengerClient,
+    rpcdb::database_client::DatabaseClient, vm::vm_server::Vm,
+};
 use avalanche_types::ids::{short::Id as ShortId, Id};
 use jsonrpc_derive::rpc;
 use jsonrpc_http_server::jsonrpc_core::{BoxFuture, IoHandler, Params, Result as RpcResult, Value};
@@ -17,11 +21,6 @@ use semver::Version;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, RwLock};
 use tonic::transport::Channel;
-
-use avalanche_proto::{
-    appsender::app_sender_client::AppSenderClient, messenger::messenger_client::MessengerClient,
-    rpcdb::database_client::DatabaseClient, vm::vm_server::Vm,
-};
 
 use crate::block::{Block, Status};
 use crate::engine::*;
@@ -37,7 +36,7 @@ pub struct ChainVMInterior {
     pub db: Option<Database>,
     pub state: State,
     pub preferred: Id,
-    pub mempool: Vec<[u8; BLOCK_DATA_LEN]>,
+    pub mempool: Vec<Vec<u8>>,
     pub verified_blocks: HashMap<Id, Block>,
     pub last_accepted: Block,
 }
@@ -115,24 +114,10 @@ impl VM for ChainVMInterior {
         vm.ctx = ctx;
 
         let current_db = &db_manager[0].database;
-        // let mut db = crate::state::Interior::new(current_db);
-
         vm.db = Some(current_db.clone());
-
-        log::info!("kvvm: pre init_genesis");
 
         let state = State::new(Some(current_db.clone()));
         vm.state = state;
-
-        if genesis_bytes.len() > BLOCK_DATA_LEN {
-            return Err(Error::new(
-                ErrorKind::Other,
-                format!(
-                    "genesis data must not exceed 32 bytes: len {}",
-                    genesis_bytes.len(),
-                ),
-            ));
-        }
 
         let genesis = Genesis::from_json(genesis_bytes).unwrap();
         vm.genesis = genesis;
@@ -141,7 +126,9 @@ impl VM for ChainVMInterior {
             Err(e) => eprintln!("failed to verify genesis: {:?}", e),
         }
 
+        // Check if last accepted block exists
         if vm.state.has_last_accepted_block().await? {
+            log::info!("last accepted block found");
             let last_block_id = vm
                 .state
                 .get_last_accepted_block_id()
@@ -154,7 +141,8 @@ impl VM for ChainVMInterior {
             vm.last_accepted = last_block;
             log::info!("initialized from last accepted block {:?}", last_block_id)
         } else {
-            let genesis_block_vec = Id::from_slice(genesis_bytes).to_vec();
+            log::info!("last accepted block NOT found!");
+            let genesis_block_vec = genesis_bytes.to_vec();
             let genesis_block_bytes = genesis_block_vec.try_into().unwrap();
 
             let mut genesis_block = Block::new(
@@ -171,6 +159,10 @@ impl VM for ChainVMInterior {
                 Ok(g) => g,
                 Err(e) => eprintln!("failed to put genesis block: {:?}", e),
             }
+
+            let accepted_block_id = vm.state.accept_block(genesis_block).await?;
+            // Remove accepted block now that it is accepted
+            vm.verified_blocks.remove(&accepted_block_id);
 
             log::info!("initialized from genesis block {:?}", genesis_block_id)
         }
@@ -211,7 +203,7 @@ impl VM for ChainVMInterior {
 }
 
 impl Getter for ChainVMInterior {
-    fn get_block(id: Id) -> Result<Block, Error> {
+    fn get_block(_id: Id) -> Result<Block, Error> {
         Ok(Block::default())
     }
 }
@@ -251,24 +243,17 @@ impl ChainVM for ChainVMInterior {
 
         Ok(new_block)
     }
-    fn issue_tx() -> Result<Block, Error> {
+    async fn issue_tx() -> Result<Block, Error> {
         Ok(Block::default())
     }
-    fn set_preference(_id: Id) -> Result<(), Error> {
+    async fn set_preference(_id: Id) -> Result<(), Error> {
         Ok(())
     }
 
     async fn last_accepted(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<Id, Error> {
-        log::info!("last_accepted");
         let interior = inner.read().await;
-
-        log::info!("last_accepted interior {:?}", interior);
         let mut state = crate::state::State::new(Some(interior.db.clone().unwrap()));
-
-        log::info!("last_accepted state ok");
         let last_accepted_id = state.get_last_accepted_block_id().await;
-
-        log::info!("last_accepted_id: {:?}", last_accepted_id);
         let next = last_accepted_id.unwrap();
 
         log::info!("next value: {:?}", next);
@@ -281,14 +266,5 @@ impl ChainVM for ChainVMInterior {
         }
 
         Ok(next.unwrap())
-    }
-
-    //TODO remove
-    async fn initialize_genesis(
-        inner: &Arc<RwLock<ChainVMInterior>>,
-        genesis_bytes: &[u8],
-    ) -> Result<(), Error> {
-        log::info!("initialize genesis called");
-        Ok(())
     }
 }

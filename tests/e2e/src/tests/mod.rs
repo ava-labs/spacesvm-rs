@@ -19,6 +19,9 @@ async fn e2e() {
 
     let cli = Client::new(&ep).await;
 
+    // Allow server time to become ready.
+    thread::sleep(Duration::from_millis(2000));
+
     info!("ping...");
     let resp = cli.ping().await.expect("failed ping");
     info!("network-runner is running (ping response {:?})", resp);

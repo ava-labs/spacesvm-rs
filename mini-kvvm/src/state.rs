@@ -2,15 +2,11 @@ use std::io::{Error, ErrorKind};
 
 use avalanche_proto::rpcdb::{database_client::*, GetRequest, PutRequest};
 use avalanche_types::ids::Id;
-use chrono::{DateTime, NaiveDateTime, Utc};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use tonic::transport::Channel;
 
-use crate::{
-    block::{Block, Status},
-    genesis,
-};
+use crate::block::{Block, Status};
 
 pub type Database = DatabaseClient<Channel>;
 
@@ -22,16 +18,6 @@ const BLOCK_STATE_PREFIX: &[u8] = b"snowman_accepted";
 const SINGLETON_STATE_PREFIX: &[u8] = b"singleton";
 
 pub const BLOCK_DATA_LEN: usize = 32;
-
-/// snow.engine.common.AppHandler
-/// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/vms/components/state#State
-// #[tonic::async_trait]
-// pub trait State<'a> {
-//     async fn get(&'a self, key: Id) -> Result<Option<Vec<u8>>, Error>;
-//     async fn put(&'a mut self, key: Id, value: Vec<u8>) -> Result<(), Error>;
-//     async fn get_block(&'a mut self, id: Id) -> Result<Option<Block>, Error>;
-//     async fn get_last_accepted_block_id(&'a mut self) -> Result<Option<Id>, Error>;
-// }
 
 #[derive(Debug, Default)]
 pub struct State {
@@ -61,14 +47,9 @@ impl State {
     }
 
     pub async fn get(&mut self, key: Vec<u8>) -> Result<Option<Vec<u8>>, Error> {
-        log::info!("get 1");
         let key = prost::bytes::Bytes::from(key);
-        log::info!("get 2 key: {:?}", key);
-
         let mut client = self.client.clone().unwrap();
         let resp = client.get(GetRequest { key }).await.unwrap().into_inner();
-        log::info!("get 3 resp: {:?}", resp);
-
         let err = DatabaseError::from_u32(resp.err);
         match err {
             Some(DatabaseError::Closed) => Err(Error::new(
@@ -144,9 +125,17 @@ impl State {
         }
     }
 
+    pub async fn set_last_accepted_block_id(&mut self, id: &Id) -> Result<(), Error> {
+        log::info!("Setting last accepted block id bytes: {:?}", id.as_ref());
+        self.put(
+            self.last_accepted_block_id_key.clone(),
+            Vec::from(id.as_ref()),
+        )
+        .await
+    }
+
     pub async fn is_state_initialized(&mut self) -> Result<bool, Error> {
         let state = self.get(self.state_initialized_key.clone()).await?;
-
         Ok(match state {
             Some(state_initialized_bytes) => !state_initialized_bytes.is_empty(),
             None => false,
@@ -161,60 +150,18 @@ impl State {
         .await
     }
 
-    pub async fn init_genesis(&mut self, genesis_bytes: &[u8]) -> Result<(), Error> {
-        log::info!("initialize genesis called");
+    pub async fn accept_block(&mut self, mut block: Block) -> Result<Id, Error> {
+        block.status = Status::Accepted;
+        let bid = block.init()?.clone();
+        log::info!("Accepting block with id: {}", bid);
 
-        // if self.is_state_initialized().await? {
-        //     // State is already initialized - no need to init genesis block
-        //     log::info!("state is already initialized. No further work to do.");
-        //     return Ok(());
-        // }
+        self.put_block(block).await?;
+        log::info!("Put accepted block into database with id: {}", bid);
 
-        if genesis_bytes.len() > BLOCK_DATA_LEN {
-            return Err(Error::new(
-                ErrorKind::Other,
-                format!("Genesis data byte length {} is greater than the expected block byte length of {}. Genesis bytes: {:#?} as a string: {}",
-                genesis_bytes.len(),
-                BLOCK_DATA_LEN,
-                genesis_bytes,
-                String::from_utf8(Vec::from(genesis_bytes)).unwrap(),
-            )));
-        }
+        self.set_last_accepted_block_id(&bid).await?;
+        log::info!("Setting last accepted block id in database to: {}", bid);
 
-        let genesis_block_vec = Id::from_slice(genesis_bytes).to_vec();
-        let genesis_block_bytes = genesis_block_vec.try_into().unwrap();
-
-        let mut genesis_block = Block::new(
-            Id::empty(),
-            0,
-            genesis_block_bytes,
-            DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(0, 0), Utc),
-            Status::Processing,
-        )?;
-
-        let genesis_block_id = genesis_block.init()?.clone();
-
-        log::info!(
-            "Genesis storage block created with Id: {}",
-            genesis_block_id
-        );
-        self.put_block(genesis_block.clone()).await?;
-        log::info!(
-            "Genesis storage block with Id {} put in database successfully.",
-            genesis_block_id
-        );
-        // self.accept_block(genesis_block).await?;
-        // log::info!(
-        //     "Genesis storage block with Id {} was accepted by this node.",
-        //     genesis_block_id
-        // );
-
-        // // reacquire state since we need to release writable_interior to pass into accept_block
-        // let state = self.mut_state_status().await?;
-        // state.set_state_initialized().await?;
-        // log::info!("State set to initialized, so it won't hapen again.");
-
-        Ok(())
+        Ok(bid)
     }
 }
 

@@ -34,23 +34,25 @@ if [[ ${GOOS} == "darwin" ]]; then
   DOWNLOAD_PATH=/tmp/avalanchego.zip
 fi
 
-rm -rf /tmp/avalanchego-v${AVALANCHEGO_VERSION}
-rm -f ${DOWNLOAD_PATH}
+# rm -rf /tmp/avalanchego-v${AVALANCHEGO_VERSION}
+# rm -f ${DOWNLOAD_PATH}
 
-echo "downloading avalanchego ${AVALANCHEGO_VERSION} at ${DOWNLOAD_URL}"
-curl -L ${DOWNLOAD_URL} -o ${DOWNLOAD_PATH}
+# echo "downloading avalanchego ${AVALANCHEGO_VERSION} at ${DOWNLOAD_URL}"
+# curl -L ${DOWNLOAD_URL} -o ${DOWNLOAD_PATH}
 
-echo "extracting downloaded avalanchego"
-if [[ ${GOOS} == "linux" ]]; then
-  tar xzvf ${DOWNLOAD_PATH} -C /tmp
-elif [[ ${GOOS} == "darwin" ]]; then
-  unzip ${DOWNLOAD_PATH} -d /tmp/avalanchego-build
-  mv /tmp/avalanchego-build/build /tmp/avalanchego-v${AVALANCHEGO_VERSION}
-fi
-find /tmp/avalanchego-v${AVALANCHEGO_VERSION}
+# echo "extracting downloaded avalanchego"
+# if [[ ${GOOS} == "linux" ]]; then
+#   tar xzvf ${DOWNLOAD_PATH} -C /tmp
+# elif [[ ${GOOS} == "darwin" ]]; then
+#   unzip ${DOWNLOAD_PATH} -d /tmp/avalanchego-build
+#   mv /tmp/avalanchego-build/build /tmp/avalanchego-v${AVALANCHEGO_VERSION}
+# fi
+# find /tmp/avalanchego-v${AVALANCHEGO_VERSION}
 
 AVALANCHEGO_PATH=/tmp/avalanchego-v${AVALANCHEGO_VERSION}/avalanchego
 AVALANCHEGO_PLUGIN_DIR=/tmp/avalanchego-v${AVALANCHEGO_VERSION}/plugins
+
+rm -f "${AVALANCHEGO_PLUGIN_DIR}/${VMID}"
 
 echo "compile mini-kvvm and install to plugin dir"
 cargo build --release --bin mini-kvvm
@@ -69,7 +71,7 @@ cat ${VM_GENESIS_PATH}
 # download avalanche-network-runner
 # https://github.com/ava-labs/avalanche-network-runner
 # TODO: use "go install -v github.com/ava-labs/avalanche-network-runner/cmd/avalanche-network-runner@v${NETWORK_RUNNER_VERSION}"
-NETWORK_RUNNER_VERSION=v1.0.16-beta Latest
+NETWORK_RUNNER_VERSION=1.0.14
 DOWNLOAD_PATH=/tmp/avalanche-network-runner.tar.gz
 DOWNLOAD_URL=https://github.com/ava-labs/avalanche-network-runner/releases/download/v${NETWORK_RUNNER_VERSION}/avalanche-network-runner_${NETWORK_RUNNER_VERSION}_linux_amd64.tar.gz
 if [[ ${GOOS} == "darwin" ]]; then

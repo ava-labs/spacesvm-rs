@@ -1,11 +1,11 @@
+use std::io::Error;
+
 use avalanche_types::ids::Id;
 use avalanche_utils::rfc3339;
 use bytes::BufMut;
 use chrono::{DateTime, Utc};
 use hmac_sha256::Hash;
 use serde::{Deserialize, Serialize};
-use std::io::{Error, ErrorKind, Write};
-use time::{format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset};
 
 pub const DATA_LEN: usize = 32;
 
@@ -16,7 +16,7 @@ impl Default for Block {
             id: Some(Id::default()),
             parent: Id::default(),
             timestamp: now,
-            bytes: [0; DATA_LEN],
+            bytes: Vec::default(),
             height: 0,
             status: Status::Unknown,
         }
@@ -25,28 +25,24 @@ impl Default for Block {
 
 /// snow/consensus/snowman/Block
 /// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/snow/consensus/snowman#Block
-#[derive(Serialize, Debug, Copy, Clone, Deserialize)]
+#[derive(Serialize, Debug, Clone, Deserialize)]
 pub struct Block {
     pub parent: Id,
     height: u64,
     #[serde(with = "rfc3339::serde_format")]
     timestamp: DateTime<Utc>,
-    bytes: [u8; DATA_LEN],
-    status: Status,
-
+    bytes: Vec<u8>,
+    pub status: Status,
     // id is generated not serialized
     #[serde(skip)]
     id: Option<Id>,
 }
 
 impl Block {
-    // TODO: add
-    // ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/snow/choices#Decidable
-
     pub fn new(
         parent: Id,
         height: u64,
-        bytes: [u8; DATA_LEN],
+        bytes: Vec<u8>,
         timestamp: DateTime<Utc>,
         status: Status,
     ) -> Result<Self, Error> {
@@ -95,7 +91,6 @@ impl Block {
 
     pub fn init(&mut self) -> Result<&Id, Error> {
         if self.id.is_none() {
-            //generate bytes only for the stuff that makes an identity of the block
             let mut writer = Vec::new().writer();
             serde_json::to_writer(&mut writer, &self.parent())?;
             serde_json::to_writer(&mut writer, &self.height())?;
@@ -103,16 +98,7 @@ impl Block {
             serde_json::to_writer(&mut writer, &self.bytes())?;
 
             let buf = writer.into_inner();
-
-            log::info!("generate_id: {:?}", buf);
-            log::info!("generate_id: len: {:?}", buf.len());
-
-            // Id::new(Hash::hash(bytes))
-
             let block_id = Self::generate(&buf);
-            //TODO...
-            // let block_id = Id::default();
-            log::info!("block_id: {:?}", buf.len());
             self.id = Some(block_id);
         }
 
@@ -123,7 +109,6 @@ impl Block {
         Id::from_slice(&bytes)
     }
 
-    // Generate an Id for an arbitrary set of bytes.
     pub fn generate(bytes: &[u8]) -> Id {
         Self::new_id(Hash::hash(bytes))
     }
