@@ -1,8 +1,8 @@
+use std::io;
+
 use clap::{crate_version, Arg, Command};
 use log::info;
-
 use mini_kvvm::{engine, genesis, kvvm, plugin};
-use std::io;
 
 pub const APP_NAME: &str = "mini-kvvm-rs";
 

@@ -1,31 +1,23 @@
 #![allow(dead_code)]
-#![allow(unused_imports)]
 
 use std::collections::HashMap;
-use std::future::Future;
-use std::io::{self, Error, ErrorKind};
+use std::io::{Error, ErrorKind};
 use std::sync::Arc;
 use std::time;
 
 use async_trait::async_trait;
 use avalanche_proto::{
     appsender::app_sender_client::AppSenderClient, messenger::messenger_client::MessengerClient,
-    rpcdb::database_client::DatabaseClient, vm::vm_server::Vm,
 };
 use avalanche_types::ids::{short::Id as ShortId, Id};
-use jsonrpc_derive::rpc;
-use jsonrpc_http_server::jsonrpc_core::{BoxFuture, IoHandler, Params, Result as RpcResult, Value};
-use jsonrpc_http_server::ServerBuilder;
-use prost::bytes::Bytes;
 use semver::Version;
-use serde::{Deserialize, Serialize};
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 use tonic::transport::Channel;
 
 use crate::block::{Block, Status};
 use crate::engine::*;
 use crate::genesis::Genesis;
-use crate::state::{Database, State, BLOCK_DATA_LEN};
+use crate::state::{Database, State};
 
 #[derive(Debug)]
 pub struct ChainVMInterior {
@@ -97,6 +89,7 @@ impl Checkable for ChainVMInterior {
         Ok(())
     }
 }
+
 #[tonic::async_trait]
 impl VM for ChainVMInterior {
     async fn initialize(

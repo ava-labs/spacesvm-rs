@@ -101,9 +101,6 @@ impl State {
     pub async fn put_block(&mut self, mut block: Block) -> Result<(), Error> {
         let value = serde_json::to_vec(&block)?;
         let key = Self::prefix(BLOCK_STATE_PREFIX, block.init()?.as_ref());
-
-        log::info!("put_block key {:?}", key);
-
         self.put(key, value).await
     }
 
@@ -124,7 +121,6 @@ impl State {
     }
 
     pub async fn set_last_accepted_block_id(&mut self, id: &Id) -> Result<(), Error> {
-        log::info!("Setting last accepted block id bytes: {:?}", id.as_ref());
         self.put(
             self.last_accepted_block_id_key.clone(),
             Vec::from(id.as_ref()),
@@ -150,16 +146,12 @@ impl State {
 
     pub async fn accept_block(&mut self, mut block: Block) -> Result<Id, Error> {
         block.status = Status::Accepted;
-        let bid = block.init()?.clone();
-        log::info!("Accepting block with id: {}", bid);
-
+        let block_id = block.init()?.clone();
+        log::info!("Accepting block with id: {}", block_id);
         self.put_block(block).await?;
-        log::info!("Put accepted block into database with id: {}", bid);
+        self.set_last_accepted_block_id(&block_id).await?;
 
-        self.set_last_accepted_block_id(&bid).await?;
-        log::info!("Setting last accepted block id in database to: {}", bid);
-
-        Ok(bid)
+        Ok(block_id)
     }
 }
 
