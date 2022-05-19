@@ -17,7 +17,7 @@ use tonic::transport::Channel;
 use crate::block::{Block, Status};
 use crate::engine::*;
 use crate::genesis::Genesis;
-use crate::state::{Database, State};
+use crate::state::{Database, State, BLOCK_STATE_PREFIX};
 
 #[derive(Debug)]
 pub struct ChainVMInterior {
@@ -137,7 +137,7 @@ impl VM for ChainVMInterior {
             let genesis_block_bytes = genesis_block_vec.try_into().unwrap();
 
             let mut genesis_block = Block::new(
-                Id::empty(),
+                Id::default(),
                 0,
                 genesis_block_bytes,
                 chrono::offset::Utc::now(),
@@ -155,7 +155,7 @@ impl VM for ChainVMInterior {
             // Remove accepted block now that it is accepted
             vm.verified_blocks.remove(&accepted_block_id);
 
-            log::info!("initialized from genesis block {:?}", genesis_block_id)
+            log::info!("initialized from genesis block: {}", genesis_block_id)
         }
 
         Ok(())
@@ -193,15 +193,35 @@ impl VM for ChainVMInterior {
     }
 }
 
+#[async_trait]
 impl Getter for ChainVMInterior {
-    fn get_block(_id: Id) -> Result<Block, Error> {
-        // TODO
-        Ok(Block::default())
+    // async fn get_block(
+    //     inner: &Arc<RwLock<ChainVMInterior>>,
+    //     id: Id,
+    // ) -> Result<Option<Block>, Error> {
+    //     log::info!("kvvm get_block called");
+    //     let mut vm = inner.write().await;
+    //     log::info!("kvvm get_block called");
+    //     let block = vm.state.get_block(id).await?;    
+    //     log::info!("kvvm get_block found: {}", block.clone().unwrap().id().unwrap());
+    //     Ok(block)
+    // }
+
+    async fn get_block(
+        inner: &Arc<RwLock<ChainVMInterior>>,
+        id: Id,
+    ) -> Result<Option<Block>, Error> {
+        log::info!("kvvm get_block called");
+        let vm = inner.write().await;
+        let mut state = crate::state::State::new(Some(vm.db.clone().unwrap()));
+
+        Ok(state.get_block(id).await?)
     }
 }
 
 impl Parser for ChainVMInterior {
     fn parse_block(_bytes: &[u8]) -> Result<Block, Error> {
+        log::info!("kvvm parse_block called");
         // TODO
         Ok(Block::default())
     }
@@ -209,8 +229,8 @@ impl Parser for ChainVMInterior {
 #[async_trait]
 impl ChainVM for ChainVMInterior {
     async fn build_block(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<Block, Error> {
+        log::info!("build_block called");
         let mut vm = inner.write().await;
-
         // Pop next block from mempool error if empty
         let block_value = vm
             .mempool
@@ -219,8 +239,7 @@ impl ChainVM for ChainVMInterior {
 
         // TODO; manage error vs unwrap
         // Get Preferred Block
-        let preferred_block = Self::get_block(vm.preferred).unwrap();
-
+        let preferred_block = Self::get_block(inner, vm.preferred).await?.unwrap();
         let preferred_height = preferred_block.height();
 
         let new_block = Block::new(
@@ -232,11 +251,16 @@ impl ChainVM for ChainVMInterior {
         )
         .unwrap();
 
-        // TODO: verify block
+        new_block.verify(inner).await.map_err(|e| {
+            Error::new(ErrorKind::Other, format!("failed to verify block: {:?}", e))
+        })?;
+        log::info!("block verified {:#?}", new_block.id());
 
         Ok(new_block)
     }
+
     async fn issue_tx() -> Result<Block, Error> {
+        log::info!("kvvm issue_tx called");
         Ok(Block::default())
     }
     async fn set_preference(_id: Id) -> Result<(), Error> {
@@ -245,6 +269,8 @@ impl ChainVM for ChainVMInterior {
 
     async fn last_accepted(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<Id, Error> {
         let interior = inner.read().await;
+        // TODO: This is exactly how we should get state always perhaps make a helper.
+        // The interior db is all we really care about.
         let mut state = crate::state::State::new(Some(interior.db.clone().unwrap()));
         let last_accepted_id = state.get_last_accepted_block_id().await;
         let last_accepted_block = last_accepted_id.unwrap();
@@ -254,6 +280,7 @@ impl ChainVM for ChainVMInterior {
                 format!("last accepted block not found"),
             ));
         }
+
         Ok(last_accepted_block.unwrap())
     }
 }

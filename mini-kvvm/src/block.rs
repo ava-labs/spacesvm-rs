@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::io::{Error, ErrorKind};
 use std::sync::Arc;
 
-use avalanche_types::ids::Id;
+use avalanche_types::ids::{Id, must_deserialize_id};
 use avalanche_utils::rfc3339;
 use bytes::BufMut;
 use chrono::{DateTime, Utc};
@@ -32,6 +32,7 @@ impl Default for Block {
 /// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/snow/consensus/snowman#Block
 #[derive(Serialize, Debug, Clone, Deserialize)]
 pub struct Block {
+    #[serde(deserialize_with = "must_deserialize_id")]
     pub parent: Id,
     pub status: Status,
     height: u64,
@@ -174,4 +175,12 @@ impl Status {
     pub fn valid(&self) -> bool {
         !matches!(self, Self::Unknown)
     }
+}
+
+#[test]
+fn test_serialization_round_trip() {
+    let block = Block::default();
+    let writer = serde_json::to_vec(&block).unwrap();
+    let value: Block = serde_json::from_slice(&writer).unwrap();
+    assert_eq!(block.parent(), value.parent());
 }

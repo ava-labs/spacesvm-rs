@@ -13,10 +13,10 @@ pub type Database = DatabaseClient<Channel>;
 const LAST_ACCEPTED_BLOCK_ID_KEY: &[u8] = b"last_accepted";
 const STATE_INITIALIZED_KEY: &[u8] = b"state_initialized";
 const STATE_INITIALIZED_VALUE: &[u8] = b"state_has_infact_been_initialized";
-const BLOCK_STATE_PREFIX: &[u8] = b"blockStatePrefix";
 const SINGLETON_STATE_PREFIX: &[u8] = b"singleton";
 
 pub const BLOCK_DATA_LEN: usize = 32;
+pub const BLOCK_STATE_PREFIX: &[u8] = b"blockStatePrefix";
 
 #[derive(Debug, Default)]
 pub struct State {
@@ -36,7 +36,7 @@ impl State {
             state_initialized_key: Self::prefix(SINGLETON_STATE_PREFIX, STATE_INITIALIZED_KEY),
         }
     }
-    fn prefix(prefix: &[u8], data: &[u8]) -> Vec<u8> {
+    pub fn prefix(prefix: &[u8], data: &[u8]) -> Vec<u8> {
         let mut result = Vec::with_capacity(prefix.len() + data.len());
         result.extend_from_slice(prefix);
         result.extend_from_slice(data);
@@ -47,7 +47,11 @@ impl State {
     pub async fn get(&mut self, key: Vec<u8>) -> Result<Option<Vec<u8>>, Error> {
         let key = prost::bytes::Bytes::from(key);
         let mut client = self.client.clone().unwrap();
+
         let resp = client.get(GetRequest { key }).await.unwrap().into_inner();
+        
+        log::info!("state get response: {:#?}", resp);
+        
         let err = DatabaseError::from_u32(resp.err);
         match err {
             Some(DatabaseError::Closed) => Err(Error::new(
@@ -88,12 +92,21 @@ impl State {
         }
     }
 
+    // Dupe of kvvm this should be removed or moved to block?
     pub async fn get_block(&mut self, id: Id) -> Result<Option<Block>, Error> {
+         log::info!("state get_block called");
         let key = Self::prefix(BLOCK_STATE_PREFIX, id.as_ref());
+        log::info!("state get_block key {:#?}", key);
         let value = self.get(key).await?;
+        log::info!("state get_block value {}", String::from_utf8_lossy(&value.clone().unwrap()));
+
 
         Ok(match value {
-            Some(v) => serde_json::from_slice(&v)?,
+            Some(v) => {
+                let block = serde_json::from_slice(&v)?;
+                log::info!("state get_block value: {:#?}", block);
+                block
+            }
             None => None,
         })
     }
