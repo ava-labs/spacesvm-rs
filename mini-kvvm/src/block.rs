@@ -1,4 +1,6 @@
-use std::io::Error;
+use std::cmp::Ordering;
+use std::io::{Error, ErrorKind};
+use std::sync::Arc;
 
 use avalanche_types::ids::Id;
 use avalanche_utils::rfc3339;
@@ -6,6 +8,9 @@ use bytes::BufMut;
 use chrono::{DateTime, Utc};
 use hmac_sha256::Hash;
 use serde::{Deserialize, Serialize};
+use tokio::sync::RwLock;
+
+use crate::kvvm::ChainVMInterior;
 
 pub const DATA_LEN: usize = 32;
 
@@ -69,10 +74,40 @@ impl Block {
         &self.timestamp
     }
 
-    // TODO:
-    // pub fn verify(&self) -> Result<(), Error> {
-    //     Err(Error {})
-    // }
+    pub async fn verify(&self, inner: &Arc<RwLock<ChainVMInterior>>) -> Result<(), Error> {
+        let mut vm = inner.write().await;
+        Ok(match vm.state.get_block(self.parent).await? {
+            Some(mut pb) => {
+                let block_id = pb.init().expect("failed to initialize block");
+                // Ensure block height comes right after its parent's height
+                if pb.height() + 1 != self.height() {
+                    return Err(Error::new(
+                        ErrorKind::InvalidData,
+                        "failed to verify block invalid height",
+                    ));
+                }
+                // Ensure block timestamp is after its parent's timestamp.
+                if self.timestamp().cmp(pb.timestamp()) == Ordering::Less {
+                    return Err(Error::new(
+                        ErrorKind::InvalidData,
+                        format!(
+                            "block timestamp {} is after parents {}",
+                            self.timestamp(),
+                            pb.timestamp()
+                        ),
+                    ));
+                }
+                // Add block as verified
+                vm.verified_blocks.insert(block_id, pb);
+            }
+            None => {
+                return Err(Error::new(
+                    ErrorKind::NotFound,
+                    "failed to verify block parent not found",
+                ))
+            }
+        })
+    }
 
     /// bytes returns the binary representation of this block
     pub fn bytes(&self) -> &[u8] {
@@ -89,7 +124,7 @@ impl Block {
         self.status
     }
 
-    pub fn init(&mut self) -> Result<&Id, Error> {
+    pub fn init(&mut self) -> Result<Id, Error> {
         if self.id.is_none() {
             let mut writer = Vec::new().writer();
             serde_json::to_writer(&mut writer, &self.parent())?;
@@ -102,7 +137,7 @@ impl Block {
             self.id = Some(block_id);
         }
 
-        Ok(self.id.as_ref().expect("in Block::id, the id was just set to Some(_) above and yet is still None. This is next to impossible."))
+        Ok(self.id.expect("in Block::id, the id was just set to Some(_) above and yet is still None. This is next to impossible."))
     }
 
     pub fn new_id(bytes: [u8; DATA_LEN]) -> Id {
