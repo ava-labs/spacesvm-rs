@@ -17,7 +17,7 @@ use tonic::transport::Channel;
 use crate::block::{Block, Status};
 use crate::engine::*;
 use crate::genesis::Genesis;
-use crate::state::{Database, State, BLOCK_STATE_PREFIX};
+use crate::state::{Database, State};
 
 #[derive(Debug)]
 pub struct ChainVMInterior {
@@ -244,7 +244,7 @@ impl Parser for ChainVMInterior {
         inner: &Arc<RwLock<ChainVMInterior>>,
         bytes: &[u8],
     ) -> Result<Block, Error> {
-        log::info!(
+        log::debug!(
             "kvvm parse_block called: {}",
             String::from_utf8_lossy(&bytes)
         );
@@ -258,7 +258,7 @@ impl Parser for ChainVMInterior {
         new_block.status = Status::Processing;
 
         let interior = inner.read().await;
-        let mut state = crate::state::State::new(Some(interior.db.clone().unwrap()));
+        let mut state = crate::state::State::new(interior.db);
 
         let new_block_id = new_block
             .init()
@@ -284,30 +284,37 @@ impl ChainVM for ChainVMInterior {
     async fn build_block(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<Block, Error> {
         log::info!("build_block called");
         let mut vm = inner.write().await;
+
         // Pop next block from mempool error if empty
         let block_value = vm
             .mempool
             .pop()
             .ok_or_else(|| Error::new(ErrorKind::Other, "there is no block to propose"))?;
 
-        // TODO; manage error vs unwrap
         // Get Preferred Block
-        let preferred_block = Self::get_block(inner, vm.preferred).await?.unwrap();
-        let preferred_height = preferred_block.height();
+        let preferred_block = Self::get_block(inner, vm.preferred)
+            .await
+            .map_err(|e| Error::new(ErrorKind::Other, format!("failed to get block: {:?}", e)))?
+            .unwrap();
 
         let new_block = Block::new(
             vm.preferred,
-            preferred_height + 1,
+            preferred_block.height() + 1,
             block_value,
             chrono::offset::Utc::now(),
             Status::Processing,
         )
-        .unwrap();
+        .map_err(|e| {
+            Error::new(
+                ErrorKind::Other,
+                format!("failed to create new block: {:?}", e),
+            )
+        })?;
 
         new_block.verify(inner).await.map_err(|e| {
             Error::new(ErrorKind::Other, format!("failed to verify block: {:?}", e))
         })?;
-        log::info!("block verified {:?}", new_block.id());
+        log::debug!("block verified {:?}", new_block.id());
 
         Ok(new_block)
     }
@@ -325,17 +332,19 @@ impl ChainVM for ChainVMInterior {
     }
 
     async fn last_accepted(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<Id, Error> {
-        let interior = inner.read().await;
-        let mut state = crate::state::State::new(Some(interior.db.clone().unwrap()));
-        let last_accepted_id = state.get_last_accepted_block_id().await;
-        let last_accepted_block = last_accepted_id.unwrap();
-        if last_accepted_block.is_none() {
+        let vm = inner.read().await;
+        let mut state = crate::state::State::new(vm.db);
+        let last_accepted_block_id = state
+            .get_last_accepted_block_id()
+            .await
+            .map_err(|e| Error::new(ErrorKind::Other, format!("failed to get block: {:?}", e)))?;
+        if last_accepted_block_id.is_none() {
             return Err(Error::new(
                 ErrorKind::NotFound,
                 format!("last accepted block not found"),
             ));
         }
 
-        Ok(last_accepted_block.unwrap())
+        Ok(last_accepted_block_id.unwrap())
     }
 }
