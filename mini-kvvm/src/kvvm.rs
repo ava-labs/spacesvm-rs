@@ -174,7 +174,9 @@ impl VM for ChainVMInterior {
                 Status::Processing,
             )?;
 
-            let genesis_block_id = genesis_block.init()?;
+            let genesis_block_id = genesis_block.init().map_err(|e| {
+                Error::new(ErrorKind::Other, format!("failed to init block: {:?}", e))
+            })?;
 
             vm.state.put_block(genesis_block).await.map_err(|e| {
                 Error::new(
@@ -183,11 +185,13 @@ impl VM for ChainVMInterior {
                 )
             });
 
-            let accepted_block_id = vm.state.accept_block(genesis_block).await?;
+            let accepted_block_id = vm.state.accept_block(genesis_block).await.map_err(|e| {
+                Error::new(ErrorKind::Other, format!("failed to accept block: {:?}", e))
+            })?;
             // Remove accepted block now that it is accepted
             vm.verified_blocks.remove(&accepted_block_id);
 
-            log::info!("initialized from genesis block: {}", genesis_block_id)
+            log::info!("initialized from genesis block: {:?}", genesis_block_id)
         }
 
         Ok(())
@@ -257,8 +261,8 @@ impl Parser for ChainVMInterior {
 
         new_block.status = Status::Processing;
 
-        let interior = inner.read().await;
-        let mut state = crate::state::State::new(interior.db);
+        let vm = inner.read().await;
+        let mut state = crate::state::State::new(vm.db.clone());
 
         let new_block_id = new_block
             .init()
@@ -333,7 +337,7 @@ impl ChainVM for ChainVMInterior {
 
     async fn last_accepted(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<Id, Error> {
         let vm = inner.read().await;
-        let mut state = crate::state::State::new(vm.db);
+        let mut state = crate::state::State::new(vm.db.clone());
         let last_accepted_block_id = state
             .get_last_accepted_block_id()
             .await

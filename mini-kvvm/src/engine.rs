@@ -399,9 +399,9 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
         &self,
         req: Request<vm::SetPreferenceRequest>,
     ) -> Result<Response<Empty>, Status> {
-        log::debug!("set_preference called id: {}", id);
         let req = req.into_inner();
         let id = Id::from_slice(&req.id);
+        log::debug!("set_preference called id: {}", id);
 
         C::set_preference(&self.interior, id)
             .await
