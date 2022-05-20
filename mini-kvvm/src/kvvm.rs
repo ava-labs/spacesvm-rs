@@ -31,6 +31,7 @@ pub struct ChainVMInterior {
     pub mempool: Vec<Vec<u8>>,
     pub verified_blocks: HashMap<Id, Block>,
     pub last_accepted: Block,
+    preferred_block_id: Option<Id>,
 }
 
 impl ChainVMInterior {
@@ -46,6 +47,7 @@ impl ChainVMInterior {
             mempool: Vec::new(),
             verified_blocks: HashMap::new(),
             last_accepted: Block::default(),
+            preferred_block_id: None,
         }
     }
 }
@@ -195,18 +197,6 @@ impl VM for ChainVMInterior {
 
 #[async_trait]
 impl Getter for ChainVMInterior {
-    // async fn get_block(
-    //     inner: &Arc<RwLock<ChainVMInterior>>,
-    //     id: Id,
-    // ) -> Result<Option<Block>, Error> {
-    //     log::info!("kvvm get_block called");
-    //     let mut vm = inner.write().await;
-    //     log::info!("kvvm get_block called");
-    //     let block = vm.state.get_block(id).await?;    
-    //     log::info!("kvvm get_block found: {}", block.clone().unwrap().id().unwrap());
-    //     Ok(block)
-    // }
-
     async fn get_block(
         inner: &Arc<RwLock<ChainVMInterior>>,
         id: Id,
@@ -214,16 +204,49 @@ impl Getter for ChainVMInterior {
         log::info!("kvvm get_block called");
         let vm = inner.write().await;
         let mut state = crate::state::State::new(Some(vm.db.clone().unwrap()));
-
         Ok(state.get_block(id).await?)
     }
 }
 
+#[async_trait]
 impl Parser for ChainVMInterior {
-    fn parse_block(_bytes: &[u8]) -> Result<Block, Error> {
-        log::info!("kvvm parse_block called");
-        // TODO
-        Ok(Block::default())
+    async fn parse_block(
+        inner: &Arc<RwLock<ChainVMInterior>>,
+        bytes: &[u8],
+    ) -> Result<Block, Error> {
+        log::info!(
+            "kvvm parse_block called: {}",
+            String::from_utf8_lossy(&bytes)
+        );
+        let mut new_block: Block = serde_json::from_slice(bytes.as_ref()).map_err(|e| {
+            Error::new(
+                ErrorKind::Other,
+                format!("failed to deserialize block: {:?}", e),
+            )
+        })?;
+
+        new_block.status = Status::Processing;
+
+        let interior = inner.read().await;
+        let mut state = crate::state::State::new(Some(interior.db.clone().unwrap()));
+
+        let new_block_id = new_block
+            .init()
+            .map_err(|e| Error::new(ErrorKind::Other, format!("failed to init block: {:?}", e)))?;
+
+        match state.get_block(new_block_id).await? {
+            Some(mut old_block) => {
+                let old_block_id = old_block.init().map_err(|e| {
+                    Error::new(ErrorKind::Other, format!("failed to init block: {:?}", e))
+                })?;
+                log::info!("found old block id: {}", old_block_id);
+                return Ok(old_block);
+            }
+            None => {
+                log::info!("found new block id: {}", new_block_id);
+                Ok(new_block)
+            }
+        }
     }
 }
 #[async_trait]
@@ -254,7 +277,7 @@ impl ChainVM for ChainVMInterior {
         new_block.verify(inner).await.map_err(|e| {
             Error::new(ErrorKind::Other, format!("failed to verify block: {:?}", e))
         })?;
-        log::info!("block verified {:#?}", new_block.id());
+        log::info!("block verified {:?}", new_block.id());
 
         Ok(new_block)
     }
@@ -263,7 +286,11 @@ impl ChainVM for ChainVMInterior {
         log::info!("kvvm issue_tx called");
         Ok(Block::default())
     }
-    async fn set_preference(_id: Id) -> Result<(), Error> {
+
+    async fn set_preference(inner: &Arc<RwLock<ChainVMInterior>>, id: Id) -> Result<(), Error> {
+        log::info!("setting preferred block id...");
+        let mut vm = inner.write().await;
+        vm.preferred_block_id = Some(id);
         Ok(())
     }
 

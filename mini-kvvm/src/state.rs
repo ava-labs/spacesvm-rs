@@ -49,9 +49,9 @@ impl State {
         let mut client = self.client.clone().unwrap();
 
         let resp = client.get(GetRequest { key }).await.unwrap().into_inner();
-        
-        log::info!("state get response: {:#?}", resp);
-        
+
+        log::info!("state get response: {:?}", resp);
+
         let err = DatabaseError::from_u32(resp.err);
         match err {
             Some(DatabaseError::Closed) => Err(Error::new(
@@ -94,17 +94,19 @@ impl State {
 
     // Dupe of kvvm this should be removed or moved to block?
     pub async fn get_block(&mut self, id: Id) -> Result<Option<Block>, Error> {
-         log::info!("state get_block called");
+        log::info!("state get_block called");
         let key = Self::prefix(BLOCK_STATE_PREFIX, id.as_ref());
-        log::info!("state get_block key {:#?}", key);
+        log::info!("state get_block key {:?}", key);
         let value = self.get(key).await?;
-        log::info!("state get_block value {}", String::from_utf8_lossy(&value.clone().unwrap()));
-
+        log::info!(
+            "state get_block value {}",
+            String::from_utf8_lossy(&value.clone().unwrap())
+        );
 
         Ok(match value {
             Some(v) => {
                 let block = serde_json::from_slice(&v)?;
-                log::info!("state get_block value: {:#?}", block);
+                log::info!("state get_block value: {:?}", block);
                 block
             }
             None => None,

@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::io::{Error, ErrorKind};
 use std::sync::Arc;
 
-use avalanche_types::ids::{Id, must_deserialize_id};
+use avalanche_types::ids::{must_deserialize_id, Id};
 use avalanche_utils::rfc3339;
 use bytes::BufMut;
 use chrono::{DateTime, Utc};

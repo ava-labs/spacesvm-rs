@@ -124,14 +124,18 @@ pub trait Getter {
 
 /// snow/engine/snowman/block.Parser
 /// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/snow/engine/snowman/block#Parser
+#[tonic::async_trait]
 pub trait Parser {
-    fn parse_block(bytes: &[u8]) -> Result<Block, Error>;
+    async fn parse_block(
+        inner: &Arc<RwLock<ChainVMInterior>>,
+        bytes: &[u8],
+    ) -> Result<Block, Error>;
 }
 #[tonic::async_trait]
 pub trait ChainVM: VM + Getter + Parser {
     async fn build_block(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<Block, Error>;
     async fn issue_tx() -> Result<Block, Error>;
-    async fn set_preference(id: Id) -> Result<(), Error>;
+    async fn set_preference(inner: &Arc<RwLock<ChainVMInterior>>, id: Id) -> Result<(), Error>;
     async fn last_accepted(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<Id, Error>;
 }
 
@@ -225,7 +229,9 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
             &app_sender_client,
         )
         .await
-        .map_err(|e| tonic::Status::unknown(format!("VM::initialize failed: {}", e.to_string())))?;
+        .map_err(|e| {
+            tonic::Status::unknown(format!("engine::initialize failed: {}", e.to_string()))
+        })?;
 
         log::info!("engine init complete");
 
@@ -234,7 +240,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
         log::info!("engine last_accepted id: {}", last_accepted);
 
         let mut last_accepted_block = C::get_block(&self.interior, last_accepted).await?.unwrap();
-        log::info!("last_accepted_block: {:#?}", last_accepted_block);
+        log::info!("last_accepted_block: {:?}", last_accepted_block);
         let last_accepted_block_id = last_accepted_block.init().unwrap();
         let parent_id = Vec::from(last_accepted_block.parent().as_ref());
         log::info!("parent_id: {}", String::from_utf8_lossy(parent_id.as_ref()));
@@ -295,22 +301,24 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
 
     async fn build_block(
         &self,
-        _request: Request<Empty>,
+        _req: Request<Empty>,
     ) -> Result<Response<vm::BuildBlockResponse>, Status> {
-        log::info!("build_block called");
-        let interior = &self.interior;
-        let block = C::build_block(&interior).await.unwrap();
-        let block_id = Vec::from(block.clone().id().unwrap().as_ref());
-        let parent_id = Vec::from(block.parent().as_ref());
-        let timestamp = grpcutil::timestamp_from_time(block.timestamp());
-        let bytes = Vec::from(block.bytes());
+        log::debug!("build_block called");
+
+        let mut block = C::build_block(&self.interior)
+            .await
+            .map_err(|e| tonic::Status::unknown(e.to_string()))?;
+
+        let block_id = block
+            .init()
+            .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
         Ok(Response::new(vm::BuildBlockResponse {
-            id: Bytes::from(block_id),
-            parent_id: Bytes::from(parent_id),
-            bytes: Bytes::from(bytes),
+            id: Bytes::from(block_id.to_vec()),
+            parent_id: Bytes::from(block.parent.to_vec()),
+            bytes: Bytes::from(block.bytes().to_vec()),
             height: block.height(),
-            timestamp: Some(timestamp),
+            timestamp: Some(grpcutil::timestamp_from_time(block.timestamp())),
         }))
     }
 
@@ -318,21 +326,25 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
         &self,
         req: Request<vm::ParseBlockRequest>,
     ) -> Result<Response<vm::ParseBlockResponse>, Status> {
-        log::info!("parse_block called");
+        log::debug!("parse_block called");
         let req = req.into_inner();
 
-        let block = C::parse_block(req.bytes.as_ref()).unwrap();
-        let parent_id = Vec::from(block.parent().as_ref());
-        let timestamp = grpcutil::timestamp_from_time(block.timestamp());
+        let mut block = C::parse_block(&self.interior, req.bytes.as_ref())
+            .await
+            .map_err(|e| tonic::Status::unknown(e.to_string()))?;
+
+        let block_id = block
+            .init()
+            .map_err(|e| tonic::Status::unknown(e.to_string()))?;
+
         let status = block.status() as u32;
-        let id = Vec::from(block.id().unwrap().as_ref());
 
         Ok(Response::new(vm::ParseBlockResponse {
-            id: Bytes::from(id),
-            parent_id: Bytes::from(parent_id),
+            id: Bytes::from(block_id.to_vec()),
+            parent_id: Bytes::from(block.parent.to_vec()),
             status: status,
             height: block.height(),
-            timestamp: Some(timestamp),
+            timestamp: Some(grpcutil::timestamp_from_time(block.timestamp())),
         }))
     }
 
@@ -349,29 +361,30 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
         _request: Request<vm::SetStateRequest>,
     ) -> Result<Response<vm::SetStateResponse>, Status> {
         log::info!("set_state called");
-        C::set_state(&self.interior).await.map_err(|e| {
-            tonic::Status::unknown(format!("VM::set_state failed: {}", e.to_string()))
-        })?;
+        // TODO: read SetStateRequest
+        C::set_state(&self.interior)
+            .await
+            .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
-        let last_accepted = C::last_accepted(&self.interior).await.map_err(|e| {
-            tonic::Status::unknown(format!("VM::last_accepted failed: {}", e.to_string()))
-        })?;
+        let last_accepted = C::last_accepted(&self.interior)
+            .await
+            .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
         let mut block = C::get_block(&self.interior, last_accepted)
             .await
-            .unwrap()
+            .map_err(|e| tonic::Status::unknown(e.to_string()))?
             .unwrap();
-        let parent_id = Vec::from(block.parent().as_ref());
-        let id = block.init().unwrap();
-        let bytes = Vec::from(block.bytes());
-        let timestamp = grpcutil::timestamp_from_time(block.timestamp());
+            
+        let block_id = block
+            .init()
+            .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
         Ok(Response::new(vm::SetStateResponse {
-            last_accepted_id: Bytes::from(id.to_vec()),
-            last_accepted_parent_id: Bytes::from(parent_id),
-            bytes: Bytes::from(bytes),
+            last_accepted_id: Bytes::from(block_id.to_vec()),
+            last_accepted_parent_id: Bytes::from(block.parent.to_vec()),
+            bytes: Bytes::from(block.bytes().to_vec()),
             height: block.height(),
-            timestamp: Some(timestamp),
+            timestamp: Some(grpcutil::timestamp_from_time(block.timestamp())),
         }))
     }
 
@@ -396,17 +409,23 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
 
     async fn set_preference(
         &self,
-        _request: Request<vm::SetPreferenceRequest>,
+        req: Request<vm::SetPreferenceRequest>,
     ) -> Result<Response<Empty>, Status> {
-        log::info!("set_preference called");
-        Err(Status::unimplemented("set_preference"))
+        let req = req.into_inner();
+        let id = Id::from_slice(&req.id);
+        log::info!("set_preference called id: {}", id);
+
+        C::set_preference(&self.interior, id)
+            .await
+            .map_err(|e| tonic::Status::unknown(e.to_string()))?;
+
+        Ok(Response::new(Empty {}))
     }
 
     async fn health(
         &self,
         _request: Request<vm::HealthRequest>,
     ) -> Result<Response<vm::HealthResponse>, Status> {
-        log::info!("health called");
         Ok(Response::new(vm::HealthResponse {
             details: "mini-kvvm is healthy".to_string(),
         }))
