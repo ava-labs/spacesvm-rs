@@ -166,7 +166,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
             .unwrap()
             .connect()
             .await
-            .unwrap();
+            .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
         // Create gRPC clients
         // Multiplexing in tonic is done by cloning the client which is very cheap.
@@ -178,19 +178,13 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
         let sn_lookup_client = SubnetLookupClient::new(client_conn.clone());
         let app_sender_client = AppSenderClient::new(client_conn.clone());
 
-        let subnet_id = Id::from_slice(&req.subnet_id);
-        let chain_id = Id::from_slice(&req.chain_id);
-        let node_id = ShortId::from_slice(&req.node_id);
-        let x_chain_id = Id::from_slice(&req.x_chain_id);
-        let avax_asset_id = Id::from_slice(&req.avax_asset_id);
-
         let ctx = Some(Context {
             network_id: req.network_id,
-            subnet_id: subnet_id,
-            chain_id: chain_id,
-            node_id: node_id,
-            x_chain_id: x_chain_id,
-            avax_asset_id: avax_asset_id,
+            subnet_id: Id::from_slice(&req.subnet_id),
+            chain_id: Id::from_slice(&req.chain_id),
+            node_id: ShortId::from_slice(&req.node_id),
+            x_chain_id: Id::from_slice(&req.x_chain_id),
+            avax_asset_id: Id::from_slice(&req.avax_asset_id),
             keystore: keystore_client,
             shared_memory: shared_memory_client,
             bc_lookup: bc_lookup_client,
@@ -207,7 +201,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
                 .unwrap()
                 .connect()
                 .await
-                .unwrap();
+                .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
             let db_client = DatabaseClient::new(client_conn);
             db_clients.push(VersionedDatabase {
@@ -229,15 +223,9 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
             &app_sender_client,
         )
         .await
-        .map_err(|e| {
-            tonic::Status::unknown(format!("engine::initialize failed: {}", e.to_string()))
-        })?;
-
-        log::info!("engine init complete");
+        .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
         let last_accepted = C::last_accepted(&self.interior).await?;
-
-        log::info!("engine last_accepted id: {}", last_accepted);
 
         let mut last_accepted_block = C::get_block(&self.interior, last_accepted).await?.unwrap();
         log::info!("last_accepted_block: {:?}", last_accepted_block);
@@ -360,7 +348,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
         &self,
         _request: Request<vm::SetStateRequest>,
     ) -> Result<Response<vm::SetStateResponse>, Status> {
-        log::info!("set_state called");
+        log::debug!("set_state called");
         // TODO: read SetStateRequest
         C::set_state(&self.interior)
             .await
@@ -374,7 +362,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
             .await
             .map_err(|e| tonic::Status::unknown(e.to_string()))?
             .unwrap();
-            
+
         let block_id = block
             .init()
             .map_err(|e| tonic::Status::unknown(e.to_string()))?;
@@ -411,9 +399,9 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
         &self,
         req: Request<vm::SetPreferenceRequest>,
     ) -> Result<Response<Empty>, Status> {
+        log::debug!("set_preference called id: {}", id);
         let req = req.into_inner();
         let id = Id::from_slice(&req.id);
-        log::info!("set_preference called id: {}", id);
 
         C::set_preference(&self.interior, id)
             .await

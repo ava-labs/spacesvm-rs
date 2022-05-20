@@ -114,26 +114,54 @@ impl VM for ChainVMInterior {
         let state = State::new(Some(current_db.clone()));
         vm.state = state;
 
-        let genesis = Genesis::from_json(genesis_bytes).unwrap();
+        let genesis = Genesis::from_json(genesis_bytes).map_err(|e| {
+            Error::new(
+                ErrorKind::Other,
+                format!("failed to deserialize genesis: {:?}", e),
+            )
+        })?;
         vm.genesis = genesis;
-        match vm.genesis.verify() {
-            Ok(g) => g,
-            Err(e) => eprintln!("failed to verify genesis: {:?}", e),
-        }
+
+        vm.genesis.verify().map_err(|e| {
+            Error::new(
+                ErrorKind::Other,
+                format!("failed to verify genesis: {:?}", e),
+            )
+        })?;
 
         // Check if last accepted block exists
         if vm.state.has_last_accepted_block().await? {
-            let last_block_id = vm
+            let last_accepted_block_id = vm
                 .state
                 .get_last_accepted_block_id()
                 .await
-                .unwrap()
+                .map_err(|e| {
+                    Error::new(
+                        ErrorKind::Other,
+                        format!("failed to get last accepted block id: {:?}", e),
+                    )
+                })?
                 .unwrap();
-            let last_block = vm.state.get_block(last_block_id).await.unwrap().unwrap();
 
-            vm.preferred = last_block_id;
-            vm.last_accepted = last_block;
-            log::info!("initialized from last accepted block {:?}", last_block_id)
+            let last_accepted_block = vm
+                .state
+                .get_block(last_accepted_block_id)
+                .await
+                .map_err(|e| {
+                    Error::new(
+                        ErrorKind::Other,
+                        format!("failed to verify genesis: {:?}", e),
+                    )
+                })?
+                .unwrap();
+
+            vm.preferred = last_accepted_block_id;
+            vm.last_accepted = last_accepted_block;
+
+            log::info!(
+                "initialized from last accepted block {}",
+                last_accepted_block_id
+            );
         } else {
             let genesis_block_vec = genesis_bytes.to_vec();
             let genesis_block_bytes = genesis_block_vec.try_into().unwrap();
@@ -146,12 +174,14 @@ impl VM for ChainVMInterior {
                 Status::Processing,
             )?;
 
-            let genesis_block_id = genesis_block.init()?.clone();
+            let genesis_block_id = genesis_block.init()?;
 
-            match vm.state.put_block(genesis_block.clone()).await {
-                Ok(g) => g,
-                Err(e) => eprintln!("failed to put genesis block: {:?}", e),
-            }
+            vm.state.put_block(genesis_block).await.map_err(|e| {
+                Error::new(
+                    ErrorKind::Other,
+                    format!("failed to verify genesis: {:?}", e),
+                )
+            });
 
             let accepted_block_id = vm.state.accept_block(genesis_block).await?;
             // Remove accepted block now that it is accepted
@@ -201,9 +231,9 @@ impl Getter for ChainVMInterior {
         inner: &Arc<RwLock<ChainVMInterior>>,
         id: Id,
     ) -> Result<Option<Block>, Error> {
-        log::info!("kvvm get_block called");
+        log::debug!("kvvm get_block called");
         let vm = inner.write().await;
-        let mut state = crate::state::State::new(Some(vm.db.clone().unwrap()));
+        let mut state = crate::state::State::new(vm.db.clone());
         Ok(state.get_block(id).await?)
     }
 }
@@ -239,11 +269,11 @@ impl Parser for ChainVMInterior {
                 let old_block_id = old_block.init().map_err(|e| {
                     Error::new(ErrorKind::Other, format!("failed to init block: {:?}", e))
                 })?;
-                log::info!("found old block id: {}", old_block_id);
+                log::debug!("found old block id: {}", old_block_id);
                 return Ok(old_block);
             }
             None => {
-                log::info!("found new block id: {}", new_block_id);
+                log::debug!("found new block id: {}", new_block_id);
                 Ok(new_block)
             }
         }
@@ -296,8 +326,6 @@ impl ChainVM for ChainVMInterior {
 
     async fn last_accepted(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<Id, Error> {
         let interior = inner.read().await;
-        // TODO: This is exactly how we should get state always perhaps make a helper.
-        // The interior db is all we really care about.
         let mut state = crate::state::State::new(Some(interior.db.clone().unwrap()));
         let last_accepted_id = state.get_last_accepted_block_id().await;
         let last_accepted_block = last_accepted_id.unwrap();
