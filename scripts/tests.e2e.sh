@@ -34,20 +34,20 @@ if [[ ${GOOS} == "darwin" ]]; then
   DOWNLOAD_PATH=/tmp/avalanchego.zip
 fi
 
-# rm -rf /tmp/avalanchego-v${AVALANCHEGO_VERSION}
-# rm -f ${DOWNLOAD_PATH}
+rm -rf /tmp/avalanchego-v${AVALANCHEGO_VERSION}
+rm -f ${DOWNLOAD_PATH}
 
-# echo "downloading avalanchego ${AVALANCHEGO_VERSION} at ${DOWNLOAD_URL}"
-# curl -L ${DOWNLOAD_URL} -o ${DOWNLOAD_PATH}
+echo "downloading avalanchego ${AVALANCHEGO_VERSION} at ${DOWNLOAD_URL}"
+curl -L ${DOWNLOAD_URL} -o ${DOWNLOAD_PATH}
 
-# echo "extracting downloaded avalanchego"
-# if [[ ${GOOS} == "linux" ]]; then
-#   tar xzvf ${DOWNLOAD_PATH} -C /tmp
-# elif [[ ${GOOS} == "darwin" ]]; then
-#   unzip ${DOWNLOAD_PATH} -d /tmp/avalanchego-build
-#   mv /tmp/avalanchego-build/build /tmp/avalanchego-v${AVALANCHEGO_VERSION}
-# fi
-# find /tmp/avalanchego-v${AVALANCHEGO_VERSION}
+echo "extracting downloaded avalanchego"
+if [[ ${GOOS} == "linux" ]]; then
+  tar xzvf ${DOWNLOAD_PATH} -C /tmp
+elif [[ ${GOOS} == "darwin" ]]; then
+  unzip ${DOWNLOAD_PATH} -d /tmp/avalanchego-build
+  mv /tmp/avalanchego-build/build /tmp/avalanchego-v${AVALANCHEGO_VERSION}
+fi
+find /tmp/avalanchego-v${AVALANCHEGO_VERSION}
 
 AVALANCHEGO_PATH=/tmp/avalanchego-v${AVALANCHEGO_VERSION}/avalanchego
 AVALANCHEGO_PLUGIN_DIR=/tmp/avalanchego-v${AVALANCHEGO_VERSION}/plugins
