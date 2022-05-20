@@ -167,23 +167,19 @@ impl VM for ChainVMInterior {
             let genesis_block_bytes = genesis_block_vec.try_into().unwrap();
 
             let mut genesis_block = Block::new(
-                Id::default(),
+                Id::empty(),
                 0,
                 genesis_block_bytes,
                 chrono::offset::Utc::now(),
                 Status::Processing,
             )?;
 
-            let genesis_block_id = genesis_block.init().map_err(|e| {
-                Error::new(ErrorKind::Other, format!("failed to init block: {:?}", e))
-            })?;
+            let genesis_block_id = genesis_block.init()?.clone();
 
-            vm.state.put_block(genesis_block).await.map_err(|e| {
-                Error::new(
-                    ErrorKind::Other,
-                    format!("failed to verify genesis: {:?}", e),
-                )
-            });
+            match vm.state.put_block(genesis_block.clone()).await {
+                Ok(g) => g,
+                Err(e) => eprintln!("failed to put genesis block: {:?}", e),
+            }
 
             let accepted_block_id = vm.state.accept_block(genesis_block).await.map_err(|e| {
                 Error::new(ErrorKind::Other, format!("failed to accept block: {:?}", e))

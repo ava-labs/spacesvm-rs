@@ -161,7 +161,9 @@ impl State {
 
     pub async fn accept_block(&mut self, mut block: Block) -> Result<Id, Error> {
         block.status = Status::Accepted;
-        let block_id = block.init()?.clone();
+        let block_id = block
+            .init()
+            .map_err(|e| Error::new(ErrorKind::Other, format!("failed to init block: {:?}", e)))?;
         log::info!("Accepting block with id: {}", block_id);
         self.put_block(block).await?;
         self.set_last_accepted_block_id(&block_id).await?;
