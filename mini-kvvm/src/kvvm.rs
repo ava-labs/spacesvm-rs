@@ -131,29 +131,18 @@ impl VM for ChainVMInterior {
 
         // Check if last accepted block exists
         if vm.state.has_last_accepted_block().await? {
-            let last_accepted_block_id = vm
-                .state
-                .get_last_accepted_block_id()
-                .await
-                .map_err(|e| {
-                    Error::new(
-                        ErrorKind::Other,
-                        format!("failed to get last accepted block id: {:?}", e),
-                    )
-                })?
-                .unwrap();
+            let maybe_last_accepted_block_id = vm.state.get_last_accepted_block_id().await?;
+            if !maybe_last_accepted_block_id.is_some() {
+                return Err(Error::new(ErrorKind::Other, "invalid block no id found"));
+            }
+            let last_accepted_block_id = maybe_last_accepted_block_id.unwrap();
 
-            let last_accepted_block = vm
-                .state
-                .get_block(last_accepted_block_id)
-                .await
-                .map_err(|e| {
-                    Error::new(
-                        ErrorKind::Other,
-                        format!("failed to verify genesis: {:?}", e),
-                    )
-                })?
-                .unwrap();
+            let maybe_last_accepted_block =
+                vm.state.get_block(last_accepted_block_id).await?;
+            if !maybe_last_accepted_block.is_some() {
+                return Err(Error::new(ErrorKind::Other, "invalid block no id found"));
+            }
+            let last_accepted_block = maybe_last_accepted_block.unwrap();
 
             vm.preferred = last_accepted_block_id;
             vm.last_accepted = last_accepted_block;
