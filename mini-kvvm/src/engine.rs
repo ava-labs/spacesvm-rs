@@ -24,6 +24,7 @@ use tonic::{Request, Response, Status};
 
 use crate::block::Block;
 use crate::kvvm::ChainVMInterior;
+use crate::state::SnowState;
 
 // FIXME: dummies
 pub type Health = ();
@@ -109,7 +110,8 @@ pub trait VM: AppHandler + Checkable + Connector {
     fn version() -> Result<String, Error>;
     fn create_static_handlers() -> Result<HashMap<String, HTTPHandler>, Error>;
     fn create_handlers() -> Result<HashMap<String, HTTPHandler>, Error>;
-    async fn set_state(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<(), Error>;
+    async fn set_state(inner: &Arc<RwLock<ChainVMInterior>>, state: SnowState)
+        -> Result<(), Error>;
 }
 
 /// snow/engine/snowman/block.Getter
@@ -229,22 +231,24 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
 
         let mut last_accepted_block = C::get_block(&self.interior, last_accepted).await?.unwrap();
         log::info!("last_accepted_block: {:?}", last_accepted_block);
-        let last_accepted_block_id = last_accepted_block.init().unwrap();
-        let parent_id = Vec::from(last_accepted_block.parent().as_ref());
-        log::info!("parent_id: {}", String::from_utf8_lossy(parent_id.as_ref()));
 
-        let bytes = Vec::from(last_accepted_block.bytes());
-        let timestamp = grpcutil::timestamp_from_time(last_accepted_block.timestamp());
+        let last_accepted_block_id = last_accepted_block
+            .init()
+            .map_err(|e| tonic::Status::unknown(e.to_string()))?;
+
+        let parent_id = last_accepted_block.parent.to_vec();
+        log::info!("parent_id: {}", String::from_utf8_lossy(parent_id.as_ref()));
 
         let resp = vm::InitializeResponse {
             last_accepted_id: Bytes::from(last_accepted_block_id.to_vec()),
             last_accepted_parent_id: Bytes::from(parent_id),
-            bytes: Bytes::from(bytes),
+            bytes: Bytes::from(last_accepted_block.bytes().to_vec()),
             height: last_accepted_block.height(),
-            timestamp: Some(timestamp),
+            timestamp: Some(grpcutil::timestamp_from_time(
+                last_accepted_block.timestamp(),
+            )),
         };
-
-        log::info!("init resp: {:#?}", resp);
+        log::debug!("init resp: {:#?}", resp);
 
         Ok(Response::new(resp))
     }
@@ -346,11 +350,13 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
 
     async fn set_state(
         &self,
-        _request: Request<vm::SetStateRequest>,
+        req: Request<vm::SetStateRequest>,
     ) -> Result<Response<vm::SetStateResponse>, Status> {
         log::debug!("set_state called");
-        // TODO: read SetStateRequest
-        C::set_state(&self.interior)
+        let req = req.into_inner();
+
+        let snow_state = SnowState::try_from(req.state).unwrap();
+        C::set_state(&self.interior, snow_state)
             .await
             .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 

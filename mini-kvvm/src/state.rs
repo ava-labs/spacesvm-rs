@@ -180,3 +180,26 @@ pub enum DatabaseError {
     Closed = 1,
     NotFound = 2,
 }
+
+/// snow/state
+/// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/snow#State
+pub enum SnowState {
+    Initializing = 0,
+    StateSyncing = 1,
+    Bootstrapping = 2,
+    NormalOp = 3,
+}
+
+impl TryFrom<u32> for SnowState {
+    // TODO
+    type Error = ();
+    fn try_from(v: u32) -> Result<Self, Self::Error> {
+        match v {
+            x if x == SnowState::Initializing as u32 => Ok(SnowState::Initializing),
+            x if x == SnowState::StateSyncing as u32 => Ok(SnowState::StateSyncing),
+            x if x == SnowState::Bootstrapping as u32 => Ok(SnowState::Bootstrapping),
+            x if x == SnowState::NormalOp as u32 => Ok(SnowState::NormalOp),
+            _ => Err(()),
+        }
+    }
+}

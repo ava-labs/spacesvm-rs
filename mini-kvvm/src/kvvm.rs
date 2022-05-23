@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::io::{Error, ErrorKind};
 use std::sync::Arc;
 use std::time;
@@ -17,7 +18,7 @@ use tonic::transport::Channel;
 use crate::block::{Block, Status};
 use crate::engine::*;
 use crate::genesis::Genesis;
-use crate::state::{Database, State};
+use crate::state::{Database, SnowState, State};
 
 #[derive(Debug)]
 pub struct ChainVMInterior {
@@ -120,8 +121,8 @@ impl VM for ChainVMInterior {
                 format!("failed to deserialize genesis: {:?}", e),
             )
         })?;
-        vm.genesis = genesis;
 
+        vm.genesis = genesis;
         vm.genesis.verify().map_err(|e| {
             Error::new(
                 ErrorKind::Other,
@@ -137,8 +138,7 @@ impl VM for ChainVMInterior {
             }
             let last_accepted_block_id = maybe_last_accepted_block_id.unwrap();
 
-            let maybe_last_accepted_block =
-                vm.state.get_block(last_accepted_block_id).await?;
+            let maybe_last_accepted_block = vm.state.get_block(last_accepted_block_id).await?;
             if !maybe_last_accepted_block.is_some() {
                 return Err(Error::new(ErrorKind::Other, "invalid block no id found"));
             }
@@ -191,11 +191,29 @@ impl VM for ChainVMInterior {
         Ok(())
     }
 
-    async fn set_state(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<(), Error> {
-        let mut interior = inner.write().await;
-        // TODO: correctly implement
-        interior.bootstrapped = true;
-        Ok(())
+    async fn set_state(
+        inner: &Arc<RwLock<ChainVMInterior>>,
+        snow_state: SnowState,
+    ) -> Result<(), Error> {
+        let mut vm = inner.write().await;
+        match snow_state.try_into() {
+            Ok(SnowState::Initializing) => {
+                vm.bootstrapped = false;
+                Ok(())
+            }
+            Ok(SnowState::StateSyncing) => {
+                Err(Error::new(ErrorKind::Other, "state sync is not supported"))
+            }
+            Ok(SnowState::Bootstrapping) => {
+                vm.bootstrapped = false;
+                Ok(())
+            }
+            Ok(SnowState::NormalOp) => {
+                vm.bootstrapped = true;
+                Ok(())
+            }
+            Err(_) => Err(Error::new(ErrorKind::Other, "failed to accept block")),
+        }
     }
 
     fn issue_tx(_key: String, _value: String) -> Result<(), Error> {
