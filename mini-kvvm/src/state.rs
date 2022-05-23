@@ -1,12 +1,12 @@
 use std::io::{Error, ErrorKind};
 
 use avalanche_proto::rpcdb::{database_client::*, GetRequest, PutRequest};
-use avalanche_types::ids::Id;
+use avalanche_types::{choices::status::Status, ids::Id};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use tonic::transport::Channel;
 
-use crate::block::{Block, Status};
+use crate::block::Block;
 
 pub type Database = DatabaseClient<Channel>;
 
@@ -193,12 +193,12 @@ pub enum SnowState {
 impl TryFrom<u32> for SnowState {
     // TODO
     type Error = ();
-    fn try_from(v: u32) -> Result<Self, Self::Error> {
-        match v {
-            x if x == SnowState::Initializing as u32 => Ok(SnowState::Initializing),
-            x if x == SnowState::StateSyncing as u32 => Ok(SnowState::StateSyncing),
-            x if x == SnowState::Bootstrapping as u32 => Ok(SnowState::Bootstrapping),
-            x if x == SnowState::NormalOp as u32 => Ok(SnowState::NormalOp),
+    fn try_from(kind: u32) -> Result<Self, Self::Error> {
+        match kind {
+            kind if kind == SnowState::Initializing as u32 => Ok(SnowState::Initializing),
+            kind if kind == SnowState::StateSyncing as u32 => Ok(SnowState::StateSyncing),
+            kind if kind == SnowState::Bootstrapping as u32 => Ok(SnowState::Bootstrapping),
+            kind if kind == SnowState::NormalOp as u32 => Ok(SnowState::NormalOp),
             _ => Err(()),
         }
     }

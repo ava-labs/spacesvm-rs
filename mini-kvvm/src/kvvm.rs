@@ -10,12 +10,15 @@ use async_trait::async_trait;
 use avalanche_proto::{
     appsender::app_sender_client::AppSenderClient, messenger::messenger_client::MessengerClient,
 };
-use avalanche_types::ids::{short::Id as ShortId, Id};
+use avalanche_types::{
+    choices::status::Status,
+    ids::{short::Id as ShortId, Id},
+};
 use semver::Version;
 use tokio::sync::RwLock;
 use tonic::transport::Channel;
 
-use crate::block::{Block, Status};
+use crate::block::Block;
 use crate::engine::*;
 use crate::genesis::Genesis;
 use crate::state::{Database, SnowState, State};

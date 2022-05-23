@@ -329,12 +329,15 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
             .init()
             .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
-        let status = block.status() as u32;
+        let status = block
+            .status()
+            .bytes()
+            .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
         Ok(Response::new(vm::ParseBlockResponse {
             id: Bytes::from(block_id.to_vec()),
             parent_id: Bytes::from(block.parent.to_vec()),
-            status: status,
+            status: u32::from_be_bytes(status.to_vec().try_into().unwrap()),
             height: block.height(),
             timestamp: Some(grpcutil::timestamp_from_time(block.timestamp())),
         }))

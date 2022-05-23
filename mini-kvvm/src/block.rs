@@ -2,7 +2,10 @@ use std::cmp::Ordering;
 use std::io::{Error, ErrorKind};
 use std::sync::Arc;
 
-use avalanche_types::ids::{must_deserialize_id, Id};
+use avalanche_types::{
+    choices::status::Status,
+    ids::{must_deserialize_id, Id},
+};
 use avalanche_utils::rfc3339;
 use bytes::BufMut;
 use chrono::{DateTime, Utc};
@@ -23,7 +26,7 @@ impl Default for Block {
             timestamp: now,
             bytes: Vec::default(),
             height: 0,
-            status: Status::Unknown,
+            status: Status::Unknown("".to_string()),
         }
     }
 }
@@ -121,8 +124,8 @@ impl Block {
     }
 
     /// status returns the status of this block
-    pub fn status(&self) -> Status {
-        self.status
+    pub fn status(&self) -> &Status {
+        &self.status
     }
 
     pub fn init(&mut self) -> Result<Id, Error> {
@@ -148,39 +151,4 @@ impl Block {
     pub fn generate(bytes: &[u8]) -> Id {
         Self::new_id(Hash::hash(bytes))
     }
-}
-
-/// snow/consensus/snowman/Block
-/// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/snow/choices#Status
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
-pub enum Status {
-    Unknown,
-    Processing,
-    Rejected,
-    Accepted,
-}
-
-impl Status {
-    pub fn fetched(&self) -> bool {
-        match self {
-            Self::Processing => true,
-            _ => self.decided(),
-        }
-    }
-
-    pub fn decided(&self) -> bool {
-        matches!(self, Self::Rejected | Self::Accepted)
-    }
-
-    pub fn valid(&self) -> bool {
-        !matches!(self, Self::Unknown)
-    }
-}
-
-#[test]
-fn test_serialization_round_trip() {
-    let block = Block::default();
-    let writer = serde_json::to_vec(&block).unwrap();
-    let value: Block = serde_json::from_slice(&writer).unwrap();
-    assert_eq!(block.parent(), value.parent());
 }

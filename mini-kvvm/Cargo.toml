@@ -2,7 +2,7 @@
 name = "mini-kvvm"
 version = "0.0.0"
 edition = "2021"
-rust-version = "1.60"
+rust-version = "1.61"
 publish = false
 description = "Mini key-value store VM for Avalanche in Rust"
 license = "BSD-3-Clause"
@@ -16,7 +16,7 @@ path = "src/bin/mini-kvvm/main.rs"
 [dependencies]
 async-trait = "0.1.53"
 avalanche-proto = { path = "../proto" }
-avalanche-types = { version = "0.0.1" }
+avalanche-types = { version = "0.0.6" }
 bytes = "1.1.0"
 chrono = "0.4.19"
 clap = { version = "3.1.8", features = ["cargo", "derive"] }
