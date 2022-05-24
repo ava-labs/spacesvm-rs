@@ -27,6 +27,7 @@ impl Default for Block {
             bytes: Vec::default(),
             height: 0,
             status: Status::Unknown("".to_string()),
+            data: Vec::default(),
         }
     }
 }
@@ -41,27 +42,32 @@ pub struct Block {
     height: u64,
     #[serde(with = "rfc3339::serde_format")]
     timestamp: DateTime<Utc>,
-    bytes: Vec<u8>,
-    // id is generated not serialized
+    data: Vec<u8>,
+
+    // generated not serialized
     #[serde(skip)]
     id: Option<Id>,
+    // generated not serialized
+    #[serde(skip)]
+    bytes: Vec<u8>,
 }
 
 impl Block {
     pub fn new(
         parent: Id,
         height: u64,
-        bytes: Vec<u8>,
+        data: Vec<u8>,
         timestamp: DateTime<Utc>,
         status: Status,
     ) -> Result<Self, Error> {
         Ok(Self {
             parent,
             height,
-            timestamp: timestamp,
-            bytes,
-            id: None,
+            timestamp,
+            data,
             status,
+            id: None,
+            bytes: Vec::default(),
         })
     }
 
@@ -113,6 +119,11 @@ impl Block {
         })
     }
 
+    /// data returns the block payload.
+    pub fn data(&self) -> &[u8] {
+        &self.data
+    }
+
     /// bytes returns the binary representation of this block
     pub fn bytes(&self) -> &[u8] {
         &self.bytes
@@ -134,11 +145,14 @@ impl Block {
             serde_json::to_writer(&mut writer, &self.parent())?;
             serde_json::to_writer(&mut writer, &self.height())?;
             serde_json::to_writer(&mut writer, &self.timestamp().to_string())?;
-            serde_json::to_writer(&mut writer, &self.bytes())?;
+            serde_json::to_writer(&mut writer, &self.data())?;
 
-            let buf = writer.into_inner();
-            let block_id = Self::generate(&buf);
+            let block_bytes = serde_json::to_vec(&self).unwrap();
+
+            let block_data = writer.into_inner();
+            let block_id = Self::generate(&block_data);
             self.id = Some(block_id);
+            self.bytes = block_bytes;
         }
 
         Ok(self.id.expect("in Block::id, the id was just set to Some(_) above and yet is still None. This is next to impossible."))
@@ -151,4 +165,12 @@ impl Block {
     pub fn generate(bytes: &[u8]) -> Id {
         Self::new_id(Hash::hash(bytes))
     }
+}
+
+#[test]
+fn test_serialization_round_trip() {
+    let block = Block::default();
+    let writer = serde_json::to_vec(&block).unwrap();
+    let value: Block = serde_json::from_slice(&writer).unwrap();
+    assert_eq!(block.parent(), value.parent());
 }

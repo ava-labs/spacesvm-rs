@@ -98,10 +98,6 @@ impl State {
         let key = Self::prefix(BLOCK_STATE_PREFIX, id.as_ref());
         log::info!("state get_block key {:?}", key);
         let value = self.get(key).await?;
-        log::info!(
-            "state get_block value {}",
-            String::from_utf8_lossy(&value.clone().unwrap())
-        );
 
         Ok(match value {
             Some(v) => {
