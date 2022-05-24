@@ -62,7 +62,7 @@ async fn e2e() {
     // enough time for network-runner to get ready
     thread::sleep(Duration::from_secs(20));
 
-    info!("checking cluster healthiness...");
+    info!("checking custom vm healthiness...");
     let mut ready = false;
     let timeout = Duration::from_secs(300);
     let interval = Duration::from_secs(15);
@@ -84,24 +84,32 @@ async fn e2e() {
         };
         thread::sleep(itv);
 
+        cnt += 1;
         ready = {
-            match cli.health().await {
-                Ok(_) => {
-                    info!("healthy now!");
+            match cli.status().await {
+                Ok(status) => {
+                    if status.cluster_info.is_some()
+                        && !status.cluster_info.unwrap().custom_vms_healthy
+                    {
+                        warn!("custom vms not healthy yet...");
+                        continue;
+                    }
+                    warn!("custom vms healthy");
                     true
                 }
+
                 Err(e) => {
                     warn!("not healthy yet {}", e);
                     false
                 }
             }
         };
+
         if ready {
             break;
         }
-
-        cnt += 1;
     }
+
     assert!(ready);
 
     info!("checking status...");
