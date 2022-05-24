@@ -43,7 +43,7 @@ pub fn get_custom_vms() -> (HashMap<String, String>, bool) {
 fn hash_from_str(input: &str) -> HashMap<String, String> {
     input
         .split(',')
-        .map(|s| s.split_at(s.find("=").unwrap()))
+        .map(|s| s.split_at(s.find("=").expect("invalid format expect key=value")))
         .map(|(key, val)| (key.to_string(), val[1..].to_string()))
         .collect()
 }
