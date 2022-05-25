@@ -111,7 +111,7 @@ impl State {
 
     pub async fn put_block(&mut self, mut block: Block) -> Result<(), Error> {
         let value = serde_json::to_vec(&block)?;
-        let key = Self::prefix(BLOCK_STATE_PREFIX, block.init()?.as_ref());
+        let key = Self::prefix(BLOCK_STATE_PREFIX, block.initialize()?.as_ref());
         self.put(key, value).await
     }
 
@@ -158,7 +158,7 @@ impl State {
     pub async fn accept_block(&mut self, mut block: Block) -> Result<Id, Error> {
         block.status = Status::Accepted;
         let block_id = block
-            .init()
+            .initialize()
             .map_err(|e| Error::new(ErrorKind::Other, format!("failed to init block: {:?}", e)))?;
         log::info!("Accepting block with id: {}", block_id);
         self.put_block(block).await?;

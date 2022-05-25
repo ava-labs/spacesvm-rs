@@ -233,7 +233,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
         log::info!("last_accepted_block: {:?}", last_accepted_block);
 
         let last_accepted_block_id = last_accepted_block
-            .init()
+            .initialize()
             .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
         let parent_id = last_accepted_block.parent.to_vec();
@@ -302,7 +302,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
             .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
         let block_id = block
-            .init()
+            .initialize()
             .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
         Ok(Response::new(vm::BuildBlockResponse {
@@ -326,7 +326,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
             .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
         let block_id = block
-            .init()
+            .initialize()
             .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
         let status = block
@@ -373,7 +373,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
             .unwrap();
 
         let block_id = block
-            .init()
+            .initialize()
             .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
         Ok(Response::new(vm::SetStateResponse {

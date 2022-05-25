@@ -84,11 +84,12 @@ impl Block {
         &self.timestamp
     }
 
+    /// verify ensures that the state of the block is expected.
     pub async fn verify(&self, inner: &Arc<RwLock<ChainVMInterior>>) -> Result<(), Error> {
         let mut vm = inner.write().await;
         Ok(match vm.state.get_block(self.parent).await? {
             Some(mut pb) => {
-                let block_id = pb.init().expect("failed to initialize block");
+                let block_id = pb.initialize().expect("failed to initialize block");
                 // Ensure block height comes right after its parent's height
                 if pb.height() + 1 != self.height() {
                     return Err(Error::new(
@@ -139,7 +140,9 @@ impl Block {
         &self.status
     }
 
-    pub fn init(&mut self) -> Result<Id, Error> {
+    /// initialize populates the generated fields (id, bytes) of the the block and
+    /// returns the generated id.
+    pub fn initialize(&mut self) -> Result<Id, Error> {
         if self.id.is_none() {
             let mut writer = Vec::new().writer();
             serde_json::to_writer(&mut writer, &self.parent())?;
@@ -155,7 +158,7 @@ impl Block {
             self.bytes = block_bytes;
         }
 
-        Ok(self.id.expect("in Block::id, the id was just set to Some(_) above and yet is still None. This is next to impossible."))
+        Ok(self.id.expect("this is some"))
     }
 
     pub fn new_id(bytes: [u8; DATA_LEN]) -> Id {

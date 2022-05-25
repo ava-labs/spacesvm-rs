@@ -166,7 +166,7 @@ impl VM for ChainVMInterior {
                 Status::Processing,
             )?;
 
-            let genesis_block_id = genesis_block.init()?.clone();
+            let genesis_block_id = genesis_block.initialize()?.clone();
 
             match vm.state.put_block(genesis_block.clone()).await {
                 Ok(g) => g,
@@ -271,12 +271,12 @@ impl Parser for ChainVMInterior {
         let mut state = crate::state::State::new(vm.db.clone());
 
         let new_block_id = new_block
-            .init()
+            .initialize()
             .map_err(|e| Error::new(ErrorKind::Other, format!("failed to init block: {:?}", e)))?;
 
         match state.get_block(new_block_id).await? {
             Some(mut old_block) => {
-                let old_block_id = old_block.init().map_err(|e| {
+                let old_block_id = old_block.initialize().map_err(|e| {
                     Error::new(ErrorKind::Other, format!("failed to init block: {:?}", e))
                 })?;
                 log::debug!("found old block id: {}", old_block_id);
