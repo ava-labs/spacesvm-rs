@@ -94,9 +94,9 @@ impl State {
 
     // Dupe of kvvm this should be removed or moved to block?
     pub async fn get_block(&mut self, id: Id) -> Result<Option<Block>, Error> {
-        log::info!("state get_block called");
+        log::debug!("state get_block called");
         let key = Self::prefix(BLOCK_STATE_PREFIX, id.as_ref());
-        log::info!("state get_block key {:?}", key);
+        log::debug!("state get_block key {:?}", key);
         let value = self.get(key).await?;
 
         Ok(match value {

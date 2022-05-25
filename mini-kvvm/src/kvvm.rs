@@ -6,7 +6,6 @@ use std::io::{Error, ErrorKind};
 use std::sync::Arc;
 use std::time;
 
-use async_trait::async_trait;
 use avalanche_proto::{
     appsender::app_sender_client::AppSenderClient, messenger::messenger_client::MessengerClient,
 };
@@ -235,7 +234,7 @@ impl VM for ChainVMInterior {
     }
 }
 
-#[async_trait]
+#[tonic::async_trait]
 impl Getter for ChainVMInterior {
     async fn get_block(
         inner: &Arc<RwLock<ChainVMInterior>>,
@@ -248,7 +247,7 @@ impl Getter for ChainVMInterior {
     }
 }
 
-#[async_trait]
+#[tonic::async_trait]
 impl Parser for ChainVMInterior {
     async fn parse_block(
         inner: &Arc<RwLock<ChainVMInterior>>,
@@ -289,7 +288,7 @@ impl Parser for ChainVMInterior {
         }
     }
 }
-#[async_trait]
+#[tonic::async_trait]
 impl ChainVM for ChainVMInterior {
     async fn build_block(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<Block, Error> {
         log::info!("build_block called");
