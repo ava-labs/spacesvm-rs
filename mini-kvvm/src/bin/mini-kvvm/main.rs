@@ -2,12 +2,12 @@ use std::io;
 
 use clap::{crate_version, Arg, Command};
 use log::info;
-
-use mini_kvvm::genesis;
+use mini_kvvm::{engine, genesis, kvvm, plugin};
 
 pub const APP_NAME: &str = "mini-kvvm-rs";
 
-fn main() {
+#[tokio::main]
+async fn main() -> io::Result<()> {
     let matches = Command::new(APP_NAME)
         .version(crate_version!())
         .about("Mini key-value VM for Avalanche in Rust")
@@ -38,11 +38,17 @@ fn main() {
         let msg = sub_matches.value_of("WELCOME_MESSAGE").unwrap_or("");
         let p = sub_matches.value_of("GENESIS_FILE_PATH").unwrap_or("");
         execute_genesis(author, msg, p).unwrap();
-        return;
     }
 
     info!("starting mini-kvvm-rs");
-    // TODO
+
+    plugin::serve(
+        engine::VMServer::new(kvvm::ChainVMInterior::new()),
+        &plugin::HandshakeConfig::default(),
+    )
+    .await?;
+
+    Ok(())
 }
 
 pub fn command_genesis() -> Command<'static> {
