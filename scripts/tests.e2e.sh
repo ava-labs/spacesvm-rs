@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -e
 
+# created a new VMID from minikvvm
+VMID="qBnAKUQ2mxiB1JdqsPPU7Ufuj1XmPLpnPTRvZEpkYZBmK6UjE"
+VM_NAME="minikvvm"
+VM_GENESIS_PATH="/tmp/minikvvm.genesis.json"
+
 # ./scripts/tests.e2e.sh 1.7.11
 if ! [[ "$0" =~ scripts/tests.e2e.sh ]]; then
   echo "must be run from repository root"
@@ -47,6 +52,21 @@ find /tmp/avalanchego-v${AVALANCHEGO_VERSION}
 AVALANCHEGO_PATH=/tmp/avalanchego-v${AVALANCHEGO_VERSION}/avalanchego
 AVALANCHEGO_PLUGIN_DIR=/tmp/avalanchego-v${AVALANCHEGO_VERSION}/plugins
 
+rm -f "${AVALANCHEGO_PLUGIN_DIR}/${VMID}"
+
+echo "compile mini-kvvm and install to plugin dir"
+cargo build --release --bin mini-kvvm
+mv ./target/release/mini-kvvm "${AVALANCHEGO_PLUGIN_DIR}/${VMID}"
+
+cat <<EOF > ${VM_GENESIS_PATH}
+{
+  "author": "foo",
+  "welcome_message": "bar"
+}
+EOF
+
+cat ${VM_GENESIS_PATH}
+
 #################################
 # download avalanche-network-runner
 # https://github.com/ava-labs/avalanche-network-runner
@@ -75,7 +95,7 @@ echo "launch avalanche-network-runner in the background"
 server \
 --log-level debug \
 --port=":12342" \
---grpc-gateway-port=":12343" &
+--disable-grpc-gateway &
 NETWORK_RUNNER_PID=${!}
 
 #################################
@@ -83,6 +103,9 @@ NETWORK_RUNNER_PID=${!}
 echo "running e2e tests"
 NETWORK_RUNNER_GRPC_ENDPOINT=http://127.0.0.1:12342 \
 NETWORK_RUNNER_AVALANCHEGO_PATH=${AVALANCHEGO_PATH} \
+NETWORK_RUNNER_WHITELISTED_SUBNETS=${VMID} \
+NETWORK_RUNNER_PLUGIN_DIR_PATH=${AVALANCHEGO_PLUGIN_DIR} \
+NETWORK_RUNNER_CUSTOM_VM="${VM_NAME}=${VM_GENESIS_PATH}" \
 RUST_LOG=debug \
 cargo test --all-features --package e2e -- --show-output --nocapture
 
