@@ -2,7 +2,7 @@
 name = "mini-kvvm"
 version = "0.0.0"
 edition = "2021"
-rust-version = "1.60"
+rust-version = "1.61"
 publish = false
 description = "Mini key-value store VM for Avalanche in Rust"
 license = "BSD-3-Clause"
@@ -17,12 +17,21 @@ path = "src/bin/mini-kvvm/main.rs"
 avalanche-proto = { path = "../crates/avalanche-proto" }
 clap = { version = "3.1.18", features = ["cargo", "derive"] }
 env_logger = "0.9.0"
-log = "0.4.17"
-prost = "0.10.3"
-serde = { version = "1.0.137", features = ["derive"] }
-serde_json = "1.0.81"
-serde_yaml = "0.8.24"
+hmac-sha256 = "1.1"
+jsonrpc-core = "18.0"
+jsonrpc-http-server = "18.0"
+log = "0.4.16"
+num-traits = "0.2.15"
+num-derive = "0.3"
+prost = "0.10.0"
+semver = "1.0.9"
+serde = { version = "1.0.136", features = ["derive"] }
+serde_json = "1.0.79"
+serde_yaml = "0.8.23"
+time = { version = "0.3.9", features = ["formatting", "parsing"]}
 tokio = { version = "1.18.2", features = ["fs", "rt-multi-thread"] }
 tokio-stream = { version = "0.1.8", features = ["net"] }
 tonic = { version = "0.7", features = ["compression"] }
 tonic-health = "0.6"
+tonic-reflection = "0.4.0"
+avalanche-utils = { version="0.0.1" }
