@@ -218,10 +218,6 @@ impl VM for ChainVMInterior {
         }
     }
 
-    fn issue_tx(_key: String, _value: String) -> Result<(), Error> {
-        Ok(())
-    }
-
     /// Returns this VM's version
     fn version() -> Result<String, Error> {
         Ok("".to_string())

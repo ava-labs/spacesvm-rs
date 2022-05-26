@@ -104,7 +104,6 @@ pub trait VM: AppHandler + Checkable + Connector {
         app_sender: &AppSenderClient<Channel>,
     ) -> Result<(), Error>;
     fn bootstrapping() -> Result<(), Error>;
-    fn issue_tx(key: String, value: String) -> Result<(), Error>;
     fn bootstrapped() -> Result<(), Error>;
     fn shutdown() -> Result<(), Error>;
     fn version() -> Result<String, Error>;
