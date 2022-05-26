@@ -167,11 +167,6 @@ impl VM for ChainVMInterior {
 
             let genesis_block_id = genesis_block.initialize()?.clone();
 
-            match vm.state.put_block(genesis_block.clone()).await {
-                Ok(g) => g,
-                Err(e) => eprintln!("failed to put genesis block: {:?}", e),
-            }
-
             let accepted_block_id = vm.state.accept_block(genesis_block).await.map_err(|e| {
                 Error::new(ErrorKind::Other, format!("failed to accept block: {:?}", e))
             })?;
