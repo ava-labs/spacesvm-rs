@@ -34,4 +34,3 @@ tokio-stream = { version = "0.1.8", features = ["net"] }
 tonic = { version = "0.7", features = ["compression"] }
 tonic-health = "0.6"
 tonic-reflection = "0.4.0"
-avalanche-utils = { version="0.0.1" }
