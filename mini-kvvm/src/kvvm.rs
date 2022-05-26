@@ -13,6 +13,7 @@ use avalanche_types::{
     choices::status::Status,
     ids::{short::Id as ShortId, Id},
 };
+use chrono::{DateTime, NaiveDateTime, Utc};
 use semver::Version;
 use tokio::sync::RwLock;
 use tonic::transport::Channel;
@@ -161,7 +162,7 @@ impl VM for ChainVMInterior {
                 Id::empty(),
                 0,
                 genesis_block_bytes,
-                chrono::offset::Utc::now(),
+                DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(0, 0), Utc),
                 Status::Processing,
             )?;
 

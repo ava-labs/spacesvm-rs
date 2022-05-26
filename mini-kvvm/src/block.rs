@@ -8,7 +8,7 @@ use avalanche_types::{
 };
 use avalanche_utils::rfc3339;
 use bytes::BufMut;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use hmac_sha256::Hash;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
@@ -17,13 +17,14 @@ use crate::kvvm::ChainVMInterior;
 
 pub const DATA_LEN: usize = 32;
 
+// TODO remove
+// Default is only used as a placeholder for unimplemented block logic
 impl Default for Block {
     fn default() -> Self {
-        let now = chrono::offset::Utc::now();
         Self {
             id: Some(Id::default()),
             parent: Id::default(),
-            timestamp: now,
+            timestamp: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(0, 0), Utc),
             bytes: Vec::default(),
             height: 0,
             status: Status::Unknown("".to_string()),
