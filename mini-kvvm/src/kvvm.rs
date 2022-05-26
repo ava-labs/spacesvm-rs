@@ -20,7 +20,7 @@ use tonic::transport::Channel;
 use crate::block::Block;
 use crate::engine::*;
 use crate::genesis::Genesis;
-use crate::state::{Database, SnowState, State};
+use crate::state::{Database, State, VmState};
 
 #[derive(Debug)]
 pub struct ChainVMInterior {
@@ -195,22 +195,22 @@ impl VM for ChainVMInterior {
 
     async fn set_state(
         inner: &Arc<RwLock<ChainVMInterior>>,
-        snow_state: SnowState,
+        snow_state: VmState,
     ) -> Result<(), Error> {
         let mut vm = inner.write().await;
         match snow_state.try_into() {
-            Ok(SnowState::Initializing) => {
+            Ok(VmState::Initializing) => {
                 vm.bootstrapped = false;
                 Ok(())
             }
-            Ok(SnowState::StateSyncing) => {
+            Ok(VmState::StateSyncing) => {
                 Err(Error::new(ErrorKind::Other, "state sync is not supported"))
             }
-            Ok(SnowState::Bootstrapping) => {
+            Ok(VmState::Bootstrapping) => {
                 vm.bootstrapped = false;
                 Ok(())
             }
-            Ok(SnowState::NormalOp) => {
+            Ok(VmState::NormalOp) => {
                 vm.bootstrapped = true;
                 Ok(())
             }

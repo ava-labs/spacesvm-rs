@@ -38,6 +38,7 @@ async fn main() -> io::Result<()> {
         let msg = sub_matches.value_of("WELCOME_MESSAGE").unwrap_or("");
         let p = sub_matches.value_of("GENESIS_FILE_PATH").unwrap_or("");
         execute_genesis(author, msg, p).unwrap();
+        return Ok(());
     }
 
     info!("starting mini-kvvm-rs");
