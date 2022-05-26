@@ -24,7 +24,7 @@ use tonic::{Request, Response, Status};
 
 use crate::block::Block;
 use crate::kvvm::ChainVMInterior;
-use crate::state::SnowState;
+use crate::state::VmState;
 
 // FIXME: dummies
 pub type Health = ();
@@ -110,8 +110,7 @@ pub trait VM: AppHandler + Checkable + Connector {
     fn version() -> Result<String, Error>;
     fn create_static_handlers() -> Result<HashMap<String, HTTPHandler>, Error>;
     fn create_handlers() -> Result<HashMap<String, HTTPHandler>, Error>;
-    async fn set_state(inner: &Arc<RwLock<ChainVMInterior>>, state: SnowState)
-        -> Result<(), Error>;
+    async fn set_state(inner: &Arc<RwLock<ChainVMInterior>>, state: VmState) -> Result<(), Error>;
 }
 
 /// snow/engine/snowman/block.Getter
@@ -358,7 +357,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
         log::debug!("set_state called");
         let req = req.into_inner();
 
-        let snow_state = SnowState::try_from(req.state).unwrap();
+        let snow_state = VmState::try_from(req.state).unwrap();
         C::set_state(&self.interior, snow_state)
             .await
             .map_err(|e| tonic::Status::unknown(e.to_string()))?;

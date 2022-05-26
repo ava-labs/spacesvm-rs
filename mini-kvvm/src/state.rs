@@ -179,22 +179,22 @@ pub enum DatabaseError {
 
 /// snow/state
 /// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/snow#State
-pub enum SnowState {
+pub enum VmState {
     Initializing = 0,
     StateSyncing = 1,
     Bootstrapping = 2,
     NormalOp = 3,
 }
 
-impl TryFrom<u32> for SnowState {
+impl TryFrom<u32> for VmState {
     // TODO
     type Error = ();
     fn try_from(kind: u32) -> Result<Self, Self::Error> {
         match kind {
-            kind if kind == SnowState::Initializing as u32 => Ok(SnowState::Initializing),
-            kind if kind == SnowState::StateSyncing as u32 => Ok(SnowState::StateSyncing),
-            kind if kind == SnowState::Bootstrapping as u32 => Ok(SnowState::Bootstrapping),
-            kind if kind == SnowState::NormalOp as u32 => Ok(SnowState::NormalOp),
+            kind if kind == VmState::Initializing as u32 => Ok(VmState::Initializing),
+            kind if kind == VmState::StateSyncing as u32 => Ok(VmState::StateSyncing),
+            kind if kind == VmState::Bootstrapping as u32 => Ok(VmState::Bootstrapping),
+            kind if kind == VmState::NormalOp as u32 => Ok(VmState::NormalOp),
             _ => Err(()),
         }
     }
