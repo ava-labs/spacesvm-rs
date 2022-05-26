@@ -16,7 +16,8 @@ path = "src/bin/mini-kvvm/main.rs"
 [dependencies]
 async-trait = "0.1.53"
 avalanche-proto = { path = "../proto" }
-avalanche-types = { version = "0.0.6" }
+avalanche-types = { version = "0.0.7" }
+avalanche-utils = { version="0.0.3", features = ["rfc3339"] }
 bytes = "1.1.0"
 chrono = "0.4.19"
 clap = { version = "3.1.8", features = ["cargo", "derive"] }
@@ -38,4 +39,3 @@ tokio-stream = { version = "0.1.8", features = ["net"] }
 tonic = { version = "0.7", features = ["compression"] }
 tonic-health = "0.6"
 tonic-reflection = "0.4.0"
-avalanche-utils = { version="0.0.1" }
