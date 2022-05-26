@@ -41,6 +41,12 @@ jobs:
     name: Check Cargo unused (lint)
     runs-on: ubuntu-latest
     steps:
+      - name: Setup cmake
+        uses: jwlawson/actions-setup-cmake@v1.12
+        with:
+          cmake-version: '3.16.x'
+      - name: Use cmake
+        run: cmake --version
       - name: Checkout
         uses: actions/checkout@v2
         with:
@@ -82,6 +88,12 @@ jobs:
     name: Unit tests
     runs-on: ubuntu-latest
     steps:
+      - name: Setup cmake
+        uses: jwlawson/actions-setup-cmake@v1.12
+        with:
+          cmake-version: '3.16.x'
+      - name: Use cmake
+        run: cmake --version
       - name: Checkout
         uses: actions/checkout@v2
         with:
@@ -121,6 +133,12 @@ jobs:
     name: E2E tests
     runs-on: ubuntu-latest
     steps:
+      - name: Setup cmake
+        uses: jwlawson/actions-setup-cmake@v1.12
+        with:
+          cmake-version: '3.16.x'
+      - name: Use cmake
+        run: cmake --version
       - name: Checkout
         uses: actions/checkout@v3
       - name: Install Rust
@@ -228,10 +246,10 @@ jobs:
         env:
           PLATFORM_NAME: ${{ matrix.job.platform }}
           TARGET: ${{ matrix.job.target }}
+          ACTIONS_RUNNER_DEBUG: true
         shell: bash
         run: |
           if [ "$PLATFORM_NAME" == "linux" ]; then
-
             ./target/${TARGET}/release/mini-kvvm
             cp ./target/${TARGET}/release/mini-kvvm mini-kvvm.${TARGET}
             echo "::set-output name=file_name_mini-kvvm::mini-kvvm.${TARGET}"
