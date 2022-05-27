@@ -4,6 +4,7 @@ use tonic::transport::Server;
 
 use crate::google::protobuf::Timestamp;
 
+/// timestamp_from_time converts crono::DateTime<Utc> to google::protobuf::Timestamp
 pub fn timestamp_from_time(dt: &DateTime<Utc>) -> Timestamp {
     Timestamp {
         seconds: dt.timestamp(),
