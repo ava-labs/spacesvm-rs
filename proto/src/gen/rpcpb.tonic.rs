@@ -502,6 +502,82 @@ pub mod control_service_client {
             );
             self.inner.unary(request.into_request(), path, codec).await
         }
+        pub async fn save_snapshot(
+            &mut self,
+            request: impl tonic::IntoRequest<super::SaveSnapshotRequest>,
+        ) -> Result<tonic::Response<super::SaveSnapshotResponse>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/rpcpb.ControlService/SaveSnapshot",
+            );
+            self.inner.unary(request.into_request(), path, codec).await
+        }
+        pub async fn load_snapshot(
+            &mut self,
+            request: impl tonic::IntoRequest<super::LoadSnapshotRequest>,
+        ) -> Result<tonic::Response<super::LoadSnapshotResponse>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/rpcpb.ControlService/LoadSnapshot",
+            );
+            self.inner.unary(request.into_request(), path, codec).await
+        }
+        pub async fn remove_snapshot(
+            &mut self,
+            request: impl tonic::IntoRequest<super::RemoveSnapshotRequest>,
+        ) -> Result<tonic::Response<super::RemoveSnapshotResponse>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/rpcpb.ControlService/RemoveSnapshot",
+            );
+            self.inner.unary(request.into_request(), path, codec).await
+        }
+        pub async fn get_snapshot_names(
+            &mut self,
+            request: impl tonic::IntoRequest<super::GetSnapshotNamesRequest>,
+        ) -> Result<tonic::Response<super::GetSnapshotNamesResponse>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/rpcpb.ControlService/GetSnapshotNames",
+            );
+            self.inner.unary(request.into_request(), path, codec).await
+        }
     }
 }
 /// Generated server implementations.
@@ -561,6 +637,22 @@ pub mod control_service_server {
             &self,
             request: tonic::Request<super::SendOutboundMessageRequest>,
         ) -> Result<tonic::Response<super::SendOutboundMessageResponse>, tonic::Status>;
+        async fn save_snapshot(
+            &self,
+            request: tonic::Request<super::SaveSnapshotRequest>,
+        ) -> Result<tonic::Response<super::SaveSnapshotResponse>, tonic::Status>;
+        async fn load_snapshot(
+            &self,
+            request: tonic::Request<super::LoadSnapshotRequest>,
+        ) -> Result<tonic::Response<super::LoadSnapshotResponse>, tonic::Status>;
+        async fn remove_snapshot(
+            &self,
+            request: tonic::Request<super::RemoveSnapshotRequest>,
+        ) -> Result<tonic::Response<super::RemoveSnapshotResponse>, tonic::Status>;
+        async fn get_snapshot_names(
+            &self,
+            request: tonic::Request<super::GetSnapshotNamesRequest>,
+        ) -> Result<tonic::Response<super::GetSnapshotNamesResponse>, tonic::Status>;
     }
     #[derive(Debug)]
     pub struct ControlServiceServer<T: ControlService> {
@@ -1032,6 +1124,166 @@ pub mod control_service_server {
                     let fut = async move {
                         let inner = inner.0;
                         let method = SendOutboundMessageSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/rpcpb.ControlService/SaveSnapshot" => {
+                    #[allow(non_camel_case_types)]
+                    struct SaveSnapshotSvc<T: ControlService>(pub Arc<T>);
+                    impl<
+                        T: ControlService,
+                    > tonic::server::UnaryService<super::SaveSnapshotRequest>
+                    for SaveSnapshotSvc<T> {
+                        type Response = super::SaveSnapshotResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::SaveSnapshotRequest>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move {
+                                (*inner).save_snapshot(request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = SaveSnapshotSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/rpcpb.ControlService/LoadSnapshot" => {
+                    #[allow(non_camel_case_types)]
+                    struct LoadSnapshotSvc<T: ControlService>(pub Arc<T>);
+                    impl<
+                        T: ControlService,
+                    > tonic::server::UnaryService<super::LoadSnapshotRequest>
+                    for LoadSnapshotSvc<T> {
+                        type Response = super::LoadSnapshotResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::LoadSnapshotRequest>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move {
+                                (*inner).load_snapshot(request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = LoadSnapshotSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/rpcpb.ControlService/RemoveSnapshot" => {
+                    #[allow(non_camel_case_types)]
+                    struct RemoveSnapshotSvc<T: ControlService>(pub Arc<T>);
+                    impl<
+                        T: ControlService,
+                    > tonic::server::UnaryService<super::RemoveSnapshotRequest>
+                    for RemoveSnapshotSvc<T> {
+                        type Response = super::RemoveSnapshotResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::RemoveSnapshotRequest>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move {
+                                (*inner).remove_snapshot(request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = RemoveSnapshotSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/rpcpb.ControlService/GetSnapshotNames" => {
+                    #[allow(non_camel_case_types)]
+                    struct GetSnapshotNamesSvc<T: ControlService>(pub Arc<T>);
+                    impl<
+                        T: ControlService,
+                    > tonic::server::UnaryService<super::GetSnapshotNamesRequest>
+                    for GetSnapshotNamesSvc<T> {
+                        type Response = super::GetSnapshotNamesResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::GetSnapshotNamesRequest>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move {
+                                (*inner).get_snapshot_names(request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = GetSnapshotNamesSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
