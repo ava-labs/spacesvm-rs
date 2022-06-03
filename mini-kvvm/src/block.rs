@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::io::{Error, ErrorKind};
+use std::io::{Error, ErrorKind, Result};
 use std::sync::Arc;
 
 use avalanche_types::{
@@ -60,7 +60,7 @@ impl Block {
         data: Vec<u8>,
         timestamp: DateTime<Utc>,
         status: Status,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         Ok(Self {
             parent,
             height,
@@ -86,7 +86,7 @@ impl Block {
     }
 
     /// verify ensures that the state of the block is expected.
-    pub async fn verify(&self, inner: &Arc<RwLock<ChainVMInterior>>) -> Result<(), Error> {
+    pub async fn verify(&self, inner: &Arc<RwLock<ChainVMInterior>>) -> Result<()> {
         let mut vm = inner.write().await;
         Ok(match vm.state.get_block(self.parent).await? {
             Some(mut pb) => {
@@ -143,7 +143,7 @@ impl Block {
 
     /// initialize populates the generated fields (id, bytes) of the the block and
     /// returns the generated id.
-    pub fn initialize(&mut self) -> Result<Id, Error> {
+    pub fn initialize(&mut self) -> Result<Id> {
         if self.id.is_none() {
             let mut writer = Vec::new().writer();
             serde_json::to_writer(&mut writer, &self.parent())?;
