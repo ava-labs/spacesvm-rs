@@ -10,7 +10,7 @@
 # TODO:(hexfusion) add version checks
 # https://github.com/neoeinstein/protoc-gen-prost/issues/5
 
-BUF_VERSION='1.4.0'
+BUF_VERSION='1.5.0'
 
 if ! [[ "$0" =~ scripts/protobuf_codegen.sh ]]; then
   echo "must be run from repository root"
