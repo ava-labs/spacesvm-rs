@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use std::collections::HashMap;
-use std::io::Error;
+use std::io::Result;
 use std::sync::Arc;
 use std::time;
 
@@ -47,14 +47,14 @@ pub struct HTTPHandler {
 /// health.Checkable
 /// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/health#Checkable
 pub trait Checkable {
-    fn health_check() -> Result<Health, Error>;
+    fn health_check() -> Result<Health>;
 }
 
 /// snow.validators.Connector
 /// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/snow/validators#Connector
 pub trait Connector {
-    fn connected(id: &ShortId) -> Result<(), Error>;
-    fn disconnected(id: &ShortId) -> Result<(), Error>;
+    fn connected(id: &ShortId) -> Result<()>;
+    fn disconnected(id: &ShortId) -> Result<()>;
 }
 
 /// snow.Context
@@ -82,10 +82,10 @@ pub trait AppHandler {
         request_id: u32,
         deadline: time::Instant,
         request: &[u8],
-    ) -> Result<(), Error>;
-    fn app_request_failed(node_id: &ShortId, request_id: u32) -> Result<(), Error>;
-    fn app_response(node_id: &ShortId, request_id: u32, response: &[u8]) -> Result<(), Error>;
-    fn app_gossip(node_id: &ShortId, msg: &[u8]) -> Result<(), Error>;
+    ) -> Result<()>;
+    fn app_request_failed(node_id: &ShortId, request_id: u32) -> Result<()>;
+    fn app_response(node_id: &ShortId, request_id: u32, response: &[u8]) -> Result<()>;
+    fn app_gossip(node_id: &ShortId, msg: &[u8]) -> Result<()>;
 }
 
 /// snow.engine.common.VM
@@ -102,41 +102,35 @@ pub trait VM: AppHandler + Checkable + Connector {
         to_engine: &MessengerClient<Channel>,
         fxs: &[Fx],
         app_sender: &AppSenderClient<Channel>,
-    ) -> Result<(), Error>;
-    fn bootstrapping() -> Result<(), Error>;
-    fn bootstrapped() -> Result<(), Error>;
-    fn shutdown() -> Result<(), Error>;
-    fn version() -> Result<String, Error>;
-    fn create_static_handlers() -> Result<HashMap<String, HTTPHandler>, Error>;
-    fn create_handlers() -> Result<HashMap<String, HTTPHandler>, Error>;
-    async fn set_state(inner: &Arc<RwLock<ChainVMInterior>>, state: VmState) -> Result<(), Error>;
+    ) -> Result<()>;
+    fn bootstrapping() -> Result<()>;
+    fn bootstrapped() -> Result<()>;
+    fn shutdown() -> Result<()>;
+    fn version() -> Result<String>;
+    fn create_static_handlers() -> Result<HashMap<String, HTTPHandler>>;
+    fn create_handlers() -> Result<HashMap<String, HTTPHandler>>;
+    async fn set_state(inner: &Arc<RwLock<ChainVMInterior>>, state: VmState) -> Result<()>;
 }
 
 /// snow/engine/snowman/block.Getter
 /// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/snow/engine/snowman/block#Getter
 #[tonic::async_trait]
 pub trait Getter {
-    async fn get_block(
-        inner: &Arc<RwLock<ChainVMInterior>>,
-        id: Id,
-    ) -> Result<Option<Block>, Error>;
+    async fn get_block(inner: &Arc<RwLock<ChainVMInterior>>, id: Id) -> Result<Option<Block>>;
 }
 
 /// snow/engine/snowman/block.Parser
 /// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/snow/engine/snowman/block#Parser
 #[tonic::async_trait]
 pub trait Parser {
-    async fn parse_block(
-        inner: &Arc<RwLock<ChainVMInterior>>,
-        bytes: &[u8],
-    ) -> Result<Block, Error>;
+    async fn parse_block(inner: &Arc<RwLock<ChainVMInterior>>, bytes: &[u8]) -> Result<Block>;
 }
 #[tonic::async_trait]
 pub trait ChainVM: VM + Getter + Parser {
-    async fn build_block(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<Block, Error>;
-    async fn issue_tx() -> Result<Block, Error>;
-    async fn set_preference(inner: &Arc<RwLock<ChainVMInterior>>, id: Id) -> Result<(), Error>;
-    async fn last_accepted(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<Id, Error>;
+    async fn build_block(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<Block>;
+    async fn issue_tx() -> Result<Block>;
+    async fn set_preference(inner: &Arc<RwLock<ChainVMInterior>>, id: Id) -> Result<()>;
+    async fn last_accepted(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<Id>;
 }
 
 pub struct VMServer<C> {
@@ -158,7 +152,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
     async fn initialize(
         &self,
         req: Request<vm::InitializeRequest>,
-    ) -> Result<Response<vm::InitializeResponse>, Status> {
+    ) -> std::result::Result<Response<vm::InitializeResponse>, Status> {
         log::info!("initialize called");
 
         let req = req.into_inner();
@@ -251,14 +245,17 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
         Ok(Response::new(resp))
     }
 
-    async fn shutdown(&self, _request: Request<Empty>) -> Result<Response<Empty>, Status> {
+    async fn shutdown(
+        &self,
+        _request: Request<Empty>,
+    ) -> std::result::Result<Response<Empty>, Status> {
         Ok(Response::new(Empty {}))
     }
 
     async fn create_handlers(
         &self,
         _req: Request<Empty>,
-    ) -> Result<Response<vm::CreateHandlersResponse>, Status> {
+    ) -> std::result::Result<Response<vm::CreateHandlersResponse>, Status> {
         log::info!("create_handlers called");
         //TODO
         Ok(Response::new(vm::CreateHandlersResponse::default()))
@@ -267,7 +264,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
     async fn create_static_handlers(
         &self,
         _request: Request<Empty>,
-    ) -> Result<Response<vm::CreateStaticHandlersResponse>, Status> {
+    ) -> std::result::Result<Response<vm::CreateStaticHandlersResponse>, Status> {
         log::info!("create_static_handlers called");
         Ok(Response::new(vm::CreateStaticHandlersResponse::default()))
     }
@@ -276,7 +273,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
     async fn connected(
         &self,
         _req: Request<vm::ConnectedRequest>,
-    ) -> Result<Response<Empty>, Status> {
+    ) -> std::result::Result<Response<Empty>, Status> {
         log::info!("connected called");
         Ok(Response::new(Empty {}))
     }
@@ -284,7 +281,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
     async fn disconnected(
         &self,
         _request: Request<vm::DisconnectedRequest>,
-    ) -> Result<Response<Empty>, Status> {
+    ) -> std::result::Result<Response<Empty>, Status> {
         log::info!("disconnected called");
         Err(Status::unimplemented("disconnected"))
     }
@@ -292,7 +289,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
     async fn build_block(
         &self,
         _req: Request<Empty>,
-    ) -> Result<Response<vm::BuildBlockResponse>, Status> {
+    ) -> std::result::Result<Response<vm::BuildBlockResponse>, Status> {
         log::debug!("build_block called");
 
         let mut block = C::build_block(&self.interior)
@@ -315,7 +312,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
     async fn parse_block(
         &self,
         req: Request<vm::ParseBlockRequest>,
-    ) -> Result<Response<vm::ParseBlockResponse>, Status> {
+    ) -> std::result::Result<Response<vm::ParseBlockResponse>, Status> {
         log::debug!("parse_block called");
         let req = req.into_inner();
 
@@ -344,7 +341,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
     async fn get_block(
         &self,
         _request: Request<vm::GetBlockRequest>,
-    ) -> Result<Response<vm::GetBlockResponse>, Status> {
+    ) -> std::result::Result<Response<vm::GetBlockResponse>, Status> {
         log::info!("get_block called");
         Err(Status::unimplemented("get_block"))
     }
@@ -352,7 +349,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
     async fn set_state(
         &self,
         req: Request<vm::SetStateRequest>,
-    ) -> Result<Response<vm::SetStateResponse>, Status> {
+    ) -> std::result::Result<Response<vm::SetStateResponse>, Status> {
         log::debug!("set_state called");
         let req = req.into_inner();
 
@@ -387,7 +384,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
     async fn verify_height_index(
         &self,
         _request: Request<Empty>,
-    ) -> Result<Response<vm::VerifyHeightIndexResponse>, Status> {
+    ) -> std::result::Result<Response<vm::VerifyHeightIndexResponse>, Status> {
         log::info!("verify_height_index called");
         Err(Status::unimplemented(
             "vm does not implement HeightIndexedChainVM interface",
@@ -397,7 +394,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
     async fn get_block_id_at_height(
         &self,
         _request: Request<vm::GetBlockIdAtHeightRequest>,
-    ) -> Result<Response<vm::GetBlockIdAtHeightResponse>, Status> {
+    ) -> std::result::Result<Response<vm::GetBlockIdAtHeightResponse>, Status> {
         log::info!("get_block_id_at_height called");
         Err(Status::unimplemented("get_block_id_at_height"))
     }
@@ -405,7 +402,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
     async fn set_preference(
         &self,
         req: Request<vm::SetPreferenceRequest>,
-    ) -> Result<Response<Empty>, Status> {
+    ) -> std::result::Result<Response<Empty>, Status> {
         let req = req.into_inner();
         let id = Id::from_slice(&req.id);
         log::debug!("set_preference called id: {}", id);
@@ -420,7 +417,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
     async fn health(
         &self,
         _request: Request<vm::HealthRequest>,
-    ) -> Result<Response<vm::HealthResponse>, Status> {
+    ) -> std::result::Result<Response<vm::HealthResponse>, Status> {
         Ok(Response::new(vm::HealthResponse {
             details: "mini-kvvm is healthy".to_string(),
         }))
@@ -429,7 +426,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
     async fn version(
         &self,
         _request: Request<Empty>,
-    ) -> Result<Response<vm::VersionResponse>, Status> {
+    ) -> std::result::Result<Response<vm::VersionResponse>, Status> {
         let interior = &self.interior.read().await;
         log::info!("called version!!");
         Ok(Response::new(vm::VersionResponse {
@@ -440,7 +437,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
     async fn app_request(
         &self,
         _request: Request<vm::AppRequestMsg>,
-    ) -> Result<Response<Empty>, Status> {
+    ) -> std::result::Result<Response<Empty>, Status> {
         log::info!("app_request called");
         Err(Status::unimplemented("app_request"))
     }
@@ -448,7 +445,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
     async fn app_request_failed(
         &self,
         _request: Request<vm::AppRequestFailedMsg>,
-    ) -> Result<Response<Empty>, Status> {
+    ) -> std::result::Result<Response<Empty>, Status> {
         log::info!("app_request_failed called");
         Err(Status::unimplemented("app_request_failed"))
     }
@@ -456,7 +453,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
     async fn app_response(
         &self,
         _request: Request<vm::AppResponseMsg>,
-    ) -> Result<Response<Empty>, Status> {
+    ) -> std::result::Result<Response<Empty>, Status> {
         log::info!("app_response called");
 
         Err(Status::unimplemented("app_response"))
@@ -465,7 +462,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
     async fn app_gossip(
         &self,
         _request: Request<vm::AppGossipMsg>,
-    ) -> Result<Response<Empty>, Status> {
+    ) -> std::result::Result<Response<Empty>, Status> {
         log::info!("app_gossip called");
 
         Err(Status::unimplemented("app_gossip"))
@@ -474,7 +471,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
     async fn block_verify(
         &self,
         _request: Request<vm::BlockVerifyRequest>,
-    ) -> Result<Response<vm::BlockVerifyResponse>, Status> {
+    ) -> std::result::Result<Response<vm::BlockVerifyResponse>, Status> {
         log::info!("block_verify called");
 
         Err(Status::unimplemented("block_verify"))
@@ -483,7 +480,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
     async fn block_accept(
         &self,
         _request: Request<vm::BlockAcceptRequest>,
-    ) -> Result<Response<Empty>, Status> {
+    ) -> std::result::Result<Response<Empty>, Status> {
         log::info!("block_accept called");
 
         Err(Status::unimplemented("block_accept"))
@@ -491,7 +488,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
     async fn block_reject(
         &self,
         _request: Request<vm::BlockRejectRequest>,
-    ) -> Result<Response<Empty>, Status> {
+    ) -> std::result::Result<Response<Empty>, Status> {
         log::info!("block_reject called");
 
         Err(Status::unimplemented("block_reject"))
@@ -500,7 +497,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
     async fn get_ancestors(
         &self,
         _request: Request<vm::GetAncestorsRequest>,
-    ) -> Result<Response<vm::GetAncestorsResponse>, Status> {
+    ) -> std::result::Result<Response<vm::GetAncestorsResponse>, Status> {
         log::info!("get_ancestors called");
 
         Err(Status::unimplemented("get_ancestors"))
@@ -509,7 +506,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
     async fn batched_parse_block(
         &self,
         _request: Request<vm::BatchedParseBlockRequest>,
-    ) -> Result<Response<vm::BatchedParseBlockResponse>, Status> {
+    ) -> std::result::Result<Response<vm::BatchedParseBlockResponse>, Status> {
         log::info!("batched_parse_block called");
 
         Err(Status::unimplemented("batched_parse_block"))
@@ -518,7 +515,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
     async fn gather(
         &self,
         _request: Request<Empty>,
-    ) -> Result<Response<vm::GatherResponse>, Status> {
+    ) -> std::result::Result<Response<vm::GatherResponse>, Status> {
         log::info!("gather called");
 
         Err(Status::unimplemented("gather"))
@@ -527,7 +524,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
     async fn state_sync_enabled(
         &self,
         _request: Request<Empty>,
-    ) -> Result<Response<vm::StateSyncEnabledResponse>, Status> {
+    ) -> std::result::Result<Response<vm::StateSyncEnabledResponse>, Status> {
         log::info!("state_sync_enabled called");
 
         Err(Status::unimplemented("state_sync_enabled"))
@@ -536,7 +533,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
     async fn get_ongoing_sync_state_summary(
         &self,
         _request: Request<Empty>,
-    ) -> Result<Response<vm::GetOngoingSyncStateSummaryResponse>, Status> {
+    ) -> std::result::Result<Response<vm::GetOngoingSyncStateSummaryResponse>, Status> {
         log::info!("get_ongoing_sync_state_summary called");
 
         Err(Status::unimplemented("get_ongoing_sync_state_summary"))
@@ -545,7 +542,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
     async fn parse_state_summary(
         &self,
         _request: Request<vm::ParseStateSummaryRequest>,
-    ) -> Result<tonic::Response<vm::ParseStateSummaryResponse>, Status> {
+    ) -> std::result::Result<tonic::Response<vm::ParseStateSummaryResponse>, Status> {
         log::info!("parse_state_summary called");
 
         Err(Status::unimplemented("parse_state_summary"))
@@ -554,7 +551,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
     async fn get_state_summary(
         &self,
         _request: Request<vm::GetStateSummaryRequest>,
-    ) -> Result<Response<vm::GetStateSummaryResponse>, Status> {
+    ) -> std::result::Result<Response<vm::GetStateSummaryResponse>, Status> {
         log::info!("get_state_summary called");
 
         Err(Status::unimplemented("get_state_summary"))
@@ -563,7 +560,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
     async fn get_last_state_summary(
         &self,
         _request: Request<Empty>,
-    ) -> Result<Response<vm::GetLastStateSummaryResponse>, Status> {
+    ) -> std::result::Result<Response<vm::GetLastStateSummaryResponse>, Status> {
         log::info!("get_last_state_summary called");
 
         Err(Status::unimplemented("get_last_state_summary"))
@@ -572,7 +569,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
     async fn state_summary_accept(
         &self,
         _request: Request<vm::StateSummaryAcceptRequest>,
-    ) -> Result<tonic::Response<vm::StateSummaryAcceptResponse>, Status> {
+    ) -> std::result::Result<tonic::Response<vm::StateSummaryAcceptResponse>, Status> {
         log::info!("state_summary_accept called");
 
         Err(Status::unimplemented("state_summary_accept"))

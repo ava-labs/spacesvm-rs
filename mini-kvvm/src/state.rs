@@ -1,4 +1,4 @@
-use std::io::{Error, ErrorKind};
+use std::io::{Error, ErrorKind, Result};
 
 use avalanche_proto::rpcdb::{database_client::*, GetRequest, PutRequest};
 use avalanche_types::{choices::status::Status, ids::Id};
@@ -44,7 +44,7 @@ impl State {
         result
     }
 
-    pub async fn get(&mut self, key: Vec<u8>) -> Result<Option<Vec<u8>>, Error> {
+    pub async fn get(&mut self, key: Vec<u8>) -> Result<Option<Vec<u8>>> {
         let key = prost::bytes::Bytes::from(key);
         let mut client = self.client.clone().unwrap();
 
@@ -63,7 +63,7 @@ impl State {
         }
     }
 
-    pub async fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<(), Error> {
+    pub async fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
         let key = prost::bytes::Bytes::from(key);
         let value = prost::bytes::Bytes::from(value);
         let mut client = self.client.clone().unwrap();
@@ -93,7 +93,7 @@ impl State {
     }
 
     // Dupe of kvvm this should be removed or moved to block?
-    pub async fn get_block(&mut self, id: Id) -> Result<Option<Block>, Error> {
+    pub async fn get_block(&mut self, id: Id) -> Result<Option<Block>> {
         log::debug!("state get_block called");
         let key = Self::prefix(BLOCK_STATE_PREFIX, id.as_ref());
         log::debug!("state get_block key {:?}", key);
@@ -109,13 +109,13 @@ impl State {
         })
     }
 
-    pub async fn put_block(&mut self, mut block: Block) -> Result<(), Error> {
+    pub async fn put_block(&mut self, mut block: Block) -> Result<()> {
         let value = serde_json::to_vec(&block)?;
         let key = Self::prefix(BLOCK_STATE_PREFIX, block.initialize()?.as_ref());
         self.put(key, value).await
     }
 
-    pub async fn has_last_accepted_block(&mut self) -> Result<bool, Error> {
+    pub async fn has_last_accepted_block(&mut self) -> Result<bool> {
         let last = self.get_last_accepted_block_id().await?;
 
         Ok(match last {
@@ -124,14 +124,14 @@ impl State {
         })
     }
 
-    pub async fn get_last_accepted_block_id(&mut self) -> Result<Option<Id>, Error> {
+    pub async fn get_last_accepted_block_id(&mut self) -> Result<Option<Id>> {
         match self.get(self.last_accepted_block_id_key.clone()).await? {
             Some(block_id_bytes) => Ok(Some(Id::from_slice(&block_id_bytes))),
             None => Ok(None),
         }
     }
 
-    pub async fn set_last_accepted_block_id(&mut self, id: &Id) -> Result<(), Error> {
+    pub async fn set_last_accepted_block_id(&mut self, id: &Id) -> Result<()> {
         self.put(
             self.last_accepted_block_id_key.clone(),
             Vec::from(id.as_ref()),
@@ -139,7 +139,7 @@ impl State {
         .await
     }
 
-    pub async fn is_state_initialized(&mut self) -> Result<bool, Error> {
+    pub async fn is_state_initialized(&mut self) -> Result<bool> {
         let state = self.get(self.state_initialized_key.clone()).await?;
         Ok(match state {
             Some(state_initialized_bytes) => !state_initialized_bytes.is_empty(),
@@ -147,7 +147,7 @@ impl State {
         })
     }
 
-    pub async fn set_state_initialized(&mut self) -> Result<(), Error> {
+    pub async fn set_state_initialized(&mut self) -> Result<()> {
         self.put(
             self.state_initialized_key.clone(),
             Vec::from(STATE_INITIALIZED_VALUE),
@@ -155,7 +155,7 @@ impl State {
         .await
     }
 
-    pub async fn accept_block(&mut self, mut block: Block) -> Result<Id, Error> {
+    pub async fn accept_block(&mut self, mut block: Block) -> Result<Id> {
         block.status = Status::Accepted;
         let block_id = block
             .initialize()
@@ -187,9 +187,9 @@ pub enum VmState {
 }
 
 impl TryFrom<u32> for VmState {
-    // TODO
     type Error = ();
-    fn try_from(kind: u32) -> Result<Self, Self::Error> {
+
+    fn try_from(kind: u32) -> std::result::Result<Self, Self::Error> {
         match kind {
             kind if kind == VmState::Initializing as u32 => Ok(VmState::Initializing),
             kind if kind == VmState::StateSyncing as u32 => Ok(VmState::StateSyncing),

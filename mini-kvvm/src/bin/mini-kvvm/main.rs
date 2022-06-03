@@ -1,4 +1,4 @@
-use std::io;
+use std::io::Result;
 
 use clap::{crate_version, Arg, Command};
 use log::info;
@@ -7,7 +7,7 @@ use mini_kvvm::{engine, genesis, kvvm, plugin};
 pub const APP_NAME: &str = "mini-kvvm-rs";
 
 #[tokio::main]
-async fn main() -> io::Result<()> {
+async fn main() -> Result<()> {
     let matches = Command::new(APP_NAME)
         .version(crate_version!())
         .about("Mini key-value VM for Avalanche in Rust")
@@ -47,9 +47,7 @@ async fn main() -> io::Result<()> {
         engine::VMServer::new(kvvm::ChainVMInterior::new()),
         &plugin::HandshakeConfig::default(),
     )
-    .await?;
-
-    Ok(())
+    .await
 }
 
 pub fn command_genesis() -> Command<'static> {
@@ -86,7 +84,7 @@ pub fn command_genesis() -> Command<'static> {
         )
 }
 
-pub fn execute_genesis(author: &str, msg: &str, p: &str) -> io::Result<()> {
+pub fn execute_genesis(author: &str, msg: &str, p: &str) -> Result<()> {
     let g = genesis::Genesis {
         author: String::from(author),
         welcome_message: String::from(msg),
