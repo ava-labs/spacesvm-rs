@@ -1,17 +1,12 @@
 #![allow(dead_code)]
 
-use std::collections::HashMap;
-use std::io::Result;
-use std::sync::Arc;
-use std::time;
+use std::{collections::HashMap, io::Result, sync::Arc, time};
 
-use avalanche_proto::google::protobuf::Empty;
-use avalanche_proto::grpcutil;
 use avalanche_proto::{
     aliasreader::alias_reader_client::AliasReaderClient,
-    appsender::app_sender_client::AppSenderClient, keystore::keystore_client::KeystoreClient,
-    messenger::messenger_client::MessengerClient, rpcdb::database_client::DatabaseClient,
-    sharedmemory::shared_memory_client::SharedMemoryClient,
+    appsender::app_sender_client::AppSenderClient, google::protobuf::Empty, grpcutil,
+    keystore::keystore_client::KeystoreClient, messenger::messenger_client::MessengerClient,
+    rpcdb::database_client::DatabaseClient, sharedmemory::shared_memory_client::SharedMemoryClient,
     subnetlookup::subnet_lookup_client::SubnetLookupClient, vm,
 };
 use avalanche_types::{ids::short::Id as ShortId, ids::Id};
@@ -116,7 +111,7 @@ pub trait VM: AppHandler + Checkable + Connector {
 /// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/snow/engine/snowman/block#Getter
 #[tonic::async_trait]
 pub trait Getter {
-    async fn get_block(inner: &Arc<RwLock<ChainVMInterior>>, id: Id) -> Result<Option<Block>>;
+    async fn get_block(inner: &Arc<RwLock<ChainVMInterior>>, id: Id) -> Result<Block>;
 }
 
 /// snow/engine/snowman/block.Parser
@@ -133,13 +128,13 @@ pub trait ChainVM: VM + Getter + Parser {
     async fn last_accepted(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<Id>;
 }
 
-pub struct VMServer<C> {
-    vm: C,
+pub struct VMServer<V> {
+    vm: V,
     interior: Arc<RwLock<ChainVMInterior>>,
 }
 
-impl<C: ChainVM> VMServer<C> {
-    pub fn new(chain_vm: C) -> Self {
+impl<V: ChainVM> VMServer<V> {
+    pub fn new(chain_vm: V) -> Self {
         Self {
             vm: chain_vm,
             interior: Arc::new(RwLock::new(ChainVMInterior::new())),
@@ -148,7 +143,7 @@ impl<C: ChainVM> VMServer<C> {
 }
 
 #[tonic::async_trait]
-impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
+impl<V: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<V> {
     async fn initialize(
         &self,
         req: Request<vm::InitializeRequest>,
@@ -205,7 +200,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
         }
 
         // Initialize ChainVM
-        C::initialize(
+        V::initialize(
             &self.interior.clone(),
             ctx,
             &db_clients,
@@ -219,9 +214,9 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
         .await
         .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
-        let last_accepted = C::last_accepted(&self.interior).await?;
+        let last_accepted = V::last_accepted(&self.interior).await?;
 
-        let mut last_accepted_block = C::get_block(&self.interior, last_accepted).await?.unwrap();
+        let mut last_accepted_block = V::get_block(&self.interior, last_accepted).await?;
         log::info!("last_accepted_block: {:?}", last_accepted_block);
 
         let last_accepted_block_id = last_accepted_block
@@ -229,7 +224,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
             .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
         let parent_id = last_accepted_block.parent.to_vec();
-        log::info!("parent_id: {}", String::from_utf8_lossy(parent_id.as_ref()));
+        log::info!("parent_id: {}", Id::from_slice(parent_id.as_ref()));
 
         let resp = vm::InitializeResponse {
             last_accepted_id: Bytes::from(last_accepted_block_id.to_vec()),
@@ -292,7 +287,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
     ) -> std::result::Result<Response<vm::BuildBlockResponse>, Status> {
         log::debug!("build_block called");
 
-        let mut block = C::build_block(&self.interior)
+        let mut block = V::build_block(&self.interior)
             .await
             .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
@@ -316,7 +311,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
         log::debug!("parse_block called");
         let req = req.into_inner();
 
-        let mut block = C::parse_block(&self.interior, req.bytes.as_ref())
+        let mut block = V::parse_block(&self.interior, req.bytes.as_ref())
             .await
             .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
@@ -354,18 +349,17 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
         let req = req.into_inner();
 
         let snow_state = VmState::try_from(req.state).unwrap();
-        C::set_state(&self.interior, snow_state)
+        V::set_state(&self.interior, snow_state)
             .await
             .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
-        let last_accepted = C::last_accepted(&self.interior)
+        let last_accepted = V::last_accepted(&self.interior)
             .await
             .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
-        let mut block = C::get_block(&self.interior, last_accepted)
+        let mut block = V::get_block(&self.interior, last_accepted)
             .await
-            .map_err(|e| tonic::Status::unknown(e.to_string()))?
-            .unwrap();
+            .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
         let block_id = block
             .initialize()
@@ -407,7 +401,7 @@ impl<C: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<C> {
         let id = Id::from_slice(&req.id);
         log::debug!("set_preference called id: {}", id);
 
-        C::set_preference(&self.interior, id)
+        V::set_preference(&self.interior, id)
             .await
             .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 

@@ -1,6 +1,8 @@
-use std::cmp::Ordering;
-use std::io::{Error, ErrorKind, Result};
-use std::sync::Arc;
+use std::{
+    cmp::Ordering,
+    io::{Error, ErrorKind, Result},
+    sync::Arc,
+};
 
 use avalanche_types::{
     choices::status::Status,
@@ -22,8 +24,8 @@ pub const DATA_LEN: usize = 32;
 impl Default for Block {
     fn default() -> Self {
         Self {
-            id: Some(Id::default()),
-            parent: Id::default(),
+            id: Some(Id::empty()),
+            parent: Id::empty(),
             timestamp: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(0, 0), Utc),
             bytes: Vec::default(),
             height: 0,
@@ -88,37 +90,34 @@ impl Block {
     /// verify ensures that the state of the block is expected.
     pub async fn verify(&self, inner: &Arc<RwLock<ChainVMInterior>>) -> Result<()> {
         let mut vm = inner.write().await;
-        Ok(match vm.state.get_block(self.parent).await? {
-            Some(mut pb) => {
-                let block_id = pb.initialize().expect("failed to initialize block");
+
+        match vm.state.get_block(self.parent).await? {
+            Some(parent_block) => {
                 // Ensure block height comes right after its parent's height
-                if pb.height() + 1 != self.height() {
+                if parent_block.height() + 1 != self.height() {
                     return Err(Error::new(
                         ErrorKind::InvalidData,
                         "failed to verify block invalid height",
                     ));
                 }
                 // Ensure block timestamp is after its parent's timestamp.
-                if self.timestamp().cmp(pb.timestamp()) == Ordering::Less {
+                if self.timestamp().cmp(parent_block.timestamp()) == Ordering::Less {
                     return Err(Error::new(
                         ErrorKind::InvalidData,
                         format!(
-                            "block timestamp {} is after parents {}",
+                            "block timestamp: {} is after parents: {}",
                             self.timestamp(),
-                            pb.timestamp()
+                            parent_block.timestamp()
                         ),
                     ));
                 }
-                // Add block as verified
-                vm.verified_blocks.insert(block_id, pb);
+                Ok(())
             }
-            None => {
-                return Err(Error::new(
-                    ErrorKind::NotFound,
-                    "failed to verify block parent not found",
-                ))
-            }
-        })
+            None => Err(Error::new(
+                ErrorKind::NotFound,
+                "failed to verify block parent not found",
+            )),
+        }
     }
 
     /// data returns the block payload.
@@ -137,8 +136,8 @@ impl Block {
     }
 
     /// status returns the status of this block
-    pub fn status(&self) -> &Status {
-        &self.status
+    pub fn status(&self) -> Status {
+        self.status.clone()
     }
 
     /// initialize populates the generated fields (id, bytes) of the the block and

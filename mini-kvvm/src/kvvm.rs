@@ -1,10 +1,12 @@
 #![allow(dead_code)]
 
-use std::collections::HashMap;
-use std::convert::TryInto;
-use std::io::{Error, ErrorKind};
-use std::sync::Arc;
-use std::time;
+use std::{
+    collections::HashMap,
+    convert::TryInto,
+    io::{Error, ErrorKind, Result},
+    sync::Arc,
+    time,
+};
 
 use avalanche_proto::{
     appsender::app_sender_client::AppSenderClient, messenger::messenger_client::MessengerClient,
@@ -63,35 +65,35 @@ impl AppHandler for ChainVMInterior {
         _request_id: u32,
         _deadline: time::Instant,
         _request: &[u8],
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         Ok(())
     }
 
-    fn app_request_failed(_node_id: &ShortId, _request_id: u32) -> Result<(), Error> {
+    fn app_request_failed(_node_id: &ShortId, _request_id: u32) -> Result<()> {
         Ok(())
     }
 
-    fn app_response(_node_id: &ShortId, _request_id: u32, _response: &[u8]) -> Result<(), Error> {
+    fn app_response(_node_id: &ShortId, _request_id: u32, _response: &[u8]) -> Result<()> {
         Ok(())
     }
 
-    fn app_gossip(_node_id: &ShortId, _msg: &[u8]) -> Result<(), Error> {
+    fn app_gossip(_node_id: &ShortId, _msg: &[u8]) -> Result<()> {
         Ok(())
     }
 }
 
 // This VM doesn't implement Connector these methods are noop.
 impl Connector for ChainVMInterior {
-    fn connected(_id: &ShortId) -> Result<(), Error> {
+    fn connected(_id: &ShortId) -> Result<()> {
         Ok(())
     }
-    fn disconnected(_id: &ShortId) -> Result<(), Error> {
+    fn disconnected(_id: &ShortId) -> Result<()> {
         Ok(())
     }
 }
 
 impl Checkable for ChainVMInterior {
-    fn health_check() -> Result<Health, Error> {
+    fn health_check() -> Result<Health> {
         Ok(())
     }
 }
@@ -108,7 +110,7 @@ impl VM for ChainVMInterior {
         _to_engine: &MessengerClient<Channel>,
         _fxs: &[Fx],
         _app_sender: &AppSenderClient<Channel>,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         let mut vm = vm_inner.write().await;
         vm.ctx = ctx;
 
@@ -118,12 +120,7 @@ impl VM for ChainVMInterior {
         let state = State::new(Some(current_db.clone()));
         vm.state = state;
 
-        let genesis = Genesis::from_json(genesis_bytes).map_err(|e| {
-            Error::new(
-                ErrorKind::Other,
-                format!("failed to deserialize genesis: {:?}", e),
-            )
-        })?;
+        let genesis = Genesis::from_json(genesis_bytes)?;
 
         vm.genesis = genesis;
         vm.genesis.verify().map_err(|e| {
@@ -179,20 +176,17 @@ impl VM for ChainVMInterior {
 
         Ok(())
     }
-    fn bootstrapping() -> Result<(), Error> {
+    fn bootstrapping() -> Result<()> {
         Ok(())
     }
-    fn bootstrapped() -> Result<(), Error> {
+    fn bootstrapped() -> Result<()> {
         Ok(())
     }
-    fn shutdown() -> Result<(), Error> {
+    fn shutdown() -> Result<()> {
         Ok(())
     }
 
-    async fn set_state(
-        inner: &Arc<RwLock<ChainVMInterior>>,
-        snow_state: VmState,
-    ) -> Result<(), Error> {
+    async fn set_state(inner: &Arc<RwLock<ChainVMInterior>>, snow_state: VmState) -> Result<()> {
         let mut vm = inner.write().await;
         match snow_state.try_into() {
             Ok(VmState::Initializing) => {
@@ -215,46 +209,45 @@ impl VM for ChainVMInterior {
     }
 
     /// Returns this VM's version
-    fn version() -> Result<String, Error> {
+    fn version() -> Result<String> {
         Ok("".to_string())
     }
-    fn create_static_handlers() -> Result<HashMap<String, HTTPHandler>, Error> {
+    fn create_static_handlers() -> Result<HashMap<String, HTTPHandler>> {
         Ok(HashMap::new())
     }
-    fn create_handlers() -> Result<HashMap<String, HTTPHandler>, Error> {
+    fn create_handlers() -> Result<HashMap<String, HTTPHandler>> {
         Ok(HashMap::new())
     }
 }
 
 #[tonic::async_trait]
 impl Getter for ChainVMInterior {
-    async fn get_block(
-        inner: &Arc<RwLock<ChainVMInterior>>,
-        id: Id,
-    ) -> Result<Option<Block>, Error> {
+    async fn get_block(inner: &Arc<RwLock<ChainVMInterior>>, id: Id) -> Result<Block> {
         log::debug!("kvvm get_block called");
         let vm = inner.write().await;
         let mut state = crate::state::State::new(vm.db.clone());
-        Ok(state.get_block(id).await?)
+        match state.get_block(id).await? {
+            Some(mut block) => {
+                let block_id = block.initialize()?;
+                log::debug!("found old block id: {}", block_id.to_string());
+                Ok(block)
+            }
+            None => Err(Error::new(
+                ErrorKind::NotFound,
+                format!("failed to get block id: {}", id),
+            )),
+        }
     }
 }
 
 #[tonic::async_trait]
 impl Parser for ChainVMInterior {
-    async fn parse_block(
-        inner: &Arc<RwLock<ChainVMInterior>>,
-        bytes: &[u8],
-    ) -> Result<Block, Error> {
+    async fn parse_block(inner: &Arc<RwLock<ChainVMInterior>>, bytes: &[u8]) -> Result<Block> {
         log::debug!(
             "kvvm parse_block called: {}",
             String::from_utf8_lossy(&bytes)
         );
-        let mut new_block: Block = serde_json::from_slice(bytes.as_ref()).map_err(|e| {
-            Error::new(
-                ErrorKind::Other,
-                format!("failed to deserialize block: {:?}", e),
-            )
-        })?;
+        let mut new_block: Block = serde_json::from_slice(bytes.as_ref())?;
 
         new_block.status = Status::Processing;
 
@@ -267,11 +260,9 @@ impl Parser for ChainVMInterior {
 
         match state.get_block(new_block_id).await? {
             Some(mut old_block) => {
-                let old_block_id = old_block.initialize().map_err(|e| {
-                    Error::new(ErrorKind::Other, format!("failed to init block: {:?}", e))
-                })?;
-                log::debug!("found old block id: {}", old_block_id);
-                return Ok(old_block);
+                let old_block_id = old_block.initialize()?;
+                log::debug!("found old block id: {}", old_block_id.to_string());
+                Ok(old_block)
             }
             None => {
                 log::debug!("found new block id: {}", new_block_id);
@@ -282,7 +273,7 @@ impl Parser for ChainVMInterior {
 }
 #[tonic::async_trait]
 impl ChainVM for ChainVMInterior {
-    async fn build_block(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<Block, Error> {
+    async fn build_block(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<Block> {
         log::info!("build_block called");
         let mut vm = inner.write().await;
 
@@ -293,12 +284,9 @@ impl ChainVM for ChainVMInterior {
             .ok_or_else(|| Error::new(ErrorKind::Other, "there is no block to propose"))?;
 
         // Get Preferred Block
-        let preferred_block = Self::get_block(inner, vm.preferred)
-            .await
-            .map_err(|e| Error::new(ErrorKind::Other, format!("failed to get block: {:?}", e)))?
-            .unwrap();
+        let preferred_block = Self::get_block(inner, vm.preferred).await?;
 
-        let new_block = Block::new(
+        let mut new_block = Block::new(
             vm.preferred,
             preferred_block.height() + 1,
             block_value,
@@ -312,27 +300,32 @@ impl ChainVM for ChainVMInterior {
             )
         })?;
 
+        let new_block_id = new_block.initialize()?;
+
         new_block.verify(inner).await.map_err(|e| {
             Error::new(ErrorKind::Other, format!("failed to verify block: {:?}", e))
         })?;
+
+        // Add block as verified
+        vm.verified_blocks.insert(new_block_id, preferred_block);
         log::debug!("block verified {:?}", new_block.id());
 
         Ok(new_block)
     }
 
-    async fn issue_tx() -> Result<Block, Error> {
+    async fn issue_tx() -> Result<Block> {
         log::info!("kvvm issue_tx called");
         Ok(Block::default())
     }
 
-    async fn set_preference(inner: &Arc<RwLock<ChainVMInterior>>, id: Id) -> Result<(), Error> {
+    async fn set_preference(inner: &Arc<RwLock<ChainVMInterior>>, id: Id) -> Result<()> {
         log::info!("setting preferred block id...");
         let mut vm = inner.write().await;
         vm.preferred_block_id = Some(id);
         Ok(())
     }
 
-    async fn last_accepted(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<Id, Error> {
+    async fn last_accepted(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<Id> {
         let vm = inner.read().await;
         let mut state = crate::state::State::new(vm.db.clone());
         let last_accepted_block_id = state
