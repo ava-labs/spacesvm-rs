@@ -89,7 +89,5 @@ pub fn execute_genesis(author: &str, msg: &str, p: &str) -> Result<()> {
         author: String::from(author),
         welcome_message: String::from(msg),
     };
-    g.sync(p)?;
-
-    Ok(())
+    g.sync(p)
 }

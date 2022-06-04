@@ -97,16 +97,20 @@ impl State {
         log::debug!("state get_block called");
         let key = Self::prefix(BLOCK_STATE_PREFIX, id.as_ref());
         log::debug!("state get_block key {:?}", key);
-        let value = self.get(key).await?;
+        let value = match self.get(key).await {
+            Ok(Some(v)) => v,
+            _ => return Ok(None),
+        };
 
-        Ok(match value {
-            Some(v) => {
-                let block = serde_json::from_slice(&v)?;
-                log::info!("state get_block value: {:?}", block);
-                block
-            }
-            None => None,
-        })
+        let block = serde_json::from_slice(&value).map_err(|e| {
+            Error::new(
+                ErrorKind::Other,
+                format!("failed deserialize block: {:?}", e),
+            )
+        })?;
+        log::info!("state get_block value: {:?}", block);
+
+        Ok(block)
     }
 
     pub async fn put_block(&mut self, mut block: Block) -> Result<()> {
