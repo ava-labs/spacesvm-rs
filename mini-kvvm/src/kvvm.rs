@@ -133,13 +133,13 @@ impl VM for ChainVMInterior {
         // Check if last accepted block exists
         if vm.state.has_last_accepted_block().await? {
             let maybe_last_accepted_block_id = vm.state.get_last_accepted_block_id().await?;
-            if !maybe_last_accepted_block_id.is_some() {
+            if maybe_last_accepted_block_id.is_none() {
                 return Err(Error::new(ErrorKind::Other, "invalid block no id found"));
             }
             let last_accepted_block_id = maybe_last_accepted_block_id.unwrap();
 
             let maybe_last_accepted_block = vm.state.get_block(last_accepted_block_id).await?;
-            if !maybe_last_accepted_block.is_some() {
+            if maybe_last_accepted_block.is_none() {
                 return Err(Error::new(ErrorKind::Other, "invalid block no id found"));
             }
             let last_accepted_block = maybe_last_accepted_block.unwrap();
@@ -163,7 +163,7 @@ impl VM for ChainVMInterior {
                 Status::Processing,
             )?;
 
-            let genesis_block_id = genesis_block.initialize()?.clone();
+            let genesis_block_id = genesis_block.initialize()?;
 
             let accepted_block_id = vm.state.accept_block(genesis_block).await.map_err(|e| {
                 Error::new(ErrorKind::Other, format!("failed to accept block: {:?}", e))
@@ -226,6 +226,7 @@ impl Getter for ChainVMInterior {
         log::debug!("kvvm get_block called");
         let vm = inner.write().await;
         let mut state = crate::state::State::new(vm.db.clone());
+
         match state.get_block(id).await? {
             Some(mut block) => {
                 let block_id = block.initialize()?;
@@ -328,17 +329,13 @@ impl ChainVM for ChainVMInterior {
     async fn last_accepted(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<Id> {
         let vm = inner.read().await;
         let mut state = crate::state::State::new(vm.db.clone());
-        let last_accepted_block_id = state
-            .get_last_accepted_block_id()
-            .await
-            .map_err(|e| Error::new(ErrorKind::Other, format!("failed to get block: {:?}", e)))?;
-        if last_accepted_block_id.is_none() {
-            return Err(Error::new(
-                ErrorKind::NotFound,
-                format!("last accepted block not found"),
-            ));
-        }
 
-        Ok(last_accepted_block_id.unwrap())
+        match state.get_last_accepted_block_id().await? {
+            Some(last_accepted_block_id) => Ok(last_accepted_block_id),
+            None => Err(Error::new(
+                ErrorKind::NotFound,
+                "failed to get last accepted block",
+            )),
+        }
     }
 }
