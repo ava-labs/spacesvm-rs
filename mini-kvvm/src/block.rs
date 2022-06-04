@@ -9,7 +9,6 @@ use avalanche_types::{
     ids::{must_deserialize_id, Id},
 };
 use avalanche_utils::rfc3339;
-use bytes::BufMut;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use hmac_sha256::Hash;
 use serde::{Deserialize, Serialize};
@@ -144,21 +143,21 @@ impl Block {
     /// returns the generated id.
     pub fn initialize(&mut self) -> Result<Id> {
         if self.id.is_none() {
-            let mut writer = Vec::new().writer();
-            serde_json::to_writer(&mut writer, &self.parent())?;
-            serde_json::to_writer(&mut writer, &self.height())?;
-            serde_json::to_writer(&mut writer, &self.timestamp().to_string())?;
-            serde_json::to_writer(&mut writer, &self.data())?;
-
-            let block_bytes = serde_json::to_vec(&self).unwrap();
-
-            let block_data = writer.into_inner();
-            let block_id = Self::generate(&block_data);
-            self.id = Some(block_id);
-            self.bytes = block_bytes;
+            match serde_json::to_vec(&self) {
+                // Populate generated fields
+                Ok(block_bytes) => {
+                    let block_data = block_bytes.as_slice();
+                    let block_id = Self::generate(&block_data);
+                    self.id = Some(block_id);
+                    self.bytes = block_bytes;
+                    return Ok(self.id.unwrap());
+                }
+                Err(error) => {
+                    return Err(Error::new(ErrorKind::NotFound, error));
+                }
+            }
         }
-
-        Ok(self.id.expect("this is some"))
+        Ok(self.id.unwrap())
     }
 
     pub fn new_id(bytes: [u8; DATA_LEN]) -> Id {
