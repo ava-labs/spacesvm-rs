@@ -13,7 +13,7 @@ use avalanche_proto::{
 };
 use avalanche_types::{
     choices::status::Status,
-    ids::{short::Id as ShortId, Id},
+    ids::{node::Id as NodeId, Id},
 };
 use chrono::{DateTime, NaiveDateTime, Utc};
 use semver::Version;
@@ -61,7 +61,7 @@ impl ChainVMInterior {
 // This VM doesn't (currently) have any app-specific messages
 impl AppHandler for ChainVMInterior {
     fn app_request(
-        _node_id: &ShortId,
+        _node_id: &NodeId,
         _request_id: u32,
         _deadline: time::Instant,
         _request: &[u8],
@@ -69,25 +69,25 @@ impl AppHandler for ChainVMInterior {
         Ok(())
     }
 
-    fn app_request_failed(_node_id: &ShortId, _request_id: u32) -> Result<()> {
+    fn app_request_failed(_node_id: &NodeId, _request_id: u32) -> Result<()> {
         Ok(())
     }
 
-    fn app_response(_node_id: &ShortId, _request_id: u32, _response: &[u8]) -> Result<()> {
+    fn app_response(_node_id: &NodeId, _request_id: u32, _response: &[u8]) -> Result<()> {
         Ok(())
     }
 
-    fn app_gossip(_node_id: &ShortId, _msg: &[u8]) -> Result<()> {
+    fn app_gossip(_node_id: &NodeId, _msg: &[u8]) -> Result<()> {
         Ok(())
     }
 }
 
 // This VM doesn't implement Connector these methods are noop.
 impl Connector for ChainVMInterior {
-    fn connected(_id: &ShortId) -> Result<()> {
+    fn connected(_id: &NodeId) -> Result<()> {
         Ok(())
     }
-    fn disconnected(_id: &ShortId) -> Result<()> {
+    fn disconnected(_id: &NodeId) -> Result<()> {
         Ok(())
     }
 }
@@ -225,7 +225,7 @@ impl Getter for ChainVMInterior {
     async fn get_block(inner: &Arc<RwLock<ChainVMInterior>>, id: Id) -> Result<Block> {
         log::debug!("kvvm get_block called");
         let vm = inner.write().await;
-        let mut state = crate::state::State::new(vm.db.clone());
+        let state = crate::state::State::new(vm.db.clone());
 
         match state.get_block(id).await? {
             Some(mut block) => {
@@ -253,7 +253,7 @@ impl Parser for ChainVMInterior {
         new_block.status = Status::Processing;
 
         let vm = inner.read().await;
-        let mut state = crate::state::State::new(vm.db.clone());
+        let state = crate::state::State::new(vm.db.clone());
 
         let new_block_id = new_block
             .initialize()
@@ -262,11 +262,11 @@ impl Parser for ChainVMInterior {
         match state.get_block(new_block_id).await? {
             Some(mut old_block) => {
                 let old_block_id = old_block.initialize()?;
-                log::debug!("found old block id: {}", old_block_id.to_string());
+                log::debug!("parsed old block id: {}", old_block_id.to_string());
                 Ok(old_block)
             }
             None => {
-                log::debug!("found new block id: {}", new_block_id);
+                log::debug!("parsed new block id: {}", new_block_id);
                 Ok(new_block)
             }
         }
@@ -275,7 +275,7 @@ impl Parser for ChainVMInterior {
 #[tonic::async_trait]
 impl ChainVM for ChainVMInterior {
     async fn build_block(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<Block> {
-        log::info!("build_block called");
+        log::debug!("build_block called");
         let mut vm = inner.write().await;
 
         // Pop next block from mempool error if empty
@@ -328,7 +328,7 @@ impl ChainVM for ChainVMInterior {
 
     async fn last_accepted(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<Id> {
         let vm = inner.read().await;
-        let mut state = crate::state::State::new(vm.db.clone());
+        let state = crate::state::State::new(vm.db.clone());
 
         match state.get_last_accepted_block_id().await? {
             Some(last_accepted_block_id) => Ok(last_accepted_block_id),

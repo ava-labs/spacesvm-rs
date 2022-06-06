@@ -9,7 +9,7 @@ use avalanche_proto::{
     rpcdb::database_client::DatabaseClient, sharedmemory::shared_memory_client::SharedMemoryClient,
     subnetlookup::subnet_lookup_client::SubnetLookupClient, vm,
 };
-use avalanche_types::{ids::short::Id as ShortId, ids::Id};
+use avalanche_types::{ids::node::Id as NodeId, ids::Id};
 use jsonrpc_http_server::jsonrpc_core::IoHandler;
 use prost::bytes::Bytes;
 use semver::Version;
@@ -48,8 +48,8 @@ pub trait Checkable {
 /// snow.validators.Connector
 /// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/snow/validators#Connector
 pub trait Connector {
-    fn connected(id: &ShortId) -> Result<()>;
-    fn disconnected(id: &ShortId) -> Result<()>;
+    fn connected(id: &NodeId) -> Result<()>;
+    fn disconnected(id: &NodeId) -> Result<()>;
 }
 
 /// snow.Context
@@ -59,7 +59,7 @@ pub struct Context {
     pub network_id: u32,
     pub subnet_id: Id,
     pub chain_id: Id,
-    pub node_id: ShortId,
+    pub node_id: NodeId,
     pub x_chain_id: Id,
     pub avax_asset_id: Id,
     pub keystore: KeystoreClient<Channel>,
@@ -73,14 +73,14 @@ pub struct Context {
 /// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/snow/engine/common#AppHandler
 pub trait AppHandler {
     fn app_request(
-        node_id: &ShortId,
+        node_id: &NodeId,
         request_id: u32,
         deadline: time::Instant,
         request: &[u8],
     ) -> Result<()>;
-    fn app_request_failed(node_id: &ShortId, request_id: u32) -> Result<()>;
-    fn app_response(node_id: &ShortId, request_id: u32, response: &[u8]) -> Result<()>;
-    fn app_gossip(node_id: &ShortId, msg: &[u8]) -> Result<()>;
+    fn app_request_failed(node_id: &NodeId, request_id: u32) -> Result<()>;
+    fn app_response(node_id: &NodeId, request_id: u32, response: &[u8]) -> Result<()>;
+    fn app_gossip(node_id: &NodeId, msg: &[u8]) -> Result<()>;
 }
 
 /// snow.engine.common.VM
@@ -160,24 +160,24 @@ impl<V: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<V> {
         // Create gRPC clients
         // Multiplexing in tonic is done by cloning the client which is very cheap.
         // ref. https://docs.rs/tonic/latest/tonic/transport/struct.Channel.html#multiplexing-requests
-        let msg_client = MessengerClient::new(client_conn.clone());
-        let keystore_client = KeystoreClient::new(client_conn.clone());
-        let shared_memory_client = SharedMemoryClient::new(client_conn.clone());
-        let bc_lookup_client = AliasReaderClient::new(client_conn.clone());
-        let sn_lookup_client = SubnetLookupClient::new(client_conn.clone());
+        let message = MessengerClient::new(client_conn.clone());
+        let keystore = KeystoreClient::new(client_conn.clone());
+        let shared_memory = SharedMemoryClient::new(client_conn.clone());
+        let bc_lookup = AliasReaderClient::new(client_conn.clone());
+        let sn_lookup = SubnetLookupClient::new(client_conn.clone());
         let app_sender_client = AppSenderClient::new(client_conn.clone());
 
         let ctx = Some(Context {
             network_id: req.network_id,
             subnet_id: Id::from_slice(&req.subnet_id),
             chain_id: Id::from_slice(&req.chain_id),
-            node_id: ShortId::from_slice(&req.node_id),
+            node_id: NodeId::from_slice(&req.node_id),
             x_chain_id: Id::from_slice(&req.x_chain_id),
             avax_asset_id: Id::from_slice(&req.avax_asset_id),
-            keystore: keystore_client,
-            shared_memory: shared_memory_client,
-            bc_lookup: bc_lookup_client,
-            sn_lookup: sn_lookup_client,
+            keystore: keystore,
+            shared_memory: shared_memory,
+            bc_lookup: bc_lookup,
+            sn_lookup: sn_lookup,
         });
 
         let mut db_clients = DbManager::with_capacity(req.db_servers.len());
@@ -187,7 +187,7 @@ impl<V: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<V> {
                 Version::parse(semver).map_err(|e| tonic::Status::unknown(e.to_string()))?;
             let server_addr = db_server.server_addr.clone();
             let client_conn = Endpoint::from_shared(format!("http://{}", server_addr))
-                .unwrap()
+                .map_err(|e| tonic::Status::unknown(e.to_string()))?
                 .connect()
                 .await
                 .map_err(|e| tonic::Status::unknown(e.to_string()))?;
@@ -207,7 +207,7 @@ impl<V: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<V> {
             &req.genesis_bytes,
             &req.upgrade_bytes,
             &req.config_bytes,
-            &msg_client,
+            &message,
             &[()],
             &app_sender_client,
         )
