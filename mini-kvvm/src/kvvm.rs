@@ -189,18 +189,25 @@ impl VM for ChainVMInterior {
     async fn set_state(inner: &Arc<RwLock<ChainVMInterior>>, snow_state: VmState) -> Result<()> {
         let mut vm = inner.write().await;
         match snow_state.try_into() {
+            // Initializing is called by chains manager when it is creating the chain.
             Ok(VmState::Initializing) => {
+                log::debug!("set_state: initializing");
                 vm.bootstrapped = false;
                 Ok(())
             }
             Ok(VmState::StateSyncing) => {
+                log::debug!("set_state: state syncing");
                 Err(Error::new(ErrorKind::Other, "state sync is not supported"))
             }
+            // Bootstrapping is called by the bootstrapper to signal bootstrapping has started. 
             Ok(VmState::Bootstrapping) => {
+                log::debug!("set_state: bootstrapping");
                 vm.bootstrapped = false;
                 Ok(())
             }
+            // NormalOp os called when consensus has started signalling bootstrap phase is complete
             Ok(VmState::NormalOp) => {
+                log::debug!("set_state: normal op");
                 vm.bootstrapped = true;
                 Ok(())
             }
@@ -224,7 +231,7 @@ impl VM for ChainVMInterior {
 impl Getter for ChainVMInterior {
     async fn get_block(inner: &Arc<RwLock<ChainVMInterior>>, id: Id) -> Result<Block> {
         log::debug!("kvvm get_block called");
-        let vm = inner.write().await;
+        let vm = inner.read().await;
         let state = crate::state::State::new(vm.db.clone());
 
         match state.get_block(id).await? {
@@ -312,11 +319,6 @@ impl ChainVM for ChainVMInterior {
         log::debug!("block verified {:?}", new_block.id());
 
         Ok(new_block)
-    }
-
-    async fn issue_tx() -> Result<Block> {
-        log::info!("kvvm issue_tx called");
-        Ok(Block::default())
     }
 
     async fn set_preference(inner: &Arc<RwLock<ChainVMInterior>>, id: Id) -> Result<()> {
