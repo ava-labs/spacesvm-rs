@@ -14,6 +14,7 @@ use avalanche_proto::{
 use avalanche_types::{
     choices::status::Status,
     ids::{node::Id as NodeId, Id},
+    vm::state::State as VmState,
 };
 use chrono::{DateTime, NaiveDateTime, Utc};
 use semver::Version;
@@ -23,10 +24,10 @@ use tonic::transport::Channel;
 use crate::block::Block;
 use crate::engine::*;
 use crate::genesis::Genesis;
-use crate::state::{Database, State, VmState};
+use crate::state::{Database, State};
 
 #[derive(Debug)]
-pub struct ChainVMInterior {
+pub struct ChainVmInterior {
     pub ctx: Option<Context>,
     pub bootstrapped: bool,
     pub version: Version,
@@ -40,7 +41,7 @@ pub struct ChainVMInterior {
     preferred_block_id: Option<Id>,
 }
 
-impl ChainVMInterior {
+impl ChainVmInterior {
     pub fn new() -> Self {
         Self {
             ctx: None,
@@ -59,7 +60,7 @@ impl ChainVMInterior {
 }
 
 // This VM doesn't (currently) have any app-specific messages
-impl AppHandler for ChainVMInterior {
+impl AppHandler for ChainVmInterior {
     fn app_request(
         _node_id: &NodeId,
         _request_id: u32,
@@ -83,7 +84,7 @@ impl AppHandler for ChainVMInterior {
 }
 
 // This VM doesn't implement Connector these methods are noop.
-impl Connector for ChainVMInterior {
+impl Connector for ChainVmInterior {
     fn connected(_id: &NodeId) -> Result<()> {
         Ok(())
     }
@@ -92,16 +93,16 @@ impl Connector for ChainVMInterior {
     }
 }
 
-impl Checkable for ChainVMInterior {
+impl Checkable for ChainVmInterior {
     fn health_check() -> Result<Health> {
         Ok(())
     }
 }
 
 #[tonic::async_trait]
-impl VM for ChainVMInterior {
+impl VM for ChainVmInterior {
     async fn initialize(
-        vm_inner: &Arc<RwLock<ChainVMInterior>>,
+        vm_inner: &Arc<RwLock<ChainVmInterior>>,
         ctx: Option<Context>,
         db_manager: &DbManager,
         genesis_bytes: &[u8],
@@ -186,7 +187,7 @@ impl VM for ChainVMInterior {
         Ok(())
     }
 
-    async fn set_state(inner: &Arc<RwLock<ChainVMInterior>>, snow_state: VmState) -> Result<()> {
+    async fn set_state(inner: &Arc<RwLock<ChainVmInterior>>, snow_state: VmState) -> Result<()> {
         let mut vm = inner.write().await;
         match snow_state.try_into() {
             // Initializing is called by chains manager when it is creating the chain.
@@ -199,7 +200,7 @@ impl VM for ChainVMInterior {
                 log::debug!("set_state: state syncing");
                 Err(Error::new(ErrorKind::Other, "state sync is not supported"))
             }
-            // Bootstrapping is called by the bootstrapper to signal bootstrapping has started. 
+            // Bootstrapping is called by the bootstrapper to signal bootstrapping has started.
             Ok(VmState::Bootstrapping) => {
                 log::debug!("set_state: bootstrapping");
                 vm.bootstrapped = false;
@@ -228,8 +229,8 @@ impl VM for ChainVMInterior {
 }
 
 #[tonic::async_trait]
-impl Getter for ChainVMInterior {
-    async fn get_block(inner: &Arc<RwLock<ChainVMInterior>>, id: Id) -> Result<Block> {
+impl Getter for ChainVmInterior {
+    async fn get_block(inner: &Arc<RwLock<ChainVmInterior>>, id: Id) -> Result<Block> {
         log::debug!("kvvm get_block called");
         let vm = inner.read().await;
         let state = crate::state::State::new(vm.db.clone());
@@ -249,8 +250,8 @@ impl Getter for ChainVMInterior {
 }
 
 #[tonic::async_trait]
-impl Parser for ChainVMInterior {
-    async fn parse_block(inner: &Arc<RwLock<ChainVMInterior>>, bytes: &[u8]) -> Result<Block> {
+impl Parser for ChainVmInterior {
+    async fn parse_block(inner: &Arc<RwLock<ChainVmInterior>>, bytes: &[u8]) -> Result<Block> {
         log::debug!(
             "kvvm parse_block called: {}",
             String::from_utf8_lossy(&bytes)
@@ -280,8 +281,8 @@ impl Parser for ChainVMInterior {
     }
 }
 #[tonic::async_trait]
-impl ChainVM for ChainVMInterior {
-    async fn build_block(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<Block> {
+impl ChainVm for ChainVmInterior {
+    async fn build_block(inner: &Arc<RwLock<ChainVmInterior>>) -> Result<Block> {
         log::debug!("build_block called");
         let mut vm = inner.write().await;
 
@@ -321,14 +322,14 @@ impl ChainVM for ChainVMInterior {
         Ok(new_block)
     }
 
-    async fn set_preference(inner: &Arc<RwLock<ChainVMInterior>>, id: Id) -> Result<()> {
+    async fn set_preference(inner: &Arc<RwLock<ChainVmInterior>>, id: Id) -> Result<()> {
         log::info!("setting preferred block id...");
         let mut vm = inner.write().await;
         vm.preferred_block_id = Some(id);
         Ok(())
     }
 
-    async fn last_accepted(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<Id> {
+    async fn last_accepted(inner: &Arc<RwLock<ChainVmInterior>>) -> Result<Id> {
         let vm = inner.read().await;
         let state = crate::state::State::new(vm.db.clone());
 

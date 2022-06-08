@@ -122,11 +122,10 @@ impl State {
 
     pub async fn has_last_accepted_block(&self) -> Result<bool> {
         let last = self.get_last_accepted_block_id().await?;
-
-        Ok(match last {
-            Some(last_accepted_block) => !last_accepted_block.is_empty(),
-            None => false,
-        })
+        if last.is_some() {
+            return Ok(true)
+        }
+        Ok(false)
     }
 
     pub async fn get_last_accepted_block_id(&self) -> Result<Option<Id>> {
@@ -181,5 +180,3 @@ pub enum DatabaseError {
     Closed = 1,
     NotFound = 2,
 }
-
-
