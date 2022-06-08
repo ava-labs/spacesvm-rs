@@ -14,7 +14,7 @@ use hmac_sha256::Hash;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
-use crate::kvvm::ChainVMInterior;
+use crate::kvvm::ChainVmInterior;
 
 pub const DATA_LEN: usize = 32;
 
@@ -87,7 +87,7 @@ impl Block {
     }
 
     /// verify ensures that the state of the block is expected.
-    pub async fn verify(&self, inner: &Arc<RwLock<ChainVMInterior>>) -> Result<()> {
+    pub async fn verify(&self, inner: &Arc<RwLock<ChainVmInterior>>) -> Result<()> {
         let vm = inner.read().await;
 
         match vm.state.get_block(self.parent).await? {

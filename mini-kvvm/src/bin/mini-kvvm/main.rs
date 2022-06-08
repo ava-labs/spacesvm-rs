@@ -44,7 +44,7 @@ async fn main() -> Result<()> {
     info!("starting mini-kvvm-rs");
 
     plugin::serve(
-        engine::VMServer::new(kvvm::ChainVMInterior::new()),
+        engine::VmServer::new(kvvm::ChainVmInterior::new()),
         &plugin::HandshakeConfig::default(),
     )
     .await

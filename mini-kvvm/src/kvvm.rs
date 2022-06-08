@@ -100,7 +100,7 @@ impl Checkable for ChainVmInterior {
 }
 
 #[tonic::async_trait]
-impl VM for ChainVmInterior {
+impl Vm for ChainVmInterior {
     async fn initialize(
         vm_inner: &Arc<RwLock<ChainVmInterior>>,
         ctx: Option<Context>,
@@ -220,10 +220,10 @@ impl VM for ChainVmInterior {
     fn version() -> Result<String> {
         Ok("".to_string())
     }
-    fn create_static_handlers() -> Result<HashMap<String, HTTPHandler>> {
+    fn create_static_handlers() -> Result<HashMap<String, HttpHandler>> {
         Ok(HashMap::new())
     }
-    fn create_handlers() -> Result<HashMap<String, HTTPHandler>> {
+    fn create_handlers() -> Result<HashMap<String, HttpHandler>> {
         Ok(HashMap::new())
     }
 }
