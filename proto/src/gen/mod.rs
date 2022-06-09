@@ -25,6 +25,12 @@ pub mod google {
         // @@protoc_insertion_point(google.protobuf)
     }
 }
+#[cfg(feature = "helloworld")]
+// @@protoc_insertion_point(attribute:helloworld)
+pub mod helloworld {
+    include!("helloworld.rs");
+    // @@protoc_insertion_point(helloworld)
+}
 #[cfg(feature = "http")]
 // @@protoc_insertion_point(attribute:http)
 pub mod http {

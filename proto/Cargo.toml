@@ -16,6 +16,7 @@ aliasreader = []
 appsender = ["google_protobuf"]
 google_api = []
 google_protobuf = []
+helloworld = []
 http = []
 http_responsewriter = ["http","google_protobuf"]
 io_prometheus_client = []
@@ -36,6 +37,14 @@ bytes = "1.1.0"
 chrono = "0.4.19"
 prost = "0.10.4"
 tonic = { version = "0.7", features = ["compression"] }
+
+[dev-dependencies]
+avalanche-proto = { path = "./", features = ["helloworld"] }
+tokio = { version = "1.19.1", features = ["fs", "rt-multi-thread"] }
+tokio-stream = { version = "0.1.9", features = ["net"] }
+tonic = { version = "0.7", features = ["compression"] }
+tonic-health = "0.6"
+tonic-reflection = "0.4.0"
 
 [build-dependencies]
 protoc-gen-prost = "0.1.3"
