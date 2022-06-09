@@ -33,9 +33,6 @@ fn main() {
 
     // ref. https://github.com/hyperium/tonic/blob/v0.7.2/examples/src/reflection/server.rs
     let reflection_service = tonic_reflection::server::Builder::configure()
-        .register_encoded_file_descriptor_set(
-            tonic_health::proto::GRPC_HEALTH_V1_FILE_DESCRIPTOR_SET,
-        )
         .register_encoded_file_descriptor_set(helloworld::FILE_DESCRIPTOR_SET)
         .build()
         .expect("failed to create gRPC reflection service");

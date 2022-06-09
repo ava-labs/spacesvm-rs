@@ -7,12 +7,29 @@ source of truth and versioning will align with avalanchego releases.
 
 ## usage
 
-```
+```rust
 use avalanche_proto::{
-    vm_server::{Vm, VmServer},
-    appsender::app_sender_client::AppSenderClient,
-    messenger::messenger_client::MessengerClient,
+    http::{
+        http_server::Http,
+        HttpRequest, HandleSimpleHttpResponse, HandleSimpleHttpRequest
+    },
+    google::protobuf::Empty,
 };
+```
+
+```rust
+    use avalanche_proto::grpcutil;
+
+    grpcutil::default_server()
+        .add_service(VmServer::new(vm))
+        .serve_with_incoming(TcpListenerStream::new(listener))
+        .await
+        .map_err(|e| {
+            Error::new(
+                ErrorKind::Other,
+                format!("failed serve_with_incoming '{}'", e),
+            )
+        })
 ```
 
 ## note
