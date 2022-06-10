@@ -268,7 +268,7 @@ pub mod vm_client {
         }
         pub async fn health(
             &mut self,
-            request: impl tonic::IntoRequest<super::HealthRequest>,
+            request: impl tonic::IntoRequest<super::super::google::protobuf::Empty>,
         ) -> Result<tonic::Response<super::HealthResponse>, tonic::Status> {
             self.inner
                 .ready()
@@ -698,7 +698,7 @@ pub mod vm_server {
             >;
         async fn health(
             &self,
-            request: tonic::Request<super::HealthRequest>,
+            request: tonic::Request<super::super::google::protobuf::Empty>,
         ) -> Result<tonic::Response<super::HealthResponse>, tonic::Status>;
         async fn version(
             &self,
@@ -1280,7 +1280,9 @@ pub mod vm_server {
                 "/vm.VM/Health" => {
                     #[allow(non_camel_case_types)]
                     struct HealthSvc<T: Vm>(pub Arc<T>);
-                    impl<T: Vm> tonic::server::UnaryService<super::HealthRequest>
+                    impl<
+                        T: Vm,
+                    > tonic::server::UnaryService<super::super::google::protobuf::Empty>
                     for HealthSvc<T> {
                         type Response = super::HealthResponse;
                         type Future = BoxFuture<
@@ -1289,7 +1291,9 @@ pub mod vm_server {
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::HealthRequest>,
+                            request: tonic::Request<
+                                super::super::google::protobuf::Empty,
+                            >,
                         ) -> Self::Future {
                             let inner = self.0.clone();
                             let fut = async move { (*inner).health(request).await };

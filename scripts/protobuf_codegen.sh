@@ -37,17 +37,13 @@ if ! [ -x "$(command -v protoc-gen-tonic)" ]; then
   exit 255
 fi
 
-TARGET=$PWD/proto
+TARGET=$PWD/crates/avalanche-proto
 if [ -n "$1" ]; then 
   TARGET="$1"
 fi
 
 # move to proto dir
 cd $TARGET
-
-## TODO(hexfusion): Remove from avalanchego
-# remove duplicate promethus proto
-rm -f protos/avalanchego/proto/io/prometheus/client/client.proto
 
 echo "Re-generating protobuf..."
 

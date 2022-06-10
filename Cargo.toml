@@ -1,6 +1,6 @@
 [workspace]
 members = [
     "mini-kvvm",
-    "proto",
+    "crates/avalanche-proto",
     "tests/e2e"
 ]
