@@ -123,7 +123,7 @@ impl State {
     pub async fn has_last_accepted_block(&self) -> Result<bool> {
         let last = self.get_last_accepted_block_id().await?;
         if last.is_some() {
-            return Ok(true)
+            return Ok(true);
         }
         Ok(false)
     }

@@ -423,10 +423,10 @@ impl<V: ChainVm + Send + Sync + 'static> vm::vm_server::Vm for VmServer<V> {
 
     async fn health(
         &self,
-        _request: Request<vm::HealthRequest>,
+        _request: Request<Empty>,
     ) -> std::result::Result<Response<vm::HealthResponse>, tonic::Status> {
         Ok(Response::new(vm::HealthResponse {
-            details: "mini-kvvm is healthy".to_string(),
+            details: Bytes::from("mini-kvvm is healthy"),
         }))
     }
 
