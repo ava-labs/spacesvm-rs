@@ -2,6 +2,7 @@ use std::io::{Error, ErrorKind, Result};
 
 use avalanche_proto::rpcdb::{database_client::*, GetRequest, PutRequest};
 use avalanche_types::{choices::status::Status, ids::Id};
+pub use bytes::*;
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use tonic::transport::Channel;
@@ -44,7 +45,7 @@ impl State {
         result
     }
 
-    pub async fn get(&mut self, key: Vec<u8>) -> Result<Option<Vec<u8>>> {
+    pub async fn get(&self, key: Vec<u8>) -> Result<Option<Vec<u8>>> {
         let key = prost::bytes::Bytes::from(key);
         let mut client = self.client.clone().unwrap();
 
@@ -64,8 +65,8 @@ impl State {
     }
 
     pub async fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
-        let key = prost::bytes::Bytes::from(key);
-        let value = prost::bytes::Bytes::from(value);
+        let key = key.into();
+        let value = value.into();
         let mut client = self.client.clone().unwrap();
 
         let resp = client
@@ -93,7 +94,7 @@ impl State {
     }
 
     // Dupe of kvvm this should be removed or moved to block?
-    pub async fn get_block(&mut self, id: Id) -> Result<Option<Block>> {
+    pub async fn get_block(&self, id: Id) -> Result<Option<Block>> {
         log::debug!("state get_block called");
         let key = Self::prefix(BLOCK_STATE_PREFIX, id.as_ref());
         log::debug!("state get_block key {:?}", key);
@@ -119,16 +120,15 @@ impl State {
         self.put(key, value).await
     }
 
-    pub async fn has_last_accepted_block(&mut self) -> Result<bool> {
+    pub async fn has_last_accepted_block(&self) -> Result<bool> {
         let last = self.get_last_accepted_block_id().await?;
-
-        Ok(match last {
-            Some(last_accepted_block) => !last_accepted_block.is_empty(),
-            None => false,
-        })
+        if last.is_some() {
+            return Ok(true);
+        }
+        Ok(false)
     }
 
-    pub async fn get_last_accepted_block_id(&mut self) -> Result<Option<Id>> {
+    pub async fn get_last_accepted_block_id(&self) -> Result<Option<Id>> {
         match self.get(self.last_accepted_block_id_key.clone()).await? {
             Some(block_id_bytes) => Ok(Some(Id::from_slice(&block_id_bytes))),
             None => Ok(None),
@@ -164,7 +164,7 @@ impl State {
         let block_id = block
             .initialize()
             .map_err(|e| Error::new(ErrorKind::Other, format!("failed to init block: {:?}", e)))?;
-        log::info!("Accepting block with id: {}", block_id);
+        log::info!("accepting block with id: {}", block_id);
         self.put_block(block).await?;
         self.set_last_accepted_block_id(&block_id).await?;
 
@@ -179,27 +179,4 @@ pub enum DatabaseError {
     None = 0,
     Closed = 1,
     NotFound = 2,
-}
-
-/// snow/state
-/// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/snow#State
-pub enum VmState {
-    Initializing = 0,
-    StateSyncing = 1,
-    Bootstrapping = 2,
-    NormalOp = 3,
-}
-
-impl TryFrom<u32> for VmState {
-    type Error = ();
-
-    fn try_from(kind: u32) -> std::result::Result<Self, Self::Error> {
-        match kind {
-            kind if kind == VmState::Initializing as u32 => Ok(VmState::Initializing),
-            kind if kind == VmState::StateSyncing as u32 => Ok(VmState::StateSyncing),
-            kind if kind == VmState::Bootstrapping as u32 => Ok(VmState::Bootstrapping),
-            kind if kind == VmState::NormalOp as u32 => Ok(VmState::NormalOp),
-            _ => Err(()),
-        }
-    }
 }

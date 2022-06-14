@@ -136,24 +136,6 @@ pub mod database_client {
             self.inner.unary(request.into_request(), path, codec).await
         }
         ///
-        pub async fn stat(
-            &mut self,
-            request: impl tonic::IntoRequest<super::StatRequest>,
-        ) -> Result<tonic::Response<super::StatResponse>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::new(
-                        tonic::Code::Unknown,
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
-            let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static("/rpcdb.Database/Stat");
-            self.inner.unary(request.into_request(), path, codec).await
-        }
-        ///
         pub async fn compact(
             &mut self,
             request: impl tonic::IntoRequest<super::CompactRequest>,
@@ -187,6 +169,26 @@ pub mod database_client {
                 })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static("/rpcdb.Database/Close");
+            self.inner.unary(request.into_request(), path, codec).await
+        }
+        ///
+        pub async fn health_check(
+            &mut self,
+            request: impl tonic::IntoRequest<super::super::google::protobuf::Empty>,
+        ) -> Result<tonic::Response<super::HealthCheckResponse>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/rpcdb.Database/HealthCheck",
+            );
             self.inner.unary(request.into_request(), path, codec).await
         }
         ///
@@ -322,11 +324,6 @@ pub mod database_server {
             request: tonic::Request<super::DeleteRequest>,
         ) -> Result<tonic::Response<super::DeleteResponse>, tonic::Status>;
         ///
-        async fn stat(
-            &self,
-            request: tonic::Request<super::StatRequest>,
-        ) -> Result<tonic::Response<super::StatResponse>, tonic::Status>;
-        ///
         async fn compact(
             &self,
             request: tonic::Request<super::CompactRequest>,
@@ -336,6 +333,11 @@ pub mod database_server {
             &self,
             request: tonic::Request<super::CloseRequest>,
         ) -> Result<tonic::Response<super::CloseResponse>, tonic::Status>;
+        ///
+        async fn health_check(
+            &self,
+            request: tonic::Request<super::super::google::protobuf::Empty>,
+        ) -> Result<tonic::Response<super::HealthCheckResponse>, tonic::Status>;
         ///
         async fn write_batch(
             &self,
@@ -569,42 +571,6 @@ pub mod database_server {
                     };
                     Box::pin(fut)
                 }
-                "/rpcdb.Database/Stat" => {
-                    #[allow(non_camel_case_types)]
-                    struct StatSvc<T: Database>(pub Arc<T>);
-                    impl<T: Database> tonic::server::UnaryService<super::StatRequest>
-                    for StatSvc<T> {
-                        type Response = super::StatResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::StatRequest>,
-                        ) -> Self::Future {
-                            let inner = self.0.clone();
-                            let fut = async move { (*inner).stat(request).await };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let inner = inner.0;
-                        let method = StatSvc(inner);
-                        let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
                 "/rpcdb.Database/Compact" => {
                     #[allow(non_camel_case_types)]
                     struct CompactSvc<T: Database>(pub Arc<T>);
@@ -666,6 +632,48 @@ pub mod database_server {
                     let fut = async move {
                         let inner = inner.0;
                         let method = CloseSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/rpcdb.Database/HealthCheck" => {
+                    #[allow(non_camel_case_types)]
+                    struct HealthCheckSvc<T: Database>(pub Arc<T>);
+                    impl<
+                        T: Database,
+                    > tonic::server::UnaryService<super::super::google::protobuf::Empty>
+                    for HealthCheckSvc<T> {
+                        type Response = super::HealthCheckResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<
+                                super::super::google::protobuf::Empty,
+                            >,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move {
+                                (*inner).health_check(request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = HealthCheckSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

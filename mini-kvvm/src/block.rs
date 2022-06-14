@@ -14,7 +14,7 @@ use hmac_sha256::Hash;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
-use crate::kvvm::ChainVMInterior;
+use crate::kvvm::ChainVmInterior;
 
 pub const DATA_LEN: usize = 32;
 
@@ -87,8 +87,8 @@ impl Block {
     }
 
     /// verify ensures that the state of the block is expected.
-    pub async fn verify(&self, inner: &Arc<RwLock<ChainVMInterior>>) -> Result<()> {
-        let mut vm = inner.write().await;
+    pub async fn verify(&self, inner: &Arc<RwLock<ChainVmInterior>>) -> Result<()> {
+        let vm = inner.read().await;
 
         match vm.state.get_block(self.parent).await? {
             Some(parent_block) => {
@@ -147,7 +147,7 @@ impl Block {
                 // Populate generated fields
                 Ok(block_bytes) => {
                     let block_data = block_bytes.as_slice();
-                    let block_id = Self::generate(&block_data);
+                    let block_id = to_block_id(&block_data);
                     self.id = Some(block_id);
                     self.bytes = block_bytes;
                     return Ok(self.id.unwrap());
@@ -159,14 +159,14 @@ impl Block {
         }
         Ok(self.id.unwrap())
     }
+}
 
-    pub fn new_id(bytes: [u8; DATA_LEN]) -> Id {
-        Id::from_slice(&bytes)
-    }
+fn to_block_id(bytes: &[u8]) -> Id {
+    new_id(Hash::hash(bytes))
+}
 
-    pub fn generate(bytes: &[u8]) -> Id {
-        Self::new_id(Hash::hash(bytes))
-    }
+fn new_id(bytes: [u8; DATA_LEN]) -> Id {
+    Id::from_slice(&bytes)
 }
 
 #[test]
