@@ -54,6 +54,7 @@ pub trait Connector {
 
 /// snow.Context
 /// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/snow#Context
+/// The context for which the VM will operate
 #[derive(Debug)]
 pub struct Context {
     pub network_id: u32,
@@ -72,14 +73,26 @@ pub struct Context {
 /// snow.engine.common.AppHandler
 /// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/snow/engine/common#AppHandler
 pub trait AppHandler {
+
+    /// Notifies this engine of a request for data from [node_id].
+    /// Requests are VM specific, so there is no guarantee requests are well-formed.
     fn app_request(
         node_id: &ShortId,
         request_id: u32,
         deadline: time::Instant,
         request: &[u8],
     ) -> Result<()>;
+
+    /// Notifies this engine that a request sent to [node_id] has failed.
     fn app_request_failed(node_id: &ShortId, request_id: u32) -> Result<()>;
+
+    /// Notifies this engine of a response sent by a request to [node_id].
+    /// Does not guarantee that [response] is well-formed or expected
     fn app_response(node_id: &ShortId, request_id: u32, response: &[u8]) -> Result<()>;
+
+    /// Notifes the engine of a gossip message
+    /// Gossip messages are not responses from this engine, and also do not need to be responded to
+    /// Nodes may gossip multiple times, so app_gossip may be called multiple times  
     fn app_gossip(node_id: &ShortId, msg: &[u8]) -> Result<()>;
 }
 
@@ -87,6 +100,19 @@ pub trait AppHandler {
 /// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/snow/engine/common#VM
 #[tonic::async_trait]
 pub trait VM: AppHandler + Checkable + Connector {
+
+    /// Initialize the VM.
+    /// [vm_inner]: 
+    /// [ctx]: Metadata about the VM
+    /// [db_manager]: Manager of the database this VM will run on
+    /// [genesis_bytes]: Byte-encoding of genesis data for the VM.
+    ///                  This is data the VM uses to intialize its
+    ///                  state.
+    /// [upgrade_bytes]: Byte-encoding of update data
+    /// [config_bytes]: Byte-encoding of configuration data
+    /// [to_engine]: Channel used to send messages to the consensus engine
+    /// [fxs]: Feature extensions that attach to this VM.
+    /// [app_sender]: Channel used to send app requests
     async fn initialize(
         vm_inner: &Arc<RwLock<ChainVMInterior>>,
         ctx: Option<Context>,
@@ -98,12 +124,26 @@ pub trait VM: AppHandler + Checkable + Connector {
         fxs: &[Fx],
         app_sender: &AppSenderClient<Channel>,
     ) -> Result<()>;
+
+    // Retruns if currently bootstrapping
     fn bootstrapping() -> Result<()>;
+
+    // Retruns if done bootstrapping
     fn bootstrapped() -> Result<()>;
+
+    /// Called when node is shutting down
     fn shutdown() -> Result<()>;
+
+    /// Returns version this VM node is running
     fn version() -> Result<String>;
+
+    /// Creates HTTP handlers for custom VM network calls
     fn create_static_handlers() -> Result<HashMap<String, HTTPHandler>>;
+
+    /// Creates HTTP handlers for custom chain network calls
     fn create_handlers() -> Result<HashMap<String, HTTPHandler>>;
+
+    /// Communicates to the VM the next state which it should be in
     async fn set_state(inner: &Arc<RwLock<ChainVMInterior>>, state: VmState) -> Result<()>;
 }
 
@@ -120,20 +160,39 @@ pub trait Getter {
 pub trait Parser {
     async fn parse_block(inner: &Arc<RwLock<ChainVMInterior>>, bytes: &[u8]) -> Result<Block>;
 }
+
+/// snow/engine/snowmman/block.ChainVM
+/// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/snow/engine/snowman/block#ChainVM
 #[tonic::async_trait]
 pub trait ChainVM: VM + Getter + Parser {
+
+    /// Attempt to create a new block from ChainVM data
+    /// Returns either a block or an error
     async fn build_block(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<Block>;
+
+    /// Issues a transaction to the chain
     async fn issue_tx() -> Result<Block>;
+
+    /// Notify the VM of the currently preferred block.
     async fn set_preference(inner: &Arc<RwLock<ChainVMInterior>>, id: Id) -> Result<()>;
+
+    /// Returns the ID of the last accepted block.
+    /// If no blocks have been accepted, this should return the genesis block
     async fn last_accepted(inner: &Arc<RwLock<ChainVMInterior>>) -> Result<Id>;
 }
 
+/// Server struct containing [vm], the virtual machine, and [interior], the interior data.
+/// generic type [V] will mostly likely contain a ChainVM, as initialization functions currently 
+/// only accept ChainVM data
 pub struct VMServer<V> {
     vm: V,
     interior: Arc<RwLock<ChainVMInterior>>,
 }
 
+
 impl<V: ChainVM> VMServer<V> {
+
+    /// Create a ChainVMInterior in this VMServer
     pub fn new(chain_vm: V) -> Self {
         Self {
             vm: chain_vm,
@@ -142,14 +201,20 @@ impl<V: ChainVM> VMServer<V> {
     }
 }
 
+/// Implementation of functionality for VMServer
+/// Note:  V is most likely a ChainVMInterior object from kvvm.rs, and as such any
+/// calls to functions from V (e.g. V::initialize) use the method defined in
+/// kvvm.rs.
 #[tonic::async_trait]
 impl<V: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<V> {
+
     async fn initialize(
         &self,
         req: Request<vm::InitializeRequest>,
     ) -> std::result::Result<Response<vm::InitializeResponse>, Status> {
         log::info!("initialize called");
 
+        // From gRPC request, generate a client connection
         let req = req.into_inner();
         let client_conn = Endpoint::from_shared(format!("http://{}", req.server_addr))
             .unwrap()
@@ -167,6 +232,7 @@ impl<V: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<V> {
         let sn_lookup_client = SubnetLookupClient::new(client_conn.clone());
         let app_sender_client = AppSenderClient::new(client_conn.clone());
 
+        // Generate metadata from the request
         let ctx = Some(Context {
             network_id: req.network_id,
             subnet_id: Id::from_slice(&req.subnet_id),
@@ -180,18 +246,24 @@ impl<V: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<V> {
             sn_lookup: sn_lookup_client,
         });
 
+        // Generate database clients for every db_server in the request, along with an 
+        // open stream for every db_server.
         let mut db_clients = DbManager::with_capacity(req.db_servers.len());
         for db_server in req.db_servers.iter() {
+            // Get version
             let semver = db_server.version.trim_start_matches('v');
             let version =
                 Version::parse(semver).map_err(|e| tonic::Status::unknown(e.to_string()))?;
             let server_addr = db_server.server_addr.clone();
+
+            // Create a client connection with the server address
             let client_conn = Endpoint::from_shared(format!("http://{}", server_addr))
                 .unwrap()
                 .connect()
                 .await
                 .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
+            // If succesfull, push the new db_client into db_clients
             let db_client = DatabaseClient::new(client_conn);
             db_clients.push(VersionedDatabase {
                 database: db_client,
@@ -199,7 +271,7 @@ impl<V: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<V> {
             });
         }
 
-        // Initialize ChainVM
+        // Initialize ChainVM from ChainVMInterior initialization function
         V::initialize(
             &self.interior.clone(),
             ctx,
@@ -214,6 +286,7 @@ impl<V: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<V> {
         .await
         .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
+        // Get last accepted block on the chain
         let last_accepted = V::last_accepted(&self.interior).await?;
 
         let mut last_accepted_block = V::get_block(&self.interior, last_accepted).await?;
@@ -226,6 +299,7 @@ impl<V: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<V> {
         let parent_id = last_accepted_block.parent.to_vec();
         log::info!("parent_id: {}", Id::from_slice(parent_id.as_ref()));
 
+        // If no problems occurred, pass back a valid InitializeResponse as a gRCP response
         let resp = vm::InitializeResponse {
             last_accepted_id: Bytes::from(last_accepted_block_id.to_vec()),
             last_accepted_parent_id: Bytes::from(parent_id),
@@ -287,6 +361,7 @@ impl<V: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<V> {
     ) -> std::result::Result<Response<vm::BuildBlockResponse>, Status> {
         log::debug!("build_block called");
 
+        // Build block based on ChainVMInterior data
         let mut block = V::build_block(&self.interior)
             .await
             .map_err(|e| tonic::Status::unknown(e.to_string()))?;
@@ -295,6 +370,7 @@ impl<V: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<V> {
             .initialize()
             .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
+        // If no problems occurred, pass back a valid BuildBlockResponse as a gRCP response
         Ok(Response::new(vm::BuildBlockResponse {
             id: Bytes::from(block_id.to_vec()),
             parent_id: Bytes::from(block.parent.to_vec()),
@@ -311,10 +387,12 @@ impl<V: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<V> {
         log::debug!("parse_block called");
         let req = req.into_inner();
 
+        // Take the byte stream and attempt to compile into a block
         let mut block = V::parse_block(&self.interior, req.bytes.as_ref())
             .await
             .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
+        // Get information about block
         let block_id = block
             .initialize()
             .map_err(|e| tonic::Status::unknown(e.to_string()))?;
@@ -324,6 +402,7 @@ impl<V: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<V> {
             .bytes()
             .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
+        // If no problems occurred, pass a ParseBlockResponse as a gRCP response
         Ok(Response::new(vm::ParseBlockResponse {
             id: Bytes::from(block_id.to_vec()),
             parent_id: Bytes::from(block.parent.to_vec()),
@@ -348,11 +427,14 @@ impl<V: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<V> {
         log::debug!("set_state called");
         let req = req.into_inner();
 
+        // From request, generate a VmState from 
+        // 0 - 3 (Initializing, StateSyncing, Bootstrapping, and NormalOp respectively
         let snow_state = VmState::try_from(req.state).unwrap();
         V::set_state(&self.interior, snow_state)
             .await
             .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
+        // Get the last generated block from ChainVM data
         let last_accepted = V::last_accepted(&self.interior)
             .await
             .map_err(|e| tonic::Status::unknown(e.to_string()))?;
@@ -365,6 +447,7 @@ impl<V: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<V> {
             .initialize()
             .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
+        // If no errors occurred, return a valid SetStateResponse as a gRCP response
         Ok(Response::new(vm::SetStateResponse {
             last_accepted_id: Bytes::from(block_id.to_vec()),
             last_accepted_parent_id: Bytes::from(block.parent.to_vec()),
@@ -397,14 +480,19 @@ impl<V: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<V> {
         &self,
         req: Request<vm::SetPreferenceRequest>,
     ) -> std::result::Result<Response<Empty>, Status> {
+
+        // Get id of the preferred block
         let req = req.into_inner();
         let id = Id::from_slice(&req.id);
+
         log::debug!("set_preference called id: {}", id);
 
+        // Set ChainVMInterior block preference
         V::set_preference(&self.interior, id)
             .await
             .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
+        // If no errors occurred, return empty response
         Ok(Response::new(Empty {}))
     }
 
@@ -421,8 +509,12 @@ impl<V: ChainVM + Send + Sync + 'static> vm::vm_server::Vm for VMServer<V> {
         &self,
         _request: Request<Empty>,
     ) -> std::result::Result<Response<vm::VersionResponse>, Status> {
+
+        // Attempt to read interior data
         let interior = &self.interior.read().await;
         log::info!("called version!!");
+
+        // If no errors occurred, return a valid VersionResponse as a gRCP response
         Ok(Response::new(vm::VersionResponse {
             version: interior.version.to_string(),
         }))
