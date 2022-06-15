@@ -3,7 +3,7 @@ use std::io::Result;
 use avalanche_types::rpcchainvm::plugin;
 use clap::{crate_version, Arg, Command};
 use log::info;
-use mini_kvvm::{engine, genesis, kvvm};
+use kvvm::{engine, genesis, kvvm};
 
 pub const APP_NAME: &str = "mini-kvvm-rs";
 
