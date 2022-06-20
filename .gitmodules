@@ -1,6 +1,3 @@
 [submodule "proto/protos/avalanchego"]
 	path = crates/avalanche-proto/protos/avalanchego
 	url = https://github.com/ava-labs/avalanchego.git
-[submodule "proto/protos/avalanche-network-runner"]
-	path = crates/avalanche-proto/protos/avalanche-network-runner
-	url = https://github.com/ava-labs/avalanche-network-runner

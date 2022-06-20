@@ -12,7 +12,7 @@ Support for avalanchego protocol version 15+
 The release version will align with the [protocol version](https://github.com/ava-labs/avalanchego/blob/v1.7.13/vms/rpcchainvm/vm.go#L21)
 for avalanchego. In our example linked above avalanchego is currently on protocol version 15.
 This aligns with the minor version of the avalanche-proto release. Patches to minor releases
-could include improvements and even features for protos not releated to avalanchego.
+could include improvements or bug fixes.
 
 ```bash
 avalanche-types = { version = "0.15", features = [] } // supports avalanchego protocol version 15

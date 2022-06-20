@@ -97,12 +97,6 @@ pub mod rpcdb {
     include!("rpcdb.rs");
     // @@protoc_insertion_point(rpcdb)
 }
-#[cfg(feature = "rpcpb")]
-// @@protoc_insertion_point(attribute:rpcpb)
-pub mod rpcpb {
-    include!("rpcpb.rs");
-    // @@protoc_insertion_point(rpcpb)
-}
 #[cfg(feature = "sharedmemory")]
 // @@protoc_insertion_point(attribute:sharedmemory)
 pub mod sharedmemory {
