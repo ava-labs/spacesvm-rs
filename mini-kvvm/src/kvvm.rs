@@ -9,7 +9,6 @@ use std::{
 };
 use avalanche_proto::{
     appsender::app_sender_client::AppSenderClient, messenger::messenger_client::MessengerClient,
-    vm
 };
 use avalanche_types::{
     choices::status::Status,

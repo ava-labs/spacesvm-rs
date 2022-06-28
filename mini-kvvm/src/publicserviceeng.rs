@@ -4,6 +4,9 @@ use avalanche_types::ids::Id;
 use crate::block::Block;
 use prost::bytes::Bytes;
 use avalanche_proto::google::protobuf::Timestamp;
+use avalanche_proto::vm;
+
+use std::convert::{TryFrom, TryInto};
 
 pub const PUBLICENDPOINT: String = String::from("/kvvm-rs");
 
@@ -29,7 +32,7 @@ pub struct InitializeArgs {
     pub genesis_bytes: Vec<u8>,
     pub upgrade_bytes: Vec<u8>,
     pub config_bytes: Vec<u8>,
-    pub db_servers: ::prost::alloc::vec::Vec<avalanche_proto::vm::VersionedDbServer>,
+    pub db_servers: ::prost::alloc::vec::Vec<VersionedDbServer>,
     pub server_addr: String
 }
 
@@ -39,6 +42,13 @@ pub struct SetStateResponseEng {
     pub last_accepted_parent_id: Vec<u8>,
     pub height: u64,
     pub bytes: Vec<u8>
+}
+
+impl TryInto<vm::SetStateResponse> for SetStateResponseEng {
+    type Error = ();
+    fn try_into(self) -> Result<vm::SetStateResponse, Error> {
+        
+    }
 }
 
 #[derive(Deserialize)]
