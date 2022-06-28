@@ -1,12 +1,5 @@
 #![allow(dead_code)]
 
-use std::{
-    collections::HashMap,
-    convert::TryInto,
-    io::{Error, ErrorKind, Result},
-    sync::Arc,
-    time,
-};
 use avalanche_proto::{
     appsender::app_sender_client::AppSenderClient, messenger::messenger_client::MessengerClient,
 };
@@ -17,6 +10,13 @@ use avalanche_types::{
 };
 use chrono::{DateTime, NaiveDateTime, Utc};
 use semver::Version;
+use std::{
+    collections::HashMap,
+    convert::TryInto,
+    io::{Error, ErrorKind, Result},
+    sync::Arc,
+    time,
+};
 use tokio::sync::RwLock;
 use tonic::transport::Channel;
 
@@ -25,8 +25,7 @@ use crate::engine::*;
 use crate::genesis::Genesis;
 use crate::state::{Database, State};
 
-use jsonrpc_core::{Error as JsonRPCError, ErrorCode as JRPCErrorCode, Value, Params};
-
+use jsonrpc_core::{Error as JsonRPCError, ErrorCode as JRPCErrorCode, Params, Value};
 
 #[derive(Debug)]
 pub struct ChainVmInterior {
@@ -226,7 +225,9 @@ impl Vm for ChainVmInterior {
         Ok(HashMap::new())
     }
 
-    async fn create_handlers(inner: &'static Arc<RwLock<ChainVmInterior>>) -> Result<HashMap<String, HttpHandler>> {
+    async fn create_handlers(
+        inner: &'static Arc<RwLock<ChainVmInterior>>,
+    ) -> Result<HashMap<String, HttpHandler>> {
         use crate::publicservicevm::*;
         let mut handlermap = HashMap::new();
         let handler = jsonrpc_core::IoHandler::new();
@@ -239,12 +240,14 @@ impl Vm for ChainVmInterior {
         async fn match_serialized(data: serde_json::Result<Value>) -> jsonrpc_core::Result<Value> {
             match data {
                 Ok(x) => Ok(x),
-                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::ParseError).await)
+                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::ParseError).await),
             }
         }
 
         /// Converts any serializable response [T] to json format
-        async fn response_to_serialized<T: serde::Serialize> (response: &T) -> jsonrpc_core::Result<Value>{
+        async fn response_to_serialized<T: serde::Serialize>(
+            response: &T,
+        ) -> jsonrpc_core::Result<Value> {
             match_serialized(serde_json::to_value(response)).await
         }
 
@@ -270,20 +273,19 @@ impl Vm for ChainVmInterior {
         handler.add_method("set_state", |params: Params| async move {
             let parsed: SetStateArgs = params.parse()?;
             let state = VmState::try_from(parsed.state);
-            let state = match state { //if state does not match, propogate error
+            let state = match state {
+                //if state does not match, propogate error
                 Ok(x) => Ok(x),
-                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InvalidParams).await)
+                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InvalidParams).await),
             }?;
 
             let result = ChainVmInterior::set_state(inner, state).await;
             let result: bool = match result {
                 Ok(result) => true,
-                Err(e) => false
+                Err(e) => false,
             };
 
-            let resp = SetStateResponse{
-                accepted: result
-            };
+            let resp = SetStateResponse { accepted: result };
 
             response_to_serialized(&resp).await
         });
@@ -293,28 +295,24 @@ impl Vm for ChainVmInterior {
             let result = ChainVmInterior::get_block(inner, parsed.id).await;
             let result = match result {
                 Ok(x) => Ok(x),
-                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await)
+                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await),
             }?;
 
-            let resp = GetBlockResponse{
-                block: result
-            };
+            let resp = GetBlockResponse { block: result };
 
             response_to_serialized(&resp).await
         });
 
         handler.add_method("parse_block", |params: Params| async move {
             let parsed: ParseBlockArgs = params.parse()?;
-            
+
             let result = ChainVmInterior::parse_block(inner, &parsed.bytes).await;
             let result = match result {
                 Ok(x) => Ok(x),
-                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await)
+                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await),
             }?;
 
-            let resp = ParseBlockResponse {
-                block: result
-            };
+            let resp = ParseBlockResponse { block: result };
 
             response_to_serialized(&resp).await
         });
@@ -323,12 +321,10 @@ impl Vm for ChainVmInterior {
             let result = ChainVmInterior::build_block(inner).await;
             let result = match result {
                 Ok(x) => Ok(x),
-                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await)
+                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await),
             }?;
 
-            let resp = BuildBlockResponse {
-                block: result
-            };
+            let resp = BuildBlockResponse { block: result };
 
             response_to_serialized(&resp).await
         });
@@ -339,10 +335,10 @@ impl Vm for ChainVmInterior {
 
             let result = match result {
                 Ok(x) => Ok(x),
-                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await)
+                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await),
             }?;
 
-            let resp = SetPreferenceResponse{};
+            let resp = SetPreferenceResponse {};
 
             response_to_serialized(&resp).await
         });
@@ -352,19 +348,17 @@ impl Vm for ChainVmInterior {
 
             let result = match result {
                 Ok(x) => Ok(x),
-                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await)
+                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await),
             }?;
 
-            let resp = LastAcceptedResponse{
-                id: result
-            };
+            let resp = LastAcceptedResponse { id: result };
 
             response_to_serialized(&resp).await
         });
 
         let handler = HttpHandler {
             lock_options: 0,
-            handler
+            handler,
         };
 
         handlermap.insert(crate::publicservicevm::PUBLICENDPOINT, handler);

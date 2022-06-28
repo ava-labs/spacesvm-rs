@@ -1,5 +1,5 @@
-use hyper::Client;
 use hyper::body::HttpBody as _;
+use hyper::Client;
 use tokio::io::{stdout, AsyncWriteExt as _};
 
 #[tokio::main]

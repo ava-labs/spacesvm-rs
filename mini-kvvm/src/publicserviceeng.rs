@@ -1,12 +1,13 @@
-use jsonrpc_core::*;
-use serde::{Serialize, Deserialize};
-use avalanche_types::ids::Id;
 use crate::block::Block;
-use prost::bytes::Bytes;
 use avalanche_proto::google::protobuf::Timestamp;
 use avalanche_proto::vm;
+use avalanche_types::ids::Id;
+use jsonrpc_core::*;
+use prost::bytes::Bytes;
+use serde::{Deserialize, Serialize};
+use bytes::Bytes as StandardBytes;
 
-use std::convert::{TryFrom, TryInto};
+use std::{io::Result, convert::{TryFrom, TryInto}};
 
 pub const PUBLICENDPOINT: String = String::from("/kvvm-rs");
 
@@ -21,6 +22,17 @@ pub struct VersionedDbServer {
     pub server_addr: String,
 }
 
+impl TryInto<vm::VersionedDbServer> for VersionedDbServer {
+    type Error = ();
+
+    fn try_into(self) -> std::result::Result<vm::VersionedDbServer, ()> {
+        Ok(vm::VersionedDbServer {
+            version: self.version,
+            server_addr: self.server_addr
+        })
+    }
+}
+
 #[derive(Deserialize)]
 pub struct InitializeArgs {
     pub network_id: u32,
@@ -33,7 +45,53 @@ pub struct InitializeArgs {
     pub upgrade_bytes: Vec<u8>,
     pub config_bytes: Vec<u8>,
     pub db_servers: ::prost::alloc::vec::Vec<VersionedDbServer>,
-    pub server_addr: String
+    pub server_addr: String,
+}
+
+impl TryInto<vm::InitializeRequest> for InitializeArgs {
+    type Error = ();
+
+    fn try_into(self) -> std::result::Result<vm::InitializeRequest, ()> {
+        let db: Vec<vm::VersionedDbServer> = prost::alloc::vec::Vec::new();
+        for item in self.db_servers {
+            db.push(item.try_into().unwrap());
+        }
+
+        Ok(vm::InitializeRequest {
+            network_id: self.network_id,
+            subnet_id: Bytes::from_iter(self.subnet_id),
+            chain_id: Bytes::from_iter(self.chain_id),
+            node_id: Bytes::from_iter(self.node_id),
+            x_chain_id: Bytes::from_iter(self.x_chain_id),
+            avax_asset_id: Bytes::from_iter(self.avax_asset_id),
+            genesis_bytes: Bytes::from_iter(self.genesis_bytes),
+            upgrade_bytes: Bytes::from_iter(self.upgrade_bytes),
+            config_bytes: Bytes::from_iter(self.config_bytes),
+            db_servers: db,
+            server_addr: self.server_addr
+        })
+    }
+}
+
+#[derive(Serialize)]
+pub struct InitializeResponseEng {
+    pub last_accepted_id: Vec<u8>,
+    pub last_accepted_parent_id: Vec<u8>,
+    pub height: u64,
+    pub bytes: Vec<u8>,
+}
+
+impl TryFrom<vm::InitializeResponse> for InitializeResponseEng {
+    type Error = ();
+
+    fn try_from(resp: vm::InitializeResponse) -> std::result::Result<InitializeResponseEng, ()> {
+        Ok(InitializeResponseEng {
+            last_accepted_id: resp.last_accepted_id.as_ref().to_vec(),
+            last_accepted_parent_id: resp.last_accepted_parent_id.as_ref().to_vec(),
+            height: resp.height,
+            bytes: resp.bytes.as_ref().to_vec(),
+        })
+    }
 }
 
 #[derive(Serialize)]
@@ -41,19 +99,12 @@ pub struct SetStateResponseEng {
     pub last_accepted_id: Vec<u8>,
     pub last_accepted_parent_id: Vec<u8>,
     pub height: u64,
-    pub bytes: Vec<u8>
-}
-
-impl TryInto<vm::SetStateResponse> for SetStateResponseEng {
-    type Error = ();
-    fn try_into(self) -> Result<vm::SetStateResponse, Error> {
-        
-    }
+    pub bytes: Vec<u8>,
 }
 
 #[derive(Deserialize)]
 pub struct GetBlockArgs {
-    pub id: Vec<u8>
+    pub id: Vec<u8>,
 }
 
 #[derive(Serialize)]
@@ -67,7 +118,7 @@ pub struct GetBlockResponseEng {
 
 #[derive(Deserialize)]
 pub struct ParseBlockArgs {
-    pub bytes: Vec<u8>
+    pub bytes: Vec<u8>,
 }
 
 #[derive(Serialize)]
@@ -88,7 +139,7 @@ pub struct BuildBlockResponseEng {
 
 #[derive(Deserialize)]
 pub struct SetPreferenceArgs {
-    pub id: Vec<u8>
+    pub id: Vec<u8>,
 }
 
 #[derive(Serialize)]
