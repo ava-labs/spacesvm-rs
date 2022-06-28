@@ -12,6 +12,7 @@ use avalanche_proto::{
 use avalanche_types::{
     choices::status::Status, ids::node::Id as NodeId, ids::Id, vm::state::State as VmState,
 };
+use jsonrpc_core::{Error as JsonRPCError, ErrorCode as JRPCErrorCode, Value, Params};
 use jsonrpc_http_server::jsonrpc_core::IoHandler;
 use prost::bytes::Bytes;
 use semver::Version;
@@ -142,7 +143,7 @@ pub trait Vm: AppHandler + Checkable + Connector {
     fn create_static_handlers() -> Result<HashMap<String, HttpHandler>>;
 
     /// Creates HTTP handlers for custom chain network calls
-    fn create_handlers() -> Result<HashMap<String, HttpHandler>>;
+    async fn create_handlers(inner: &'static Arc<RwLock<ChainVmInterior>>) -> Result<HashMap<String, HttpHandler>>;
 
     /// Communicates to the Vm the next state which it should be in
     async fn set_state(inner: &Arc<RwLock<ChainVmInterior>>, state: VmState) -> Result<()>;
@@ -297,7 +298,7 @@ impl<V: ChainVm + Send + Sync + 'static> vm::vm_server::Vm for VmServer<V> {
         let parent_id = last_accepted_block.parent.to_vec();
         log::debug!("parent_id: {}", Id::from_slice(parent_id.as_ref()));
 
-        // If no problems occurred, pass back a valid InitializeResponse as a gRCP response
+        // If no problems occurred, pass back a valid InitializeResponse as a gRPC response
         let resp = vm::InitializeResponse {
             last_accepted_id: Bytes::from(last_accepted_block_id.to_vec()),
             last_accepted_parent_id: Bytes::from(parent_id),
@@ -323,10 +324,216 @@ impl<V: ChainVm + Send + Sync + 'static> vm::vm_server::Vm for VmServer<V> {
     // The handlers for the vms services will be returned in CreateStaticHandlersResponse.
     async fn create_handlers(
         &self,
-        _req: Request<Empty>,
+        req: Request<Empty>,
     ) -> std::result::Result<Response<vm::CreateHandlersResponse>, tonic::Status> {
-        log::debug!("create_handlers called");
-        Ok(Response::new(vm::CreateHandlersResponse::default()))
+        use crate::publicserviceeng::*;
+        let mut handlermap = HashMap::new();
+        let handler = jsonrpc_core::IoHandler::new();
+
+        async fn get_jsonrpc_error(code: JRPCErrorCode) -> JsonRPCError {
+            JsonRPCError::new(code)
+        }
+
+        /// Converts serde_json result to a jsonrpc_core result
+        async fn match_serialized(data: serde_json::Result<Value>) -> jsonrpc_core::Result<Value> {
+            match data {
+                Ok(x) => Ok(x),
+                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::ParseError).await)
+            }
+        }
+
+        /// Converts any serializable response [T] to json format
+        async fn response_to_serialized<T: serde::Serialize> (response: &T) -> jsonrpc_core::Result<Value>{
+            match_serialized(serde_json::to_value(response)).await
+        }
+
+        fn bytes_to_vec(bytes: Bytes) -> Vec<u8> {
+            bytes.as_ref().to_vec()
+        }
+
+        // Unimplemented
+        handler.add_method("initialize", |params: Params| async move {
+            let parsed: InitializeArgs = params.parse()?;
+
+            let db_servers: Vec<vm::VersionedDbServer> = Vec::new();
+            
+
+            let req = Request::new(vm::InitializeRequest {
+                network_id: parsed.network_id,
+                subnet_id: Bytes::from_iter(parsed.subnet_id),
+                chain_id: Bytes::from_iter(parsed.chain_id),
+                node_id: Bytes::from_iter(parsed.node_id),
+                x_chain_id: Bytes::from_iter(parsed.x_chain_id),
+                avax_asset_id: Bytes::from_iter(parsed.avax_asset_id),
+                genesis_bytes: Bytes::from_iter(parsed.genesis_bytes),
+                upgrade_bytes: Bytes::from_iter(parsed.upgrade_bytes),
+                config_bytes: Bytes::from_iter(parsed.config_bytes),
+                db_servers: parsed.db_servers,
+                server_addr: parsed.server_addr
+            });
+
+            Ok(())
+
+
+        });
+
+        // Unimplemented
+        handler.add_method("bootstrapping", |params: Params| async move {
+            Err(get_jsonrpc_error(JRPCErrorCode::MethodNotFound).await)
+        });
+
+        // Unimplemented
+        handler.add_method("bootstrapped", |params: Params| async move {
+            Err(get_jsonrpc_error(JRPCErrorCode::MethodNotFound).await)
+        });
+        // Unimplemented
+        handler.add_method("shutdown", |params: Params| async move {
+            Err(get_jsonrpc_error(JRPCErrorCode::MethodNotFound).await)
+        });
+
+        handler.add_method("set_state", |params: Params| async move {
+            let parsed: SetStateArgs = params.parse()?;
+
+            let req = Request::new(vm::SetStateRequest{
+                state: parsed.state
+            });
+            let result = self.set_state(req).await;
+
+            let result = match result {
+                Ok(x) => Ok(x),
+                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await)
+            }?;
+
+            let resp = result.into_inner();
+
+            let resp = SetStateResponseEng {
+                last_accepted_id: bytes_to_vec(resp.last_accepted_id),
+                last_accepted_parent_id: bytes_to_vec(resp.last_accepted_parent_id),
+                height: resp.height,
+                bytes: bytes_to_vec(resp.bytes)
+            };
+
+            response_to_serialized(&resp).await
+        });
+
+        handler.add_method("get_block", |params: Params| async move {
+            let parsed: GetBlockArgs = params.parse()?;
+            
+            let req = Request::new(vm::GetBlockRequest {
+                id: Bytes::from_iter(parsed.id)
+            });
+
+            let result = self.get_block(req).await;
+            let result = match result {
+                Ok(x) => Ok(x),
+                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await)
+            }?;
+
+            let resp = result.into_inner();
+
+            let resp = GetBlockResponseEng{
+                parent_id: bytes_to_vec(resp.parent_id),
+                bytes: bytes_to_vec(resp.bytes),
+                status: resp.status,
+                height: resp.height,
+                err: resp.err,
+            };
+
+            response_to_serialized(&resp).await
+        });
+
+        handler.add_method("parse_block", |params: Params| async move {
+            let parsed: ParseBlockArgs = params.parse()?;
+
+            let req = Request::new(vm::ParseBlockRequest {
+                bytes: Bytes::from_iter(parsed.bytes)
+            });
+
+            let result = self.parse_block(req).await;
+            let result = match result {
+                Ok(x) => Ok(x),
+                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await)
+            }?;
+
+            let resp = result.into_inner();
+
+            let resp = ParseBlockResponseEng {
+                id: bytes_to_vec(resp.id),
+                parent_id:  bytes_to_vec(resp.parent_id),
+                status: resp.status,
+                height: resp.height
+            };
+
+            response_to_serialized(&resp).await
+        });
+
+        handler.add_method("build_block", |_params: Params| async move {
+            let request = Request::new(Empty{});
+            let result = self.build_block(req).await;
+
+            let result = match result {
+                Ok(x) => Ok(x),
+                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await)
+            }?;
+
+            let resp: vm::BuildBlockResponse = result.into_inner();
+
+            let resp = BuildBlockResponseEng {
+                id: bytes_to_vec(resp.id),
+                parent_id: bytes_to_vec(resp.parent_id),
+                bytes: bytes_to_vec(resp.bytes),
+                height: resp.height
+            };
+
+            response_to_serialized(&resp).await
+        });
+
+        handler.add_method("set_preference", |params: Params| async move {
+            let parsed: SetPreferenceArgs = params.parse()?;
+
+            let req = Request::new(vm::SetPreferenceRequest {
+                id: Bytes::from_iter(parsed.id)
+            });
+
+            let result = self.set_preference(req).await;
+
+            let result = match result {
+                Ok(x) => Ok(x),
+                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await)
+            }?;
+
+            match_serialized(serde_json::from_str("")).await
+        });
+
+        handler.add_method("get_last_state_summary", |_params: Params| async move {
+            let req = Request::new(Empty{});
+
+            let result = self.get_last_state_summary(req).await;
+
+            let result = match result {
+                Ok(x) => Ok(x),
+                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await)
+            }?;
+
+            let resp = result.into_inner();
+
+            let resp = LastStateSummaryResponseEng{
+                id: bytes_to_vec(resp.id),
+                height: resp.height,
+                bytes: bytes_to_vec(resp.bytes),
+                err: resp.err
+            };
+
+            response_to_serialized(&resp).await
+        });
+
+        let handler = HttpHandler {
+            lock_options: 0,
+            handler
+        };
+
+        handlermap.insert(crate::publicservicevm::PUBLICENDPOINT, handler);
+        Ok(handlermap)
     }
 
     // create_static_handlers executes create_static_handlers on the underlying vm implementation.
@@ -371,7 +578,7 @@ impl<V: ChainVm + Send + Sync + 'static> vm::vm_server::Vm for VmServer<V> {
             .initialize()
             .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
-        // If no problems occurred, pass back a valid BuildBlockResponse as a gRCP response
+        // If no problems occurred, pass back a valid BuildBlockResponse as a gRPC response
         Ok(Response::new(vm::BuildBlockResponse {
             id: Bytes::from(block_id.to_vec()),
             parent_id: Bytes::from(block.parent.to_vec()),
@@ -405,7 +612,7 @@ impl<V: ChainVm + Send + Sync + 'static> vm::vm_server::Vm for VmServer<V> {
             .bytes()
             .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
-        // If no problems occurred, pass a ParseBlockResponse as a gRCP response
+        // If no problems occurred, pass a ParseBlockResponse as a gRPC response
         Ok(Response::new(vm::ParseBlockResponse {
             id: Bytes::from(block_id.to_vec()),
             parent_id: Bytes::from(block.parent.to_vec()),
@@ -453,7 +660,7 @@ impl<V: ChainVm + Send + Sync + 'static> vm::vm_server::Vm for VmServer<V> {
             .initialize()
             .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
-        // If no errors occurred, return a valid SetStateResponse as a gRCP response
+        // If no errors occurred, return a valid SetStateResponse as a gRPC response
         Ok(Response::new(vm::SetStateResponse {
             last_accepted_id: Bytes::from(block_id.to_vec()),
             last_accepted_parent_id: Bytes::from(block.parent.to_vec()),
@@ -516,7 +723,7 @@ impl<V: ChainVm + Send + Sync + 'static> vm::vm_server::Vm for VmServer<V> {
         let interior = &self.interior.read().await;
         log::debug!("called version!!");
 
-        // If no errors occurred, return a valid VersionResponse as a gRCP response
+        // If no errors occurred, return a valid VersionResponse as a gRPC response
         Ok(Response::new(vm::VersionResponse {
             version: interior.version.to_string(),
         }))
