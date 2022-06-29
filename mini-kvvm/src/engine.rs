@@ -522,13 +522,20 @@ impl<V: ChainVm + Send + Sync + 'static> vm::vm_server::Vm for VmServer<V> {
             response_to_serialized(&resp).await
         });
 
+        handler.
+
         let handler = HttpHandler {
             lock_options: 0,
             handler,
         };
 
+        handler.
+
         handlermap.insert(crate::publicservicevm::PUBLICENDPOINT, handler);
-        Ok(handlermap)
+
+        let resp = Response::new(vm::CreateHandlersResponse {
+            handlers: handlermap
+        });
     }
 
     // create_static_handlers executes create_static_handlers on the underlying vm implementation.
