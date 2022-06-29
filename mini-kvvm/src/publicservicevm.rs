@@ -5,14 +5,9 @@ use serde::{Deserialize, Serialize};
 
 pub const PUBLICENDPOINT: String = String::from("/kvvm-rs");
 
-#[derive(Deserialize)]
-pub struct SetStateArgs {
-    pub state: u32,
-}
-
 #[derive(Serialize)]
-pub struct SetStateResponse {
-    pub accepted: bool,
+pub struct BuildBlockResponse {
+    pub block: Block,
 }
 
 #[derive(Deserialize)]
@@ -25,6 +20,11 @@ pub struct GetBlockResponse {
     pub block: Block,
 }
 
+#[derive(Serialize)]
+pub struct LastAcceptedResponse {
+    pub id: Id,
+}
+
 #[derive(Deserialize)]
 pub struct ParseBlockArgs {
     pub bytes: Box<[u8]>,
@@ -35,9 +35,14 @@ pub struct ParseBlockResponse {
     pub block: Block,
 }
 
+#[derive(Deserialize)]
+pub struct SetStateArgs {
+    pub state: u32,
+}
+
 #[derive(Serialize)]
-pub struct BuildBlockResponse {
-    pub block: Block,
+pub struct SetStateResponse {
+    pub accepted: bool,
 }
 
 #[derive(Deserialize)]
@@ -48,7 +53,9 @@ pub struct SetPreferenceArgs {
 #[derive(Serialize)]
 pub struct SetPreferenceResponse {}
 
-#[derive(Serialize)]
-pub struct LastAcceptedResponse {
-    pub id: Id,
-}
+
+
+
+
+
+

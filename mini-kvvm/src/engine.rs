@@ -125,10 +125,10 @@ pub trait Vm: AppHandler + Checkable + Connector {
         app_sender: &AppSenderClient<Channel>,
     ) -> Result<()>;
 
-    // Retruns if currently bootstrapping
+    // Returns if currently bootstrapping
     fn bootstrapping() -> Result<()>;
 
-    // Retruns if done bootstrapping
+    // Returns if done bootstrapping
     fn bootstrapped() -> Result<()>;
 
     /// Called when node is shutting down
@@ -326,6 +326,8 @@ impl<V: ChainVm + Send + Sync + 'static> vm::vm_server::Vm for VmServer<V> {
         let mut handlermap = HashMap::new();
         let handler = jsonrpc_core::IoHandler::new();
 
+        
+
         async fn get_jsonrpc_error(code: JRPCErrorCode) -> JsonRPCError {
             JsonRPCError::new(code)
         }
@@ -349,7 +351,6 @@ impl<V: ChainVm + Send + Sync + 'static> vm::vm_server::Vm for VmServer<V> {
             bytes.as_ref().to_vec()
         }
 
-        // Unimplemented
         handler.add_method("initialize", |params: Params| async move {
             let parsed: InitializeArgs = params.parse()?;
 
@@ -522,20 +523,21 @@ impl<V: ChainVm + Send + Sync + 'static> vm::vm_server::Vm for VmServer<V> {
             response_to_serialized(&resp).await
         });
 
-        handler.
-
         let handler = HttpHandler {
             lock_options: 0,
             handler,
         };
 
-        handler.
+        
 
         handlermap.insert(crate::publicservicevm::PUBLICENDPOINT, handler);
 
+        let handler_vec: Vec<vm::Handler> = Vec::new();
+
         let resp = Response::new(vm::CreateHandlersResponse {
-            handlers: handlermap
+            handlers: handler_vec
         });
+        Ok(resp)
     }
 
     // create_static_handlers executes create_static_handlers on the underlying vm implementation.

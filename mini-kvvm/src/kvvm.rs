@@ -251,23 +251,56 @@ impl Vm for ChainVmInterior {
             match_serialized(serde_json::to_value(response)).await
         }
 
-        // Unimplemented
-        handler.add_method("initialize", |params: Params| async move {
-            Err(get_jsonrpc_error(JRPCErrorCode::MethodNotFound).await)
+        handler.add_method("build_block", |_params: Params| async move {
+            let result = ChainVmInterior::build_block(inner).await;
+            let result = match result {
+                Ok(x) => Ok(x),
+                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await),
+            }?;
+
+            let resp = BuildBlockResponse { block: result };
+
+            response_to_serialized(&resp).await
         });
 
-        // Unimplemented
-        handler.add_method("bootstrapping", |params: Params| async move {
-            Err(get_jsonrpc_error(JRPCErrorCode::MethodNotFound).await)
+        handler.add_method("get_block", |params: Params| async move {
+            let parsed: GetBlockArgs = params.parse()?;
+            let result = ChainVmInterior::get_block(inner, parsed.id).await;
+            let result = match result {
+                Ok(x) => Ok(x),
+                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await),
+            }?;
+
+            let resp = GetBlockResponse { block: result };
+
+            response_to_serialized(&resp).await
         });
 
-        // Unimplemented
-        handler.add_method("bootstrapped", |params: Params| async move {
-            Err(get_jsonrpc_error(JRPCErrorCode::MethodNotFound).await)
+        handler.add_method("last_accepted", |_params: Params| async move {
+            let result = ChainVmInterior::last_accepted(inner).await;
+
+            let result = match result {
+                Ok(x) => Ok(x),
+                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await),
+            }?;
+
+            let resp = LastAcceptedResponse { id: result };
+
+            response_to_serialized(&resp).await
         });
-        // Unimplemented
-        handler.add_method("shutdown", |params: Params| async move {
-            Err(get_jsonrpc_error(JRPCErrorCode::MethodNotFound).await)
+
+        handler.add_method("parse_block", |params: Params| async move {
+            let parsed: ParseBlockArgs = params.parse()?;
+
+            let result = ChainVmInterior::parse_block(inner, &parsed.bytes).await;
+            let result = match result {
+                Ok(x) => Ok(x),
+                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await),
+            }?;
+
+            let resp = ParseBlockResponse { block: result };
+
+            response_to_serialized(&resp).await
         });
 
         handler.add_method("set_state", |params: Params| async move {
@@ -290,45 +323,6 @@ impl Vm for ChainVmInterior {
             response_to_serialized(&resp).await
         });
 
-        handler.add_method("get_block", |params: Params| async move {
-            let parsed: GetBlockArgs = params.parse()?;
-            let result = ChainVmInterior::get_block(inner, parsed.id).await;
-            let result = match result {
-                Ok(x) => Ok(x),
-                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await),
-            }?;
-
-            let resp = GetBlockResponse { block: result };
-
-            response_to_serialized(&resp).await
-        });
-
-        handler.add_method("parse_block", |params: Params| async move {
-            let parsed: ParseBlockArgs = params.parse()?;
-
-            let result = ChainVmInterior::parse_block(inner, &parsed.bytes).await;
-            let result = match result {
-                Ok(x) => Ok(x),
-                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await),
-            }?;
-
-            let resp = ParseBlockResponse { block: result };
-
-            response_to_serialized(&resp).await
-        });
-
-        handler.add_method("build_block", |_params: Params| async move {
-            let result = ChainVmInterior::build_block(inner).await;
-            let result = match result {
-                Ok(x) => Ok(x),
-                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await),
-            }?;
-
-            let resp = BuildBlockResponse { block: result };
-
-            response_to_serialized(&resp).await
-        });
-
         handler.add_method("set_preference", |params: Params| async move {
             let parsed: SetPreferenceArgs = params.parse()?;
             let result = ChainVmInterior::set_preference(inner, parsed.id).await;
@@ -343,17 +337,18 @@ impl Vm for ChainVmInterior {
             response_to_serialized(&resp).await
         });
 
-        handler.add_method("last_accepted", |_params: Params| async move {
-            let result = ChainVmInterior::last_accepted(inner).await;
+        // Unimplemented
+        handler.add_method("bootstrapping", |params: Params| async move {
+            Err(get_jsonrpc_error(JRPCErrorCode::MethodNotFound).await)
+        });
 
-            let result = match result {
-                Ok(x) => Ok(x),
-                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await),
-            }?;
-
-            let resp = LastAcceptedResponse { id: result };
-
-            response_to_serialized(&resp).await
+        // Unimplemented
+        handler.add_method("bootstrapped", |params: Params| async move {
+            Err(get_jsonrpc_error(JRPCErrorCode::MethodNotFound).await)
+        });
+        // Unimplemented
+        handler.add_method("shutdown", |params: Params| async move {
+            Err(get_jsonrpc_error(JRPCErrorCode::MethodNotFound).await)
         });
 
         let handler = HttpHandler {
@@ -478,5 +473,9 @@ impl ChainVm for ChainVmInterior {
                 "failed to get last accepted block",
             )),
         }
+    }
+
+    async fn issue_tx() -> Result<()> {
+
     }
 }
