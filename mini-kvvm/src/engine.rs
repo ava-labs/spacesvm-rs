@@ -13,7 +13,7 @@ use avalanche_types::{
     choices::status::Status, ids::node::Id as NodeId, ids::Id, vm::state::State as VmState,
 };
 use jsonrpc_core::{Error as JsonRPCError, ErrorCode as JRPCErrorCode, Params, Value};
-use jsonrpc_http_server::jsonrpc_core::IoHandler;
+use jsonrpc_http_server::{ServerBuilder, jsonrpc_core::IoHandler};
 use prost::bytes::Bytes;
 use semver::Version;
 use tokio::sync::RwLock;
@@ -323,10 +323,9 @@ impl<V: ChainVm + Send + Sync + 'static> vm::vm_server::Vm for VmServer<V> {
         req: Request<Empty>,
     ) -> std::result::Result<Response<vm::CreateHandlersResponse>, tonic::Status> {
         use crate::publicserviceeng::*;
-        let mut handlermap = HashMap::new();
-        let handler = jsonrpc_core::IoHandler::new();
 
-        
+
+        let mut handler = jsonrpc_core::IoHandler::new();
 
         async fn get_jsonrpc_error(code: JRPCErrorCode) -> JsonRPCError {
             JsonRPCError::new(code)
@@ -351,6 +350,8 @@ impl<V: ChainVm + Send + Sync + 'static> vm::vm_server::Vm for VmServer<V> {
             bytes.as_ref().to_vec()
         }
 
+        let newserver = self.clone();
+
         handler.add_method("initialize", |params: Params| async move {
             let parsed: InitializeArgs = params.parse()?;
 
@@ -367,27 +368,26 @@ impl<V: ChainVm + Send + Sync + 'static> vm::vm_server::Vm for VmServer<V> {
             }?;
 
             let resp = result.into_inner();
-
             let resp = InitializeResponseEng::try_from(resp).unwrap();
 
             response_to_serialized(&resp).await
         });
 
         // Unimplemented
-        handler.add_method("bootstrapping", |params: Params| async move {
+        handler.add_method("bootstrapping", |params: Params| async {
             Err(get_jsonrpc_error(JRPCErrorCode::MethodNotFound).await)
         });
 
         // Unimplemented
-        handler.add_method("bootstrapped", |params: Params| async move {
+        handler.add_method("bootstrapped", |params: Params| async {
             Err(get_jsonrpc_error(JRPCErrorCode::MethodNotFound).await)
         });
         // Unimplemented
-        handler.add_method("shutdown", |params: Params| async move {
+        handler.add_method("shutdown", |params: Params| async {
             Err(get_jsonrpc_error(JRPCErrorCode::MethodNotFound).await)
         });
 
-        handler.add_method("set_state", |params: Params| async move {
+        handler.add_method("set_state", |params: Params| async {
             let parsed: SetStateArgs = params.parse()?;
 
             let req = Request::new(vm::SetStateRequest {
@@ -412,7 +412,7 @@ impl<V: ChainVm + Send + Sync + 'static> vm::vm_server::Vm for VmServer<V> {
             response_to_serialized(&resp).await
         });
 
-        handler.add_method("get_block", |params: Params| async move {
+        handler.add_method("get_block", |params: Params| async {
             let parsed: GetBlockArgs = params.parse()?;
 
             let req = Request::new(vm::GetBlockRequest {
@@ -438,7 +438,7 @@ impl<V: ChainVm + Send + Sync + 'static> vm::vm_server::Vm for VmServer<V> {
             response_to_serialized(&resp).await
         });
 
-        handler.add_method("parse_block", |params: Params| async move {
+        handler.add_method("parse_block", |params: Params| async {
             let parsed: ParseBlockArgs = params.parse()?;
 
             let req = Request::new(vm::ParseBlockRequest {
@@ -463,8 +463,8 @@ impl<V: ChainVm + Send + Sync + 'static> vm::vm_server::Vm for VmServer<V> {
             response_to_serialized(&resp).await
         });
 
-        handler.add_method("build_block", |_params: Params| async move {
-            let request = Request::new(Empty {});
+        handler.add_method("build_block", |_params: Params| async {
+            let req = Request::new(Empty {});
             let result = self.build_block(req).await;
 
             let result = match result {
@@ -484,7 +484,7 @@ impl<V: ChainVm + Send + Sync + 'static> vm::vm_server::Vm for VmServer<V> {
             response_to_serialized(&resp).await
         });
 
-        handler.add_method("set_preference", |params: Params| async move {
+        handler.add_method("set_preference", |params: Params| async {
             let parsed: SetPreferenceArgs = params.parse()?;
 
             let req = Request::new(vm::SetPreferenceRequest {
@@ -501,7 +501,7 @@ impl<V: ChainVm + Send + Sync + 'static> vm::vm_server::Vm for VmServer<V> {
             match_serialized(serde_json::from_str("")).await
         });
 
-        handler.add_method("get_last_state_summary", |_params: Params| async move {
+        handler.add_method("get_last_state_summary", |_params: Params| async {
             let req = Request::new(Empty {});
 
             let result = self.get_last_state_summary(req).await;
@@ -523,19 +523,17 @@ impl<V: ChainVm + Send + Sync + 'static> vm::vm_server::Vm for VmServer<V> {
             response_to_serialized(&resp).await
         });
 
-        let handler = HttpHandler {
+        let addr = "http://127.0.0.1:8090";
+        let server = ServerBuilder::new(handler).start_http(&addr.parse().unwrap());
+
+        let handler_vec = vm::Handler {
+            prefix: PUBLICENDPOINT,
             lock_options: 0,
-            handler,
+            server_addr: addr.parse().unwrap()
         };
 
-        
-
-        handlermap.insert(crate::publicservicevm::PUBLICENDPOINT, handler);
-
-        let handler_vec: Vec<vm::Handler> = Vec::new();
-
         let resp = Response::new(vm::CreateHandlersResponse {
-            handlers: handler_vec
+            handlers: vec![handler_vec]
         });
         Ok(resp)
     }
@@ -562,15 +560,15 @@ impl<V: ChainVm + Send + Sync + 'static> vm::vm_server::Vm for VmServer<V> {
     async fn disconnected(
         &self,
         _request: Request<vm::DisconnectedRequest>,
-    ) -> std::result::Result<Response<Empty>, Status> {
+    ) -> std::result::Result<Response<Empty>, tonic::Status> {
         log::info!("disconnected called");
-        Err(Status::unimplemented("disconnected"))
+        Err(tonic::Status::unimplemented("disconnected"))
     }
 
     async fn build_block(
         &self,
         _req: Request<Empty>,
-    ) -> std::result::Result<Response<vm::BuildBlockResponse>, Status> {
+    ) -> std::result::Result<Response<vm::BuildBlockResponse>, tonic::Status> {
         log::debug!("build_block called");
 
         // Build block based on ChainVmInterior data
@@ -611,16 +609,19 @@ impl<V: ChainVm + Send + Sync + 'static> vm::vm_server::Vm for VmServer<V> {
             .initialize()
             .map_err(|e| tonic::Status::unknown(e.to_string()))?;
 
-        let status = block
-            .status()
-            .bytes()
-            .map_err(|e| tonic::Status::unknown(e.to_string()))?;
-
+        // Should be temporary, there probably needs to be some sort of try_into method
+        // Implemented for status
+        let status = match block.status() {
+            Status::Processing => 1,
+            Status::Rejected => 2,
+            Status:: Accepted => 3,
+        };
+            
         // If no problems occurred, pass a ParseBlockResponse as a gRPC response
         Ok(Response::new(vm::ParseBlockResponse {
             id: Bytes::from(block_id.to_vec()),
             parent_id: Bytes::from(block.parent.to_vec()),
-            status: Status::u32::from_ne_bytes(status.to_vec().try_into().unwrap()),
+            status,
             height: block.height(),
             timestamp: Some(grpcutil::timestamp_from_time(block.timestamp())),
         }))
