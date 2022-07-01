@@ -12,8 +12,7 @@ use avalanche_proto::{
 use avalanche_types::{
     choices::status::Status, ids::node::Id as NodeId, ids::Id, vm::state::State as VmState,
 };
-use jsonrpc_core::{Error as JsonRPCError, ErrorCode as JRPCErrorCode, Params, Value};
-use jsonrpc_http_server::{ServerBuilder, jsonrpc_core::IoHandler};
+use jsonrpc_http_server::{jsonrpc_core::IoHandler};
 use prost::bytes::Bytes;
 use semver::Version;
 use tokio::sync::RwLock;
@@ -322,218 +321,23 @@ impl<V: ChainVm + Send + Sync + 'static> vm::vm_server::Vm for VmServer<V> {
         &self,
         req: Request<Empty>,
     ) -> std::result::Result<Response<vm::CreateHandlersResponse>, tonic::Status> {
-        use crate::publicserviceeng::*;
+        let handlers = match V::create_handlers(&self.interior).await {
+            Ok(x) => Ok(x),
+            Err(e) => Err(tonic::Status::unknown("failed to create handlers"))
+        }?;
 
-
-        let mut handler = jsonrpc_core::IoHandler::new();
-
-        async fn get_jsonrpc_error(code: JRPCErrorCode) -> JsonRPCError {
-            JsonRPCError::new(code)
+        let resp_handlers = Vec::new();
+        for (prefix, handler) in handlers {
+            let resp_handler = vm::Handler {
+                prefix,
+                lock_options: 0,
+                server_addr: "".parse().unwrap()
+            };
+            resp_handlers.push(resp_handler);
         }
-
-        /// Converts serde_json result to a jsonrpc_core result
-        async fn match_serialized(data: serde_json::Result<Value>) -> jsonrpc_core::Result<Value> {
-            match data {
-                Ok(x) => Ok(x),
-                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::ParseError).await),
-            }
-        }
-
-        /// Converts any serializable response [T] to json format
-        async fn response_to_serialized<T: serde::Serialize>(
-            response: &T,
-        ) -> jsonrpc_core::Result<Value> {
-            match_serialized(serde_json::to_value(response)).await
-        }
-
-        fn bytes_to_vec(bytes: Bytes) -> Vec<u8> {
-            bytes.as_ref().to_vec()
-        }
-
-        let newserver = self.clone();
-
-        handler.add_method("initialize", |params: Params| async move {
-            let parsed: InitializeArgs = params.parse()?;
-
-            let req: vm::InitializeRequest = match parsed.try_into() {
-                Ok(x) => Ok(x),
-                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await),
-            }?;
-
-            let req = Request::new(req);
-            let result = self.initialize(req).await;
-            let result = match result {
-                Ok(x) => Ok(x),
-                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await),
-            }?;
-
-            let resp = result.into_inner();
-            let resp = InitializeResponseEng::try_from(resp).unwrap();
-
-            response_to_serialized(&resp).await
-        });
-
-        // Unimplemented
-        handler.add_method("bootstrapping", |params: Params| async {
-            Err(get_jsonrpc_error(JRPCErrorCode::MethodNotFound).await)
-        });
-
-        // Unimplemented
-        handler.add_method("bootstrapped", |params: Params| async {
-            Err(get_jsonrpc_error(JRPCErrorCode::MethodNotFound).await)
-        });
-        // Unimplemented
-        handler.add_method("shutdown", |params: Params| async {
-            Err(get_jsonrpc_error(JRPCErrorCode::MethodNotFound).await)
-        });
-
-        handler.add_method("set_state", |params: Params| async {
-            let parsed: SetStateArgs = params.parse()?;
-
-            let req = Request::new(vm::SetStateRequest {
-                state: parsed.state,
-            });
-            let result = self.set_state(req).await;
-
-            let result = match result {
-                Ok(x) => Ok(x),
-                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await),
-            }?;
-
-            let resp = result.into_inner();
-
-            let resp = SetStateResponseEng {
-                last_accepted_id: bytes_to_vec(resp.last_accepted_id),
-                last_accepted_parent_id: bytes_to_vec(resp.last_accepted_parent_id),
-                height: resp.height,
-                bytes: bytes_to_vec(resp.bytes),
-            };
-
-            response_to_serialized(&resp).await
-        });
-
-        handler.add_method("get_block", |params: Params| async {
-            let parsed: GetBlockArgs = params.parse()?;
-
-            let req = Request::new(vm::GetBlockRequest {
-                id: Bytes::from_iter(parsed.id),
-            });
-
-            let result = self.get_block(req).await;
-            let result = match result {
-                Ok(x) => Ok(x),
-                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await),
-            }?;
-
-            let resp = result.into_inner();
-
-            let resp = GetBlockResponseEng {
-                parent_id: bytes_to_vec(resp.parent_id),
-                bytes: bytes_to_vec(resp.bytes),
-                status: resp.status,
-                height: resp.height,
-                err: resp.err,
-            };
-
-            response_to_serialized(&resp).await
-        });
-
-        handler.add_method("parse_block", |params: Params| async {
-            let parsed: ParseBlockArgs = params.parse()?;
-
-            let req = Request::new(vm::ParseBlockRequest {
-                bytes: Bytes::from_iter(parsed.bytes),
-            });
-
-            let result = self.parse_block(req).await;
-            let result = match result {
-                Ok(x) => Ok(x),
-                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await),
-            }?;
-
-            let resp = result.into_inner();
-
-            let resp = ParseBlockResponseEng {
-                id: bytes_to_vec(resp.id),
-                parent_id: bytes_to_vec(resp.parent_id),
-                status: resp.status,
-                height: resp.height,
-            };
-
-            response_to_serialized(&resp).await
-        });
-
-        handler.add_method("build_block", |_params: Params| async {
-            let req = Request::new(Empty {});
-            let result = self.build_block(req).await;
-
-            let result = match result {
-                Ok(x) => Ok(x),
-                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await),
-            }?;
-
-            let resp: vm::BuildBlockResponse = result.into_inner();
-
-            let resp = BuildBlockResponseEng {
-                id: bytes_to_vec(resp.id),
-                parent_id: bytes_to_vec(resp.parent_id),
-                bytes: bytes_to_vec(resp.bytes),
-                height: resp.height,
-            };
-
-            response_to_serialized(&resp).await
-        });
-
-        handler.add_method("set_preference", |params: Params| async {
-            let parsed: SetPreferenceArgs = params.parse()?;
-
-            let req = Request::new(vm::SetPreferenceRequest {
-                id: Bytes::from_iter(parsed.id),
-            });
-
-            let result = self.set_preference(req).await;
-
-            let result = match result {
-                Ok(x) => Ok(x),
-                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await),
-            }?;
-
-            match_serialized(serde_json::from_str("")).await
-        });
-
-        handler.add_method("get_last_state_summary", |_params: Params| async {
-            let req = Request::new(Empty {});
-
-            let result = self.get_last_state_summary(req).await;
-
-            let result = match result {
-                Ok(x) => Ok(x),
-                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await),
-            }?;
-
-            let resp = result.into_inner();
-
-            let resp = LastStateSummaryResponseEng {
-                id: bytes_to_vec(resp.id),
-                height: resp.height,
-                bytes: bytes_to_vec(resp.bytes),
-                err: resp.err,
-            };
-
-            response_to_serialized(&resp).await
-        });
-
-        let addr = "http://127.0.0.1:8090";
-        let server = ServerBuilder::new(handler).start_http(&addr.parse().unwrap());
-
-        let handler_vec = vm::Handler {
-            prefix: PUBLICENDPOINT,
-            lock_options: 0,
-            server_addr: addr.parse().unwrap()
-        };
 
         let resp = Response::new(vm::CreateHandlersResponse {
-            handlers: vec![handler_vec]
+            handlers: resp_handlers
         });
         Ok(resp)
     }
