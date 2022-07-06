@@ -2,7 +2,7 @@
 name = "avalanche-proto"
 version = "0.15.0"
 edition = "2021"
-rust-version = "1.61"
+rust-version = "1.62"
 publish = true
 description = "Protobuf generated client and server resources for Avalanche gRPC in rust"
 license = "BSD-3-Clause"

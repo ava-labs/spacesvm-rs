@@ -9,7 +9,7 @@ use avalanche_types::{
     vm::state::State as VmState,
 };
 use chrono::{DateTime, NaiveDateTime, Utc};
-use jsonrpc_core::{Error as JsonRPCError, ErrorCode as JRPCErrorCode, Params, Value};
+use jsonrpc_core::{Error as JsonRPCError, ErrorCode as JRPCErrorCode, Params, Value, RpcMethodSimple};
 use semver::Version;
 use std::{
     collections::HashMap,
@@ -225,11 +225,12 @@ impl Vm for ChainVmInterior {
     }
 
     async fn create_handlers(
-        inner: &'static Arc<RwLock<ChainVmInterior>>,
+        inner: Arc<RwLock<ChainVmInterior>>,
     ) -> Result<HashMap<String, HttpHandler>> {
         use crate::publicservicevm::*;
         let mut handlermap = HashMap::new();
         let mut handler = jsonrpc_core::IoHandler::new();
+
 
         async fn get_jsonrpc_error(code: JRPCErrorCode) -> JsonRPCError {
             JsonRPCError::new(code)
@@ -250,8 +251,24 @@ impl Vm for ChainVmInterior {
             match_serialized(serde_json::to_value(response)).await
         }
 
-        handler.add_method("build_block", |_params: Params| async {
+        async fn build_block(params: Params) -> std::result::Result<Value, jsonrpc_core::Error> {
             let result = ChainVmInterior::build_block(&inner).await;
+            let result = match result {
+                Ok(x) => Ok(x),
+                Err(_) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await),
+            }?;
+
+            let resp = BuildBlockResponse { block: result };
+
+            response_to_serialized(&resp).await
+        }
+
+        handler.add_method("build_block", build_block);
+
+
+        handler.add_method("build_block", |_params: Params| async move {
+            let vm = &inner.read().await;
+            let result = ChainVmInterior::build_block(vm).await;
             let result = match result {
                 Ok(x) => Ok(x),
                 Err(_) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await),
@@ -264,7 +281,7 @@ impl Vm for ChainVmInterior {
 
         handler.add_method("get_block", |params: Params| async {
             let parsed: GetBlockArgs = params.parse()?;
-            let result = ChainVmInterior::get_block(&inner, parsed.id).await;
+            let result = ChainVmInterior::get_block(&inner.clone(), parsed.id).await;
             let result = match result {
                 Ok(x) => Ok(x),
                 Err(_) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await),
@@ -276,7 +293,7 @@ impl Vm for ChainVmInterior {
         });
 
         handler.add_method("last_accepted", |_params: Params| async {
-            let result = ChainVmInterior::last_accepted(&inner).await;
+            let result = ChainVmInterior::last_accepted(&inner.clone()).await;
 
             let result = match result {
                 Ok(x) => Ok(x),
@@ -291,7 +308,7 @@ impl Vm for ChainVmInterior {
         handler.add_method("parse_block", |params: Params| async {
             let parsed: ParseBlockArgs = params.parse()?;
 
-            let result = ChainVmInterior::parse_block(&inner, &parsed.bytes).await;
+            let result = ChainVmInterior::parse_block(&inner.clone(), &parsed.bytes).await;
             let result = match result {
                 Ok(x) => Ok(x),
                 Err(_) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await),
@@ -311,7 +328,7 @@ impl Vm for ChainVmInterior {
                 Err(_) => Err(get_jsonrpc_error(JRPCErrorCode::InvalidParams).await),
             }?;
 
-            let result = ChainVmInterior::set_state(&inner, state).await;
+            let result = ChainVmInterior::set_state(&inner.clone(), state).await;
             let result: bool = match result {
                 Ok(_result) => true,
                 Err(_) => false,
@@ -324,7 +341,7 @@ impl Vm for ChainVmInterior {
 
         handler.add_method("set_preference", |params: Params| async {
             let parsed: SetPreferenceArgs = params.parse()?;
-            let result = ChainVmInterior::set_preference(&inner, parsed.id).await;
+            let result = ChainVmInterior::set_preference(&inner.clone(), parsed.id).await;
 
             let result = match result {
                 Ok(x) => Ok(x),

@@ -1,4 +1,4 @@
 pub struct RpcClient {
-    httpClient: u32,
+    http_Client: u32,
     rpcAddr: String,
 }
