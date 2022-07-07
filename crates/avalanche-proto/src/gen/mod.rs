@@ -12,12 +12,6 @@ pub mod appsender {
     // @@protoc_insertion_point(appsender)
 }
 pub mod google {
-    #[cfg(feature = "google_api")]
-    // @@protoc_insertion_point(attribute:google.api)
-    pub mod api {
-        include!("google.api.rs");
-        // @@protoc_insertion_point(google.api)
-    }
     #[cfg(feature = "google_protobuf")]
     // @@protoc_insertion_point(attribute:google.protobuf)
     pub mod protobuf {

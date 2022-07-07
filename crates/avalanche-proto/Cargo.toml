@@ -2,7 +2,7 @@
 name = "avalanche-proto"
 version = "0.15.1"
 edition = "2021"
-rust-version = "1.61"
+rust-version = "1.62"
 publish = true
 description = "Protobuf generated client and server resources for Avalanche gRPC in rust"
 license = "BSD-3-Clause"
@@ -14,7 +14,6 @@ default = ["proto_full"]
 proto_full = ["aliasreader","appsender","google_protobuf","http","http_responsewriter","io_prometheus_client","io_reader","io_writer","keystore","messenger","net_conn","plugin","rpcdb","sharedmemory","subnetlookup","vm"]
 aliasreader = []
 appsender = ["google_protobuf"]
-google_api = []
 google_protobuf = []
 helloworld = []
 http = []
@@ -46,8 +45,8 @@ tonic-health = "0.6"
 tonic-reflection = "0.4.0"
 
 [build-dependencies]
-protoc-gen-prost = "0.1.3"
-protoc-gen-tonic = "0.1.0"
+protoc-gen-prost = "0.1.4"
+protoc-gen-tonic = "0.1.1"
 
 # Prevent cargo-udeps failing with the build dependencies. Without the protoc
 # plugins it will fail to compile tonic-health and possibly others.
