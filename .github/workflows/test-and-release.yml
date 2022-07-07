@@ -46,7 +46,7 @@ jobs:
         with:
           submodules: recursive
       - name: Install Buf
-        uses: bufbuild/buf-setup-action@v1.3.1
+        uses: bufbuild/buf-setup-action@v1.5.0
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
@@ -135,7 +135,7 @@ jobs:
         with:
           cache-on-failure: true
       - name: Run e2e tests
-        run: scripts/tests.e2e.sh 1.7.10
+        run: scripts/tests.e2e.sh 1.7.14
 
   release:
     name: Release ${{ matrix.job.target }} (${{ matrix.job.os }})
@@ -164,7 +164,7 @@ jobs:
         with:
           submodules: recursive
       - name: Install Buf
-        uses: bufbuild/buf-setup-action@v1.4.0
+        uses: bufbuild/buf-setup-action@v1.5.0
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
