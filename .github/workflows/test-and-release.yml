@@ -45,8 +45,6 @@ jobs:
         uses: actions/checkout@v2
         with:
           submodules: recursive
-      - name: Install Buf
-        uses: bufbuild/buf-setup-action@v1.5.0
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
@@ -59,21 +57,6 @@ jobs:
       - uses: Swatinem/rust-cache@v1
         with:
           cache-on-failure: true
-      - name: Install protoc-gen-prost
-        uses: actions-rs/install@v0.1
-        with:
-          crate: protoc-gen-prost
-          version: latest
-      - name: Install protoc-gen-tonic
-        uses: actions-rs/install@v0.1
-        with:
-          crate: protoc-gen-tonic
-          version: latest
-      - name: Install protoc-gen-prost-crate
-        uses: actions-rs/install@v0.1
-        with:
-          crate: protoc-gen-prost-crate
-          version: latest
       - name: Check unused Cargo dependencies
         shell: bash
         run: scripts/tests.unused.sh
@@ -83,11 +66,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
-        with:
-          submodules: recursive
-      - name: Install Buf
-        uses: bufbuild/buf-setup-action@v1.5.0
+        uses: actions/checkout@v3
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
@@ -99,21 +78,6 @@ jobs:
       - uses: Swatinem/rust-cache@v1
         with:
           cache-on-failure: true
-      - name: Install protoc-gen-prost
-        uses: actions-rs/install@v0.1
-        with:
-          crate: protoc-gen-prost
-          version: latest
-      - name: Install protoc-gen-tonic
-        uses: actions-rs/install@v0.1
-        with:
-          crate: protoc-gen-tonic
-          version: latest
-      - name: Install protoc-gen-prost-crate
-        uses: actions-rs/install@v0.1
-        with:
-          crate: protoc-gen-prost-crate
-          version: latest
       - name: Run unit tests
         run: scripts/tests.unit.sh
 
@@ -162,9 +126,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
         with:
-          submodules: recursive
-      - name: Install Buf
-        uses: bufbuild/buf-setup-action@v1.5.0
+          submodules: recursive 
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
@@ -174,25 +136,9 @@ jobs:
           override: true
       - name: Check Rust version
         run: rustc --version
-
       - uses: Swatinem/rust-cache@v1
         with:
           cache-on-failure: true
-      - name: Install protoc-gen-prost
-        uses: actions-rs/install@v0.1
-        with:
-          crate: protoc-gen-prost
-          version: latest
-      - name: Install protoc-gen-tonic
-        uses: actions-rs/install@v0.1
-        with:
-          crate: protoc-gen-tonic
-          version: latest
-      - name: Install protoc-gen-prost-crate
-        uses: actions-rs/install@v0.1
-        with:
-          crate: protoc-gen-prost-crate
-          version: latest
 
       # ref. https://github.com/gakonst/foundry/blob/master/.github/workflows/cross-platform.yml
       - name: Apple M1 setup
