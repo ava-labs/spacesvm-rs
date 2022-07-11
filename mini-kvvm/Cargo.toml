@@ -16,14 +16,15 @@ path = "src/bin/mini-kvvm/main.rs"
 [dependencies]
 async-trait = "0.1.53"
 avalanche-proto = { version = "0.15.1" }
-avalanche-types = { version = "0.0.20", features = ["proto"] }
-avalanche-utils = { version="0.0.11", features = ["rfc3339"] }
+avalanche-types = { version = "0.0.22" }
+avalanche-utils = { version="0.0.12", features = ["rfc3339"] }
 bytes = "1.1.0"
 chrono = "0.4.19"
 clap = { version = "3.1.8", features = ["cargo", "derive"] }
 env_logger = "0.9.0"
 hmac-sha256 = "1.1"
 jsonrpc-core = "18.0"
+jsonrpc-derive = "18.0"
 jsonrpc-http-server = "18.0"
 log = "0.4.16"
 num-traits = "0.2.15"

@@ -211,7 +211,7 @@ impl Vm for ChainVmInterior {
                 log::debug!("set_state: normal op");
                 vm.bootstrapped = true;
                 Ok(())
-            }
+            }inner: &Arc<RwLock<ChainVmInterior>>,
             Err(_) => Err(Error::new(ErrorKind::Other, "failed to accept block")),
         }
     }
@@ -224,156 +224,8 @@ impl Vm for ChainVmInterior {
         Ok(HashMap::new())
     }
 
-    async fn create_handlers(
-        inner: Arc<RwLock<ChainVmInterior>>,
-    ) -> Result<HashMap<String, HttpHandler>> {
-        use crate::publicservicevm::*;
-        let mut handlermap = HashMap::new();
-        let mut handler = jsonrpc_core::IoHandler::new();
-
-
-        async fn get_jsonrpc_error(code: JRPCErrorCode) -> JsonRPCError {
-            JsonRPCError::new(code)
-        }
-
-        /// Converts serde_json result to a jsonrpc_core result
-        async fn match_serialized(data: serde_json::Result<Value>) -> jsonrpc_core::Result<Value> {
-            match data {
-                Ok(x) => Ok(x),
-                Err(_) => Err(get_jsonrpc_error(JRPCErrorCode::ParseError).await),
-            }
-        }
-
-        /// Converts any serializable response [T] to json format
-        async fn response_to_serialized<T: serde::Serialize>(
-            response: &T,
-        ) -> jsonrpc_core::Result<Value> {
-            match_serialized(serde_json::to_value(response)).await
-        }
-
-        async fn build_block(params: Params) -> std::result::Result<Value, jsonrpc_core::Error> {
-            let result = ChainVmInterior::build_block(&inner).await;
-            let result = match result {
-                Ok(x) => Ok(x),
-                Err(_) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await),
-            }?;
-
-            let resp = BuildBlockResponse { block: result };
-
-            response_to_serialized(&resp).await
-        }
-
-        handler.add_method("build_block", build_block);
-
-
-        handler.add_method("build_block", |_params: Params| async move {
-            let vm = &inner.read().await;
-            let result = ChainVmInterior::build_block(vm).await;
-            let result = match result {
-                Ok(x) => Ok(x),
-                Err(_) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await),
-            }?;
-
-            let resp = BuildBlockResponse { block: result };
-
-            response_to_serialized(&resp).await
-        });
-
-        handler.add_method("get_block", |params: Params| async {
-            let parsed: GetBlockArgs = params.parse()?;
-            let result = ChainVmInterior::get_block(&inner.clone(), parsed.id).await;
-            let result = match result {
-                Ok(x) => Ok(x),
-                Err(_) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await),
-            }?;
-
-            let resp = GetBlockResponse { block: result };
-
-            response_to_serialized(&resp).await
-        });
-
-        handler.add_method("last_accepted", |_params: Params| async {
-            let result = ChainVmInterior::last_accepted(&inner.clone()).await;
-
-            let result = match result {
-                Ok(x) => Ok(x),
-                Err(_) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await),
-            }?;
-
-            let resp = LastAcceptedResponse { id: result };
-
-            response_to_serialized(&resp).await
-        });
-
-        handler.add_method("parse_block", |params: Params| async {
-            let parsed: ParseBlockArgs = params.parse()?;
-
-            let result = ChainVmInterior::parse_block(&inner.clone(), &parsed.bytes).await;
-            let result = match result {
-                Ok(x) => Ok(x),
-                Err(_) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await),
-            }?;
-
-            let resp = ParseBlockResponse { block: result };
-
-            response_to_serialized(&resp).await
-        });
-
-        handler.add_method("set_state", |params: Params| async {
-            let parsed: SetStateArgs = params.parse()?;
-            let state = VmState::try_from(parsed.state);
-            let state = match state {
-                //if state does not match, propogate error
-                Ok(x) => Ok(x),
-                Err(_) => Err(get_jsonrpc_error(JRPCErrorCode::InvalidParams).await),
-            }?;
-
-            let result = ChainVmInterior::set_state(&inner.clone(), state).await;
-            let result: bool = match result {
-                Ok(_result) => true,
-                Err(_) => false,
-            };
-
-            let resp = SetStateResponse { accepted: result };
-
-            response_to_serialized(&resp).await
-        });
-
-        handler.add_method("set_preference", |params: Params| async {
-            let parsed: SetPreferenceArgs = params.parse()?;
-            let result = ChainVmInterior::set_preference(&inner.clone(), parsed.id).await;
-
-            let result = match result {
-                Ok(x) => Ok(x),
-                Err(e) => Err(get_jsonrpc_error(JRPCErrorCode::InternalError).await),
-            }?;
-
-            let resp = SetPreferenceResponse {};
-
-            response_to_serialized(&resp).await
-        });
-
-        // Unimplemented
-        handler.add_method("bootstrapping", |_params: Params| async {
-            Err(get_jsonrpc_error(JRPCErrorCode::MethodNotFound).await)
-        });
-
-        // Unimplemented
-        handler.add_method("bootstrapped", |_params: Params| async {
-            Err(get_jsonrpc_error(JRPCErrorCode::MethodNotFound).await)
-        });
-        // Unimplemented
-        handler.add_method("shutdown", |_params: Params| async {
-            Err(get_jsonrpc_error(JRPCErrorCode::MethodNotFound).await)
-        });
-
-        let handler = HttpHandler {
-            lock_options: 0,
-            handler,
-        };
-
-        handlermap.insert(crate::publicservicevm::PUBLICENDPOINT, handler);
-        Ok(handlermap)
+    async fn create_handlers(inner: &Arc<RwLock<ChainVmInterior>>) -> Result<HashMap<String, HttpHandler>> {
+        
     }
 }
 
