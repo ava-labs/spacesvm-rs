@@ -1,30 +1,29 @@
-#![allow(dead_code)]
-#![allow(unused_imports)]
 
-use std::sync::{Arc, Mutex};
 
-use avalanche_proto::vm::vm_server::Vm;
-
-#[derive(Debug)]
-pub struct Handler {
-    db: Db,
+pub struct Vm {
+    inner: Arc<RwLock<HashMap<Vec<u8>, Vec<u8>>>>,
+    closed: AtomicBool,
 }
 
-#[derive(Debug, Clone)]
-struct Db {
-    shared: Arc<Shared>,
+// Database is local scope which allows the following usage.
+// database::memdb::Database::new()
+impl Vm {
+    pub fn new() -> Box<dyn crate::rpcchainvm::database::Database + Send + Sync> {
+        let state: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
+        Box::new(Database {
+            inner: Arc::new(RwLock::new(state)),
+            closed: AtomicBool::new(false),
+        })
+    }
 }
 
-#[derive(Debug)]
-struct Shared {
-    state: Mutex<State>,
-}
+/// pub trait ChainVm: Vm + Getter + Parser {}
+impl crate::rpcchainvm::block::ChainVm for Vm {}
 
-#[derive(Debug)]
-struct State {
-    bootstrapped: bool,
-}
+#[tonic::async_trait]
+impl crate::rpcchainvm::block::Getter for Database {}
+impl crate::rpcchainvm::block::Parser for Database {}
+impl crate::rpcchainvm::common::Vm for Database {}
 
-// impl Vm for Handler {
-// TODO
-// }
+
+/// ...
