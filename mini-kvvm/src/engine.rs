@@ -419,6 +419,7 @@ impl<V: ChainVm + Send + Sync + 'static> vm::vm_server::Vm for VmServer<V> {
             Status::Processing => 1,
             Status::Rejected => 2,
             Status:: Accepted => 3,
+            _ => Err(tonic::Status::unknown("could not match block status"))
         };
             
         // If no problems occurred, pass a ParseBlockResponse as a gRPC response

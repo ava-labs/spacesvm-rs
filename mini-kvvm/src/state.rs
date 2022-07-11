@@ -47,9 +47,10 @@ impl State {
 
     pub async fn get(&self, key: Vec<u8>) -> Result<Option<Vec<u8>>> {
         let key = prost::bytes::Bytes::from(key);
-        let mut client = self.client.clone().unwrap();
+        let mut client = self.client.clone()?;
+        
 
-        let resp = client.get(GetRequest { key }).await.unwrap().into_inner();
+        let resp = client.get(GetRequest { key }).await?.into_inner();
 
         log::info!("state get response: {:?}", resp);
 
@@ -71,8 +72,7 @@ impl State {
 
         let resp = client
             .put(PutRequest { key, value })
-            .await
-            .unwrap()
+            .await?
             .into_inner();
 
         let err = DatabaseError::from_u32(resp.err);

@@ -3,5 +3,6 @@ members = [
     "mini-kvvm",
     "crates/avalanche-proto",
     "tests/e2e",
-    "client"
+    "client",
+    "api-poc"
 ]
