@@ -196,6 +196,7 @@ impl Vm for ChainVmInterior {
                 vm.bootstrapped = false;
                 Ok(())
             }
+            
             Ok(VmState::StateSyncing) => {
                 log::debug!("set_state: state syncing");
                 Err(Error::new(ErrorKind::Other, "state sync is not supported"))
@@ -211,7 +212,7 @@ impl Vm for ChainVmInterior {
                 log::debug!("set_state: normal op");
                 vm.bootstrapped = true;
                 Ok(())
-            }inner: &Arc<RwLock<ChainVmInterior>>,
+            }
             Err(_) => Err(Error::new(ErrorKind::Other, "failed to accept block")),
         }
     }
@@ -220,12 +221,27 @@ impl Vm for ChainVmInterior {
     fn version() -> Result<String> {
         Ok("".to_string())
     }
+    
     fn create_static_handlers() -> Result<HashMap<String, HttpHandler>> {
         Ok(HashMap::new())
     }
 
-    async fn create_handlers(inner: &Arc<RwLock<ChainVmInterior>>) -> Result<HashMap<String, HttpHandler>> {
+    pub async fn create_handlers(vm: Arc<RwLock<ChainVmInterior>>) -> std::io::Result<HashMap<String, HttpHandler>>{
+        use super::{handlers::HandlersServiceImpl, publicservicevm::PUBLICENDPOINT};
+
+        let mut io = IoHandler::new();
+        let service = HandlersServiceImpl {vm}; 
+
+        // Allow [io] to handle methods defined in publicservicevm and implemented in handlers
+        io.extend_with(service.to_delegate());  
+        let http_handler = HttpHandler::new_from_u8(0, io)
+            .map_err(|_| {
+                std::io::Error::from(std::io::ErrorKind::InvalidData)
+            })?;
         
+        let mut handlers = HashMap::new();
+        handlers.insert(String::from(PUBLICENDPOINT), http_handler);
+        Ok(handlers)
     }
 }
 

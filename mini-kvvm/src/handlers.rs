@@ -1,3 +1,5 @@
+//Implementation of publicservicevm
+
 use avalanche_types::vm::{state::State as VmState, engine::common::HttpHandler};
 
 use jsonrpc_core::{Error as JsonRPCError, ErrorCode as JRPCErrorCode, Result, IoHandler, BoxFuture};
@@ -5,9 +7,11 @@ use jsonrpc_derive::rpc;
 use std::{sync::Arc, collections::HashMap};
 use tokio::sync::RwLock;
 
+use super::engine::{ChainVm, Getter, Parser, Vm}; //need to import these so chainvm can call methods
 use super::publicservicevm::*;
 use super::kvvm::ChainVmInterior;
 
+/// Defines the kinds of methods the kvvm api can handle
 #[rpc(server)]
 pub trait HandlersService {
     
@@ -30,11 +34,12 @@ pub trait HandlersService {
     fn set_preference(&self, params: SetPreferenceArgs) -> BoxFuture<Result<()>>;
 }
 
-struct HandlersServiceImpl {
+/// Implementation of handlers
+pub struct HandlersServiceImpl {
     vm: Arc<RwLock<ChainVmInterior>>
 }
 
-// Edit to pass error messages through jsonrpc error
+// TODO: Edit to pass error messages through jsonrpc error
 fn create_jsonrpc_error(_: std::io::Error) -> JsonRPCError{
     JsonRPCError::new(JRPCErrorCode::InternalError)
 }
@@ -124,19 +129,4 @@ impl HandlersService for HandlersServiceImpl {
             Ok(())
         })
     }
-}
-
-pub async fn create_handlers(vm: Arc<RwLock<ChainVmInterior>>) -> std::io::Result<HashMap<String, HttpHandler>>{
-    let mut io = IoHandler::new();
-    let service = HandlersServiceImpl {vm};
-    io.extend_with(service.to_delegate());
-    let http_handler = HttpHandler::new_from_u8(0, io)
-        .map_err(|_| {
-            std::io::Error::from(std::io::ErrorKind::InvalidData)
-        })?;
-    
-    let mut handlers = HashMap::new();
-
-    handlers.insert(String::from(PUBLICENDPOINT), http_handler);
-    Ok(handlers)
 }

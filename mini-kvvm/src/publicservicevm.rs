@@ -1,9 +1,12 @@
+// JsonRPC service definitions for kvvm
+
+
 use crate::block::Block;
 use avalanche_types::ids::Id;
 use jsonrpc_core::*;
 use serde::{Deserialize, Serialize};
 
-pub const PUBLICENDPOINT: String = String::from("/kvvm-rs");
+pub const PUBLICENDPOINT: String = String::from("/kvvm-rs"); //used for this service's endpoint
 
 #[derive(Serialize)]
 pub struct BuildBlockResponse {
@@ -52,10 +55,3 @@ pub struct SetPreferenceArgs {
 
 #[derive(Serialize)]
 pub struct SetPreferenceResponse {}
-
-
-
-
-
-
-

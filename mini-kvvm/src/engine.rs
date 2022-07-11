@@ -141,7 +141,7 @@ pub trait Vm: AppHandler + Checkable + Connector {
 
     /// Creates HTTP handlers for custom chain network calls
     async fn create_handlers(
-        inner: Arc<RwLock<ChainVmInterior>>,
+        inner: &Arc<RwLock<ChainVmInterior>>,
     ) -> Result<HashMap<String, HttpHandler>>;
 
     /// Communicates to the Vm the next state which it should be in
@@ -321,7 +321,7 @@ impl<V: ChainVm + Send + Sync + 'static> vm::vm_server::Vm for VmServer<V> {
         &self,
         req: Request<Empty>,
     ) -> std::result::Result<Response<vm::CreateHandlersResponse>, tonic::Status> {
-        let handlers = match V::create_handlers(self.interior.clone()).await {
+        let handlers = match V::create_handlers(&self.interior.clone()).await {
             Ok(x) => Ok(x),
             Err(e) => Err(tonic::Status::unknown("failed to create handlers"))
         }?;

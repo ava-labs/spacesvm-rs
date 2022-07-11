@@ -16,7 +16,7 @@ path = "src/bin/mini-kvvm/main.rs"
 [dependencies]
 async-trait = "0.1.53"
 avalanche-proto = { version = "0.15.1" }
-avalanche-types = { version = "0.0.22" }
+avalanche-types = { version = "0.0.23", features = ["proto"]}
 avalanche-utils = { version="0.0.12", features = ["rfc3339"] }
 bytes = "1.1.0"
 chrono = "0.4.19"
