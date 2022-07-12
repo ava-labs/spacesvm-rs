@@ -9,7 +9,7 @@ use avalanche_proto::rpcdb::database_client::DatabaseClient;
 use tokio::sync::RwLock;
 use tonic::transport::Channel;
 
-use crate::block::Block;
+use crate::chain::block::StatelessBlock;
 
 use avalanche_types::ids::{Id, ID_LEN};
 
@@ -43,7 +43,7 @@ impl State {
 /// then also persists the prefix_block_key + block_id = serialized block as the value.
 pub async fn set_last_accepted(
     db: Box<dyn avalanche_types::rpcchainvm::database::Database + Send + Sync>,
-    block: &Block,
+    block: &StatelessBlock,
 ) -> Result<()> {
     let block_id = block
         .initalize()
@@ -61,13 +61,29 @@ pub async fn set_last_accepted(
     Ok(())
 }
 
-/// Attempts to retrieve the last accepted block and return the corresponding 
+/// Attempts to retrieve the last accepted block and return the corresponding
 /// block Id.
 pub async fn get_last_accepted(
     db: Box<dyn avalanche_types::rpcchainvm::database::Database + Send + Sync>,
 ) -> Result<Id> {
     match db.get(LAST_ACCEPTED_BLOCK_KEY).await {
         Ok(value) => Ok(Id::from_slice(&value)),
+        Err(e) => {
+            if e.kind() == ErrorKind::Other && e.to_string().contains("not found") {
+                return Ok(Id::empty());
+            }
+            return Err(e);
+        }
+    }
+}
+
+/// Attempts to return block from state given a valid block id.
+pub async fn get_block(
+    db: Box<dyn avalanche_types::rpcchainvm::database::Database + Send + Sync>,
+    block_id: Id,
+) -> Result<StatelessBlock> {
+    match db.get(prefix_block_key(&block_id)).await {
+        Ok(value) => Ok(serde_json::from_slice(&value)?),
         Err(e) => {
             if e.kind() == ErrorKind::Other && e.to_string().contains("not found") {
                 return Ok(Id::empty());

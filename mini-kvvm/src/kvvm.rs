@@ -1,18 +1,80 @@
+use std::{
+    collections::HashMap,
+    convert::TryInto,
+    io::{Error, ErrorKind, Result},
+    sync::Arc,
+    time,
+};
 
+use avalanche_proto::{
+    appsender::app_sender_client::AppSenderClient, messenger::messenger_client::MessengerClient,
+};
+use avalanche_types::{
+    choices::status::Status,
+    ids::{node::Id as NodeId, Id},
+    rpcchainvm::{
+        block::Parser, database::manager::{
+        versioned_database::VersionedDatabase,
+        Manager,
+        },
+    },
+    vm::state::State as VmState,
+    vm::context::Context,
+};
+use chrono::{DateTime, NaiveDateTime, Utc};
+use lru::LruCache;
+use semver::Version;
+use tokio::sync::RwLock;
+use tonic::transport::Channel;
+
+use crate::{
+    chain::{
+        block::StatelessBlock,
+        storage::{get_block},
+    },
+    genesis::Genesis,
+};
+
+const BLOCKS_LRU_SIZE: usize = 128;
+
+pub struct VmInterior {
+    pub ctx: Option<Context>,
+    pub bootstrapped: bool,
+    pub version: Version,
+    pub genesis: Genesis,
+    pub db: Option<VersionedDatabase>,
+    pub block: LruCache<Id, StatelessBlock>,
+    pub preferred: Id,
+    pub mempool: Vec<Vec<u8>>,
+    pub verified_blocks: HashMap<Id, StatelessBlock>,
+    pub last_accepted: StatelessBlock,
+    preferred_block_id: Option<Id>,
+}
 
 pub struct Vm {
-    inner: Arc<RwLock<HashMap<Vec<u8>, Vec<u8>>>>,
-    closed: AtomicBool,
+    inner: Arc<RwLock<VmInterior>>,
 }
 
 // Database is local scope which allows the following usage.
 // database::memdb::Database::new()
 impl Vm {
-    pub fn new() -> Box<dyn crate::rpcchainvm::database::Database + Send + Sync> {
-        let state: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
-        Box::new(Database {
-            inner: Arc::new(RwLock::new(state)),
-            closed: AtomicBool::new(false),
+    pub fn new() -> Box<dyn crate::block::ChainVm + Send + Sync> {
+        let mut cache: LruCache<Id, StatelessBlock> = LruCache::new(BLOCKS_LRU_SIZE);
+        let inner = VmInterior {
+            ctx: None,
+            bootstrapped: false,
+            version: Version::new(0, 0, 1), //TODO: lazy static
+            genesis: Genesis::default(),
+            db: None,
+            block: cache,
+            preferred: Id::empty(),
+            mempool: Vec::new(),
+            verified_blocks: HashMap::new(),
+            last_accepted: StatelessBlock::default(),
+            preferred_block_id: None,
+        };
+        Box::new(Vm {
+            inner: Arc::new(RwLock::new(inner)),
         })
     }
 }
@@ -21,9 +83,177 @@ impl Vm {
 impl crate::rpcchainvm::block::ChainVm for Vm {}
 
 #[tonic::async_trait]
-impl crate::rpcchainvm::block::Getter for Database {}
-impl crate::rpcchainvm::block::Parser for Database {}
-impl crate::rpcchainvm::common::Vm for Database {}
+impl crate::rpcchainvm::block::Getter for Vm {
+    async fn get_block(&self, id: Id) -> Result<Block> {
+        log::debug!("kvvm get_block called");
+        let vm = inner.read().await;
+        let state = crate::state::State::new(vm.db.clone());
 
+        match state.get_block(id).await? {
+            Some(mut block) => {
+                let block_id = block.initialize()?;
+                log::debug!("found old block id: {}", block_id.to_string());
+                Ok(block)
+            }
+            None => Err(Error::new(
+                ErrorKind::NotFound,
+                format!("failed to get block id: {}", id),
+            )),
+        }
+    }
+}
+impl avalanche_types::rpcchainvm::block::Parser for Vm {
+    // implements "snowmanblock.ChainVM.commom.VM.Parser"
+    // replaces "core.SnowmanVM.ParseBlock"
+}
+
+#[tonic::async_trait]
+impl crate::chain::vm::Vm for Vm {
+    async fn genesis(&self) -> Genesis {}
+
+    async fn is_bootstrapped(&self) {}
+
+    async fn state(
+        &self,
+    ) -> Box<dyn avalanche_types::rpcchainvm::database::Database + Send + Sync> {
+    }
+
+    async fn get_stateless_block(&self, block_id: Id) -> Result<&StatelessBlock> {
+        let vm = self.inner.read().await;
+
+        // has the block been cached from previous "Accepted" call
+        let resp = vm.block.get(&block_id);
+        if resp.is_some {
+            Ok(resp.unwrap());
+        }
+
+        // has the block been verified, not yet accepted
+        if vm.verified_blocks.contains_key(&block_id) {
+            Ok(vm.verified_blocks.get_key_value(&block_id))
+        }
+
+        let db = vm.db.cloned();
+        get_block(db, block_id);
+        Ok(())
+        // StatelessBlock::default()
+    }
+}
+
+#[tonic::async_trait]
+impl avalanche_types::rpcchainvm::common::Vm for Vm {
+    async fn initialize(
+        &self,
+        ctx: Option<Context>,
+        db_manager: Box<dyn Manager>,
+        genesis_bytes: &[u8],
+        _upgrade_bytes: &[u8],
+        _config_bytes: &[u8],
+        _to_engine: &MessengerClient<Channel>,
+        _fxs: &[Fx],
+        _app_sender: &AppSenderClient<Channel>,
+    ) -> Result<()> {
+        let mut vm = vm_inner.write().await;
+        vm.ctx = ctx;
+
+        let current_db = &db_manager[0].database;
+        vm.db = Some(current_db.clone());
+
+        let state = State::new(Some(current_db.clone()));
+        vm.state = state;
+
+        let genesis = Genesis::from_json(genesis_bytes)?;
+
+        vm.genesis = genesis;
+        vm.genesis.verify().map_err(|e| {
+            Error::new(
+                ErrorKind::Other,
+                format!("failed to verify genesis: {:?}", e),
+            )
+        })?;
+
+        // Check if last accepted block exists
+        if vm.state.has_last_accepted_block().await? {
+            let maybe_last_accepted_block_id = vm.state.get_last_accepted_block_id().await?;
+            if maybe_last_accepted_block_id.is_none() {
+                return Err(Error::new(ErrorKind::Other, "invalid block no id found"));
+            }
+            let last_accepted_block_id = maybe_last_accepted_block_id.unwrap();
+
+            let maybe_last_accepted_block = vm.state.get_block(last_accepted_block_id).await?;
+            if maybe_last_accepted_block.is_none() {
+                return Err(Error::new(ErrorKind::Other, "invalid block no id found"));
+            }
+            let last_accepted_block = maybe_last_accepted_block.unwrap();
+
+            vm.preferred = last_accepted_block_id;
+            vm.last_accepted = last_accepted_block;
+
+            log::info!(
+                "initialized from last accepted block {}",
+                last_accepted_block_id
+            );
+        } else {
+            let genesis_block_vec = genesis_bytes.to_vec();
+            let genesis_block_bytes = genesis_block_vec.try_into().unwrap();
+
+            let mut genesis_block = StatelessBlock::new(
+                Id::empty(),
+                0,
+                genesis_block_bytes,
+                DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(0, 0), Utc),
+                Status::Processing,
+            )?;
+
+            let genesis_block_id = genesis_block.initialize()?;
+
+            let accepted_block_id = vm.state.accept_block(genesis_block).await.map_err(|e| {
+                Error::new(ErrorKind::Other, format!("failed to accept block: {:?}", e))
+            })?;
+            // Remove accepted block now that it is accepted
+            vm.verified_blocks.remove(&accepted_block_id);
+
+            log::info!("initialized from genesis block: {:?}", genesis_block_id)
+        }
+
+        Ok(())
+    }
+
+    //setstate
+    //shutdown
+    //version
+    // create static handlers
+    // create handlers
+}
 
 /// ...
+/// AppHandler (conditional) not used for this impl
+/// Connector (conditional) not used for this impl
+///
+#[tonic::async_trait]
+impl avalanche_types::rpcchainvm::health::Checkable for Vm {
+    /// Checks if the database has been closed.
+    async fn health_check(&self) -> Result<Vec<u8>> {
+        Ok(vec![])
+    }
+}
+
+#[tonic::async_trait]
+impl avalanche_types::rpcchainvm::block::Getter for Vm {
+    async fn get_block(&self, id: Id) -> Result<StatelessBlock> {
+        log::debug!("kvvm get_block called");
+
+        let vm = self.inner.read().await;
+        let db = vm.db.clone();
+        match self.get_stateless_block(db, id).await? {
+            Some(mut block) => {
+                let block_id = block.initialize()?;
+                log::debug!("found old block id: {}", block_id.to_string());
+                Ok(block)
+            }
+            None => Err(Error::new(
+                ErrorKind::NotFound,
+                format!("failed to get block id: {}", id),
+            )),
+        }
+    }
+}
