@@ -61,6 +61,8 @@ pub async fn set_last_accepted(
     Ok(())
 }
 
+/// Attempts to retrieve the last accepted block and return the corresponding 
+/// block Id.
 pub async fn get_last_accepted(
     db: Box<dyn avalanche_types::rpcchainvm::database::Database + Send + Sync>,
 ) -> Result<Id> {
@@ -75,6 +77,7 @@ pub async fn get_last_accepted(
     }
 }
 
+/// Checks if the last accepted block key exists and returns true if has a value.
 pub async fn has_last_accepted(
     db: Box<dyn avalanche_types::rpcchainvm::database::Database + Send + Sync>,
 ) -> Result<bool> {
