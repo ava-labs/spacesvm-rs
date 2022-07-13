@@ -20,6 +20,8 @@ avalanche-types = {path = "../../../avalanche-rust/avalanche-rust/crates/avalanc
 chrono = "0.4.19"
 clap = { version = "3.1.18", features = ["cargo", "derive"] }
 env_logger = "0.9.0"
+ethereum-types = { version = "0.13.1" }
+
 hmac-sha256 = "1.1"
 log = "0.4.17"
 lru = "0.7.7"
@@ -28,6 +30,7 @@ semver = "1.0.9"
 serde = { version = "1.0.137", features = ["derive"] }
 serde_json = "1.0.81"
 serde_yaml = "0.8.24"
+sha3 = { version = "0.10.1" }
 tokio = { version = "1.18.2", features = ["fs", "rt-multi-thread"] }
 tokio-stream = { version = "0.1.8", features = ["net"] }
 tonic = { version = "0.7", features = ["compression"] }

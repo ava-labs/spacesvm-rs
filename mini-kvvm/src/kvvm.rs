@@ -13,13 +13,11 @@ use avalanche_types::{
     choices::status::Status,
     ids::{node::Id as NodeId, Id},
     rpcchainvm::{
-        block::Parser, database::manager::{
-        versioned_database::VersionedDatabase,
-        Manager,
-        },
+        block::Parser,
+        database::manager::{versioned_database::VersionedDatabase, Manager},
     },
-    vm::state::State as VmState,
     vm::context::Context,
+    vm::state::State as VmState,
 };
 use chrono::{DateTime, NaiveDateTime, Utc};
 use lru::LruCache;
@@ -30,7 +28,8 @@ use tonic::transport::Channel;
 use crate::{
     chain::{
         block::StatelessBlock,
-        storage::{get_block,has_last_accepted, get_last_accepted}, vm::Vm,
+        storage::{get_block, get_last_accepted, has_last_accepted},
+        vm::Vm,
     },
     genesis::Genesis,
 };
@@ -163,7 +162,7 @@ impl avalanche_types::rpcchainvm::common::Vm for Vm {
         let resp = has_last_accepted(vm.db.clone()).await;
         if resp.is_err() {
             log::error!("could not determine if have last accepted");
-            return Err(Error::new(ErrorKind::Other, resp.unwrap_err()))
+            return Err(Error::new(ErrorKind::Other, resp.unwrap_err()));
         }
         let has = resp.unwrap();
 
@@ -182,17 +181,17 @@ impl avalanche_types::rpcchainvm::common::Vm for Vm {
             let resp = get_last_accepted(vm.db).await;
             if resp.is_err() {
                 log::error!("could not get last accepted");
-                return Err(Error::new(ErrorKind::Other, resp.unwrap_err()))
+                return Err(Error::new(ErrorKind::Other, resp.unwrap_err()));
             }
             let block_id = resp.unwrap();
 
             let resp = self.get_stateless_block(block_id).await;
             if resp.is_err() {
                 log::error!("could not get stateless block");
-                return Err(Error::new(ErrorKind::Other, resp.unwrap_err()))
+                return Err(Error::new(ErrorKind::Other, resp.unwrap_err()));
             }
             let block = resp.unwrap();
-            
+
             vm.preferred = block_id;
             vm.last_accepted = block;
             log::info!("initialized vm from last accepted block id: {:?}", block_id)
