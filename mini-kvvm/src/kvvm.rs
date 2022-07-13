@@ -30,7 +30,7 @@ use tonic::transport::Channel;
 use crate::{
     chain::{
         block::StatelessBlock,
-        storage::{get_block},
+        storage::{get_block,has_last_accepted, get_last_accepted}, vm::Vm,
     },
     genesis::Genesis,
 };
@@ -111,14 +111,17 @@ impl avalanche_types::rpcchainvm::block::Parser for Vm {
 impl crate::chain::vm::Vm for Vm {
     async fn genesis(&self) -> Genesis {}
 
-    async fn is_bootstrapped(&self) {}
+    async fn is_bootstrapped(&self) -> bool {
+        let vm = self.inner.read().await;
+        return vm.bootstrapped;
+    }
 
     async fn state(
         &self,
     ) -> Box<dyn avalanche_types::rpcchainvm::database::Database + Send + Sync> {
     }
 
-    async fn get_stateless_block(&self, block_id: Id) -> Result<&StatelessBlock> {
+    async fn get_stateless_block(&self, block_id: Id) -> Result<StatelessBlock> {
         let vm = self.inner.read().await;
 
         // has the block been cached from previous "Accepted" call
@@ -133,9 +136,7 @@ impl crate::chain::vm::Vm for Vm {
         }
 
         let db = vm.db.cloned();
-        get_block(db, block_id);
-        Ok(())
-        // StatelessBlock::default()
+        return get_block(db, block_id);
     }
 }
 
@@ -152,17 +153,22 @@ impl avalanche_types::rpcchainvm::common::Vm for Vm {
         _fxs: &[Fx],
         _app_sender: &AppSenderClient<Channel>,
     ) -> Result<()> {
-        let mut vm = vm_inner.write().await;
+        let mut vm = self.inner.write().await;
         vm.ctx = ctx;
 
-        let current_db = &db_manager[0].database;
-        vm.db = Some(current_db.clone());
+        let versioned_db = db_manager.current().await?;
+        vm.db = versioned_db.inner.clone().into_inner();
 
-        let state = State::new(Some(current_db.clone()));
-        vm.state = state;
+        // Try to load last accepted
+        let resp = has_last_accepted(vm.db.clone()).await;
+        if resp.is_err() {
+            log::error!("could not determine if have last accepted");
+            return Err(Error::new(ErrorKind::Other, resp.unwrap_err()))
+        }
+        let has = resp.unwrap();
 
+        // Parse genesis data
         let genesis = Genesis::from_json(genesis_bytes)?;
-
         vm.genesis = genesis;
         vm.genesis.verify().map_err(|e| {
             Error::new(
@@ -172,26 +178,24 @@ impl avalanche_types::rpcchainvm::common::Vm for Vm {
         })?;
 
         // Check if last accepted block exists
-        if vm.state.has_last_accepted_block().await? {
-            let maybe_last_accepted_block_id = vm.state.get_last_accepted_block_id().await?;
-            if maybe_last_accepted_block_id.is_none() {
-                return Err(Error::new(ErrorKind::Other, "invalid block no id found"));
+        if has {
+            let resp = get_last_accepted(vm.db).await;
+            if resp.is_err() {
+                log::error!("could not get last accepted");
+                return Err(Error::new(ErrorKind::Other, resp.unwrap_err()))
             }
-            let last_accepted_block_id = maybe_last_accepted_block_id.unwrap();
+            let block_id = resp.unwrap();
 
-            let maybe_last_accepted_block = vm.state.get_block(last_accepted_block_id).await?;
-            if maybe_last_accepted_block.is_none() {
-                return Err(Error::new(ErrorKind::Other, "invalid block no id found"));
+            let resp = self.get_stateless_block(block_id).await;
+            if resp.is_err() {
+                log::error!("could not get stateless block");
+                return Err(Error::new(ErrorKind::Other, resp.unwrap_err()))
             }
-            let last_accepted_block = maybe_last_accepted_block.unwrap();
-
-            vm.preferred = last_accepted_block_id;
-            vm.last_accepted = last_accepted_block;
-
-            log::info!(
-                "initialized from last accepted block {}",
-                last_accepted_block_id
-            );
+            let block = resp.unwrap();
+            
+            vm.preferred = block_id;
+            vm.last_accepted = block;
+            log::info!("initialized vm from last accepted block id: {:?}", block_id)
         } else {
             let genesis_block_vec = genesis_bytes.to_vec();
             let genesis_block_bytes = genesis_block_vec.try_into().unwrap();
