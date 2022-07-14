@@ -58,9 +58,13 @@ impl Transaction for TransactionInterior {
         self.bytes = stx.unwrap();
         self.id = Id::from_slice_sha256(&Keccak256::digest(&self.bytes));
 
-        self.t = Utc.timestamp(self.s, 0);
+        // Compute digest hash
+        let digest_hash = digest_hash(self.unsigned_transaction);
+        if digest_hash.is_err() {
+            return Err(Error::new(ErrorKind::Other, stx.unwrap_err()));
+        }
+        self.digest_hash = digest_hash.unwrap();
 
-        //   for tx in block.txs.iter() {
         Ok(())
     }
 
@@ -116,4 +120,8 @@ pub fn new_tx(utx: Box<dyn UnsignedTransaction>, sig: &[u8]) -> &TransactionInte
         size: (),
         sender: (),
     };
+}
+
+pub fn digest_hash(utx: Box<dyn UnsignedTransaction>) -> Result<&[u8]> {
+    return crate::tdata::digest_hash(utx.typed_data());
 }

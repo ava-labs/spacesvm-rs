@@ -106,7 +106,7 @@ impl Initializer for StatelessBlock {
     async fn init(&self) -> Result<()> {
         let bytes = serde_json::to_string(&self);
         if bytes.is_err() {
-            return Err(Error::new(ErrorKind::Other, stx.unwrap_err()));
+            return Err(Error::new(ErrorKind::Other, bytes.unwrap_err()));
         }
         self.bytes = bytes.unwrap();
         self.id = Id::from_slice_sha256(&Keccak256::digest(&self.bytes));
@@ -159,7 +159,7 @@ pub async fn parse_stateful_block(
         }
     }
 
-    let b = StatelessBlock::new(source, block, status);
+    let b = StatelessBlock::new(source, block, status, genesis);
     b.id = Id::from_slice_sha256(&Keccak256::digest(&b));
 
     for tx in block.txs.iter() {
