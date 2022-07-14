@@ -7,7 +7,10 @@ use ethereum_types::Address;
 use serde::{Deserialize, Serialize};
 use sha3::Keccak256;
 
-use crate::chain::{genesis::Genesis, unsigned_txn::UnsignedTransaction, vm::Context};
+use crate::chain::{
+    crypto::derive_sender, genesis::Genesis, storage::set_transaction,
+    unsigned_txn::UnsignedTransaction, vm::Context,
+};
 
 use super::{activity::Activity, block::StatelessBlock};
 
@@ -61,9 +64,17 @@ impl Transaction for TransactionInterior {
         // Compute digest hash
         let digest_hash = digest_hash(self.unsigned_transaction);
         if digest_hash.is_err() {
-            return Err(Error::new(ErrorKind::Other, stx.unwrap_err()));
+            return Err(Error::new(ErrorKind::Other, digest_hash.unwrap_err()));
         }
         self.digest_hash = digest_hash.unwrap();
+
+        // Derive sender
+        let public_key = derive_sender(self.digest_hash.into(), self.signature.into());
+        if public_key.is_err() {
+            return Err(Error::new(ErrorKind::Other, public_key.unwrap_err()));
+        }
+        self.sender = public_key.unwrap();
+        self.size = u64(self.bytes.len());
 
         Ok(())
     }
@@ -95,6 +106,40 @@ impl Transaction for TransactionInterior {
         block: StatelessBlock,
         ctx: Context,
     ) -> Result<()> {
+        let resp = self.unsigned_transaction.execute(genesis);
+        if resp.is_err() {
+            return Err(Error::new(ErrorKind::Other, resp.unwrap_err()));
+        }
+        if !ctx
+            .recent_block_ids
+            .contains(&self.unsigned_transaction.get_block_id())
+        {
+            return Err(Error::new(ErrorKind::Other, "invalid blockId"));
+        }
+        if !ctx.recent_tx_ids.contains(&self.id) {
+            return Err(Error::new(ErrorKind::Other, "duplicate transaction"));
+        }
+
+        // TODO Ensure sender has balance
+
+        let tx_ctx = &TransactionContext {
+            genesis,
+            database,
+            block_time: u64(block.stateful_block.timestamp),
+            tx_id: self.id,
+            sender: self.sender,
+        };
+
+        let resp = self.unsigned_transaction.execute(txn_ctx);
+        if resp.is_err() {
+            return Err(Error::new(ErrorKind::Other, resp.unwrap_err()));
+        }
+
+        let resp = set_transaction(database, self);
+        if resp.is_err() {
+            return Err(Error::new(ErrorKind::Other, resp.unwrap_err()));
+        }
+
         Ok(())
     }
 

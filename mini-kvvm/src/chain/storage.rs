@@ -3,15 +3,17 @@ use std::{
     sync::Arc,
 };
 
-use hmac_sha256::Hash;
-
 use avalanche_proto::rpcdb::database_client::DatabaseClient;
+use hmac_sha256::Hash;
 use tokio::sync::RwLock;
 use tonic::transport::Channel;
 
-use crate::chain::block::StatelessBlock;
+use crate::chain::{block::StatelessBlock, txn::Transaction};
 
-use avalanche_types::ids::{Id, ID_LEN};
+use avalanche_types::{
+    ids::{Id, ID_LEN},
+    rpcchainvm::database::Database,
+};
 
 const LAST_ACCEPTED_BLOCK_KEY: &[u8] = b"last_accepted";
 const BLOCK_PREFIX: u8 = 0x0;
@@ -137,4 +139,9 @@ fn value_key(key: Hash) -> [u8] {
     k[1] = BYTE_DELIMITER;
     k[2..DATA_LEN].clone_from_slice(key.k);
     k
+}
+
+pub fn set_transaction(db: Box<dyn Database>, txn: &Transaction) -> Result<()> {
+    let k = prefix_tx_key(&txn.id());
+    return db.put(k, ());
 }

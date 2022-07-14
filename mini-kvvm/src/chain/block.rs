@@ -18,14 +18,14 @@ pub struct StatefulBlock {
     #[serde(deserialize_with = "must_deserialize_id")]
     pub parent: Id,
     height: u64,
-    timestamp: u64,
+    pub timestamp: u64,
     data: Vec<u8>,
     txs: Vec<Box<dyn Transaction>>,
 }
 
 #[derive(Serialize, Debug, Clone, Deserialize)]
 pub struct StatelessBlock {
-    stateful_block: StatefulBlock,
+    pub stateful_block: StatefulBlock,
 
     #[serde(skip)]
     id: Id,

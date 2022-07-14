@@ -19,7 +19,7 @@ pub trait UnsignedTransaction {
     fn feed_units(&self, genesis: &Genesis) -> u64; // number of units to mine tx
     fn load_units(&self, genesis: &Genesis) -> u64; // units that should impact fee rate
     fn execute_base(&self, genesis: &Genesis) -> Result<()>;
-    fn execute(&self, genesis: &TransactionContext) -> Result<()>;
+    fn execute(&self, txn_ctx: &TransactionContext) -> Result<()>;
     fn typed_data(&self) -> Box<dyn TypedData>;
     fn activity(&self) -> Activity;
 }
