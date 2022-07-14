@@ -20,7 +20,7 @@ pub struct StatefulBlock {
     height: u64,
     timestamp: u64,
     data: Vec<u8>,
-    txs: Vec<Transaction>,
+    txs: Vec<Box<dyn Transaction>>,
 }
 
 #[derive(Serialize, Debug, Clone, Deserialize)]
@@ -97,7 +97,7 @@ impl avalanche_types::rpcchainvm::block::Decidable for StatelessBlock {
     }
 }
 
-pub async fn parse_block(source: &[u8], status: Status, vm: Vm) -> Result<StatelessBlock> {
+pub async fn parse_block(source: &[u8], status: Status, genesis: &Genesis) -> Result<StatelessBlock> {
     // Deserialize json bytes to a StatelessBlock.
     let mut block: StatelessBlock = serde_json::from_slice(source.as_ref()).map_err(|e| {
         Error::new(
@@ -106,7 +106,7 @@ pub async fn parse_block(source: &[u8], status: Status, vm: Vm) -> Result<Statel
         )
     })?;
 
-    return parse_stateful_block(block, source, status, vm);
+    return parse_stateful_block(block, source, status, genesis);
 }
 
 pub async fn parse_stateful_block(

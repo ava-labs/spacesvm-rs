@@ -1,9 +1,10 @@
-use std::io::Result;
+use std::io::{Error, ErrorKind, Result};
 
 use avalanche_types::{ids::Id, rpcchainvm::database::Database};
 
 use ethereum_types::Address;
 use serde::{Deserialize, Serialize};
+use sha3::Keccak256;
 
 use crate::chain::{genesis::Genesis, unsigned_txn::UnsignedTransaction, vm::Context};
 
@@ -31,6 +32,7 @@ pub struct TransactionInterior {
 }
 
 pub trait Transaction {
+    fn init(&self, genesis: &Genesis) -> Result<()>;
     fn bytes(&self) -> Vec<u8>;
     fn size(&self) -> u64;
     fn id(&self) -> Id;
@@ -47,6 +49,18 @@ pub trait Transaction {
 }
 
 impl Transaction for TransactionInterior {
+    fn init(&self, genesis: &Genesis) -> Result<()> {
+        let stx = serde_json::to_string(&self);
+        if stx.is_err() {
+            return Err(Error::new(ErrorKind::Other, stx.unwrap_err()));
+        }
+        self.bytes = stx.unwrap();
+
+        let id = Id::from_slice_sha256(&Keccak256::digest(&self.bytes));
+
+        Ok(())
+    }
+
     fn bytes(&self) -> Vec<u8> {
         return self.bytes;
     }

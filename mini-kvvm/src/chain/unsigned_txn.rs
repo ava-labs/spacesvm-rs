@@ -3,7 +3,10 @@ use std::io::Result;
 use avalanche_types::{ids::Id, rpcchainvm::database::Database};
 use ethereum_types::Address;
 
-use crate::chain::{activity::Activity, genesis::Genesis};
+use crate::{
+    chain::{activity::Activity, genesis::Genesis},
+    tdata::TypedData,
+};
 
 pub trait UnsignedTransaction {
     fn copy() -> Box<dyn UnsignedTransaction>;
@@ -17,7 +20,7 @@ pub trait UnsignedTransaction {
     fn load_units(&self, genesis: &Genesis) -> u64; // units that should impact fee rate
     fn execute_base(&self, genesis: &Genesis) -> Result<()>;
     fn execute(&self, genesis: &TransactionContext) -> Result<()>;
-    // TypedData() *tdata.TypedData // TODO
+    fn typed_data(&self) -> &TypedData;
     fn activity(&self) -> Activity;
 }
 
