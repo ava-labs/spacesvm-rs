@@ -2,6 +2,7 @@ use std::io::{Error, ErrorKind, Result};
 
 use avalanche_types::{ids::Id, rpcchainvm::database::Database};
 
+use chrono::{DateTime, Utc};
 use ethereum_types::Address;
 use serde::{Deserialize, Serialize};
 use sha3::Keccak256;
@@ -55,9 +56,11 @@ impl Transaction for TransactionInterior {
             return Err(Error::new(ErrorKind::Other, stx.unwrap_err()));
         }
         self.bytes = stx.unwrap();
+        self.id = Id::from_slice_sha256(&Keccak256::digest(&self.bytes));
 
-        let id = Id::from_slice_sha256(&Keccak256::digest(&self.bytes));
+        self.t = Utc.timestamp(self.s, 0);
 
+        //   for tx in block.txs.iter() {
         Ok(())
     }
 

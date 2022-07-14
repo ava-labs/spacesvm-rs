@@ -44,6 +44,9 @@ pub struct StatelessBlock {
 
     #[serde(skip)]
     on_accept_db: Option<Box<dyn VersionedDatabase>>,
+
+    #[serde(skip)]
+    genesis: Genesis,
 }
 
 #[tonic::async_trait]
@@ -97,7 +100,38 @@ impl avalanche_types::rpcchainvm::block::Decidable for StatelessBlock {
     }
 }
 
-pub async fn parse_block(source: &[u8], status: Status, genesis: &Genesis) -> Result<StatelessBlock> {
+#[tonic::async_trait]
+impl Initializer for StatelessBlock {
+    /// Initializes a stateless block.
+    async fn init(&self) -> Result<()> {
+        let bytes = serde_json::to_string(&self);
+        if bytes.is_err() {
+            return Err(Error::new(ErrorKind::Other, stx.unwrap_err()));
+        }
+        self.bytes = bytes.unwrap();
+        self.id = Id::from_slice_sha256(&Keccak256::digest(&self.bytes));
+
+        self.t = Utc.timestamp(self.stateful_block.timestamp, 0);
+        for tx in self.stateful_block.txs.iter() {
+            let resp = tx.init(&self.genesis);
+            if resp.is_err() {
+                Err(Error::new(ErrorKind::Other, resp.unwrap_err()))
+            }
+        }
+        Ok(())
+    }
+}
+
+#[tonic::async_trait]
+pub trait Initializer {
+    async fn init(&self) -> Result<()>;
+}
+
+pub async fn parse_block(
+    source: &[u8],
+    status: Status,
+    genesis: &Genesis,
+) -> Result<StatelessBlock> {
     // Deserialize json bytes to a StatelessBlock.
     let mut block: StatelessBlock = serde_json::from_slice(source.as_ref()).map_err(|e| {
         Error::new(
