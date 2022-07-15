@@ -141,7 +141,7 @@ fn value_key(key: Hash) -> [u8] {
     k
 }
 
-pub fn set_transaction(db: Box<dyn Database>, txn: &Transaction) -> Result<()> {
+pub fn set_transaction(db: Box<dyn Database>, txn: Box<dyn Transaction>) -> Result<()> {
     let k = prefix_tx_key(&txn.id());
     return db.put(k, ());
 }

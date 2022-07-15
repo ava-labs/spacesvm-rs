@@ -2,7 +2,6 @@ use std::io::{Error, ErrorKind, Result};
 
 use avalanche_types::{ids::Id, rpcchainvm::database::Database};
 
-use chrono::{DateTime, Utc};
 use ethereum_types::Address;
 use serde::{Deserialize, Serialize};
 use sha3::Keccak256;
@@ -74,7 +73,7 @@ impl Transaction for TransactionInterior {
             return Err(Error::new(ErrorKind::Other, public_key.unwrap_err()));
         }
         self.sender = public_key.unwrap();
-        self.size = u64(self.bytes.len());
+        self.size = u64::from(self.bytes.len());
 
         Ok(())
     }
@@ -125,12 +124,12 @@ impl Transaction for TransactionInterior {
         let tx_ctx = &TransactionContext {
             genesis,
             database,
-            block_time: u64(block.stateful_block.timestamp),
+            block_time: u64::from(block.stateful_block.timestamp),
             tx_id: self.id,
             sender: self.sender,
         };
 
-        let resp = self.unsigned_transaction.execute(txn_ctx);
+        let resp = self.unsigned_transaction.execute(&tx_ctx);
         if resp.is_err() {
             return Err(Error::new(ErrorKind::Other, resp.unwrap_err()));
         }
@@ -167,6 +166,6 @@ pub fn new_tx(utx: Box<dyn UnsignedTransaction>, sig: &[u8]) -> &TransactionInte
     };
 }
 
-pub fn digest_hash(utx: Box<dyn UnsignedTransaction>) -> Result<&[u8]> {
+pub fn digest_hash(utx: Box<dyn UnsignedTransaction>) -> Result<Vec<[u8]>> {
     return crate::tdata::digest_hash(utx.typed_data());
 }

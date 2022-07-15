@@ -25,13 +25,13 @@ use semver::Version;
 use tokio::sync::RwLock;
 use tonic::transport::Channel;
 
-use crate::{
-    chain::{
-        block::StatelessBlock,
-        storage::{get_block, get_last_accepted, has_last_accepted},
-        vm::Vm,
-    },
+use crate::chain::{
+    block::StatelessBlock,
     genesis::Genesis,
+    network::Network,
+    // vm::Vm,
+    storage::{get_last_accepted, has_last_accepted},
+    txn::TransactionInterior,
 };
 
 const BLOCKS_LRU_SIZE: usize = 128;
@@ -47,7 +47,9 @@ pub struct VmInterior {
     pub mempool: Vec<Vec<u8>>,
     pub verified_blocks: HashMap<Id, StatelessBlock>,
     pub last_accepted: StatelessBlock,
-    preferred_block_id: Option<Id>,
+    pub preferred_block_id: Option<Id>,
+    pub network: Network,
+    pub app_sender: Option<AppSenderClient<Channel>>,
 }
 
 pub struct Vm {
@@ -71,6 +73,8 @@ impl Vm {
             verified_blocks: HashMap::new(),
             last_accepted: StatelessBlock::default(),
             preferred_block_id: None,
+            network: Network::new(),
+            app_sender: None,
         };
         Box::new(Vm {
             inner: Arc::new(RwLock::new(inner)),
@@ -78,85 +82,25 @@ impl Vm {
     }
 }
 
-/// pub trait ChainVm: Vm + Getter + Parser {}
-impl crate::rpcchainvm::block::ChainVm for Vm {}
-
-#[tonic::async_trait]
-impl crate::rpcchainvm::block::Getter for Vm {
-    async fn get_block(&self, id: Id) -> Result<Block> {
-        log::debug!("kvvm get_block called");
-        let vm = inner.read().await;
-        let state = crate::state::State::new(vm.db.clone());
-
-        match state.get_block(id).await? {
-            Some(mut block) => {
-                let block_id = block.initialize()?;
-                log::debug!("found old block id: {}", block_id.to_string());
-                Ok(block)
-            }
-            None => Err(Error::new(
-                ErrorKind::NotFound,
-                format!("failed to get block id: {}", id),
-            )),
-        }
-    }
-}
-impl avalanche_types::rpcchainvm::block::Parser for Vm {
-    // implements "snowmanblock.ChainVM.commom.VM.Parser"
-    // replaces "core.SnowmanVM.ParseBlock"
-}
-
 #[tonic::async_trait]
 impl crate::chain::vm::Vm for Vm {
-    async fn genesis(&self) -> Genesis {}
-
-    async fn is_bootstrapped(&self) -> bool {
-        let vm = self.inner.read().await;
-        return vm.bootstrapped;
-    }
-
-    async fn state(
-        &self,
-    ) -> Box<dyn avalanche_types::rpcchainvm::database::Database + Send + Sync> {
-    }
-
-    async fn get_stateless_block(&self, block_id: Id) -> Result<StatelessBlock> {
-        let vm = self.inner.read().await;
-
-        // has the block been cached from previous "Accepted" call
-        let resp = vm.block.get(&block_id);
-        if resp.is_some {
-            Ok(resp.unwrap());
-        }
-
-        // has the block been verified, not yet accepted
-        if vm.verified_blocks.contains_key(&block_id) {
-            Ok(vm.verified_blocks.get_key_value(&block_id))
-        }
-
-        let db = vm.db.cloned();
-        return get_block(db, block_id);
-    }
-}
-
-#[tonic::async_trait]
-impl avalanche_types::rpcchainvm::common::Vm for Vm {
     async fn initialize(
         &self,
         ctx: Option<Context>,
         db_manager: Box<dyn Manager>,
         genesis_bytes: &[u8],
-        _upgrade_bytes: &[u8],
-        _config_bytes: &[u8],
-        _to_engine: &MessengerClient<Channel>,
-        _fxs: &[Fx],
-        _app_sender: &AppSenderClient<Channel>,
+        upgrade_bytes: &[u8],
+        config_bytes: &[u8],
+        to_engine: &MessengerClient<Channel>,
+        _fxs: (),
+        app_sender: &AppSenderClient<Channel>,
     ) -> Result<()> {
         let mut vm = self.inner.write().await;
         vm.ctx = ctx;
 
         let versioned_db = db_manager.current().await?;
         vm.db = versioned_db.inner.clone().into_inner();
+        vm.app_sender = Some(app_sender);
 
         // Try to load last accepted
         let resp = has_last_accepted(vm.db.clone()).await;
@@ -221,12 +165,91 @@ impl avalanche_types::rpcchainvm::common::Vm for Vm {
         Ok(())
     }
 
-    //setstate
-    //shutdown
-    //version
-    // create static handlers
-    // create handlers
+    // Attempts to return a block based on Id.
+    async fn get_block(&self, id: Id) -> Result<StatelessBlock> {
+        log::debug!("kvvm get_block called");
+
+        let vm = self.inner.read().await;
+        let db = vm.db.clone();
+        match self.get_stateless_block(id).await? {
+            Some(mut block) => {
+                let block_id = block.initialize()?;
+                log::debug!("found old block id: {}", block_id.to_string());
+                Ok(block)
+            }
+            None => Err(Error::new(
+                ErrorKind::NotFound,
+                format!("failed to get block id: {}", id),
+            )),
+        }
+    }
+
+    async fn genesis(&self) -> Genesis {
+        let vm = self.inner.read().await;
+        return vm.genesis;
+    }
+
+    async fn is_bootstrapped(&self) -> bool {
+        let vm = self.inner.read().await;
+        return vm.bootstrapped;
+    }
+
+    async fn state(
+        &self,
+    ) -> Box<dyn avalanche_types::rpcchainvm::database::Database + Send + Sync> {
+        let db = self.inner.read().await;
+        return db.clond().into();
+    }
+
+    async fn get_stateless_block(&self, block_id: Id) -> Result<StatelessBlock> {
+        let vm = self.inner.read().await;
+
+        // has the block been cached from previous "Accepted" call
+        let resp = vm.block.get(&block_id);
+        if resp.is_some {
+            Ok(resp.unwrap());
+        }
+
+        // has the block been verified, not yet accepted
+        if vm.verified_blocks.contains_key(&block_id) {
+            Ok(vm.verified_blocks.get_key_value(&block_id))
+        }
+
+        let db = vm.db.cloned();
+        return crate::chain::storage::get_block(db, block_id);
+    }
+
+    // Push Network
+    async fn send_txs(&self, txs: Vec<TransactionInterior>) -> Result<()> {
+        if txs.len() == 0 {
+            Ok(())
+        }
+
+        let vm = self.inner.read().await;
+
+         if vm.app_sender.is_some() {
+            let client = vm.app_sender.unwrap();
+            let resp = client.send_app_gossip(request);
+         } 
+
+        Ok(())
+    }
+
+    async fn gossip_new_tx(&self, new_tx: Vec<TransactionInterior>) -> Result<()> {
+        Ok(())
+    }
+
+    async fn regossip_tx(&self) -> Result<()> {
+        Ok(())
+    }
 }
+
+//setstate
+//shutdown
+//version
+// create static handlers
+// create handlers
+// }
 
 /// ...
 /// AppHandler (conditional) not used for this impl
@@ -241,22 +264,4 @@ impl avalanche_types::rpcchainvm::health::Checkable for Vm {
 }
 
 #[tonic::async_trait]
-impl avalanche_types::rpcchainvm::block::Getter for Vm {
-    async fn get_block(&self, id: Id) -> Result<StatelessBlock> {
-        log::debug!("kvvm get_block called");
-
-        let vm = self.inner.read().await;
-        let db = vm.db.clone();
-        match self.get_stateless_block(db, id).await? {
-            Some(mut block) => {
-                let block_id = block.initialize()?;
-                log::debug!("found old block id: {}", block_id.to_string());
-                Ok(block)
-            }
-            None => Err(Error::new(
-                ErrorKind::NotFound,
-                format!("failed to get block id: {}", id),
-            )),
-        }
-    }
-}
+impl avalanche_types::rpcchainvm::block::Getter for Vm {}

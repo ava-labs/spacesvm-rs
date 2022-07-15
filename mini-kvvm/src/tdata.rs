@@ -67,6 +67,6 @@ pub trait TypedData {
     ) -> Result<&[u8]>;
 }
 
-pub fn digest_hash(td: Box<dyn TypedData>) -> Result<&[u8]> {
+pub fn digest_hash(td: Box<dyn TypedData>) -> Result<Vec<[u8]>> {
     let typed_data_hash = td.into();
 }
