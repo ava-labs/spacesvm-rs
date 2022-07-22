@@ -1,4 +1,5 @@
 use std::{
+    process::Command,
     thread,
     time::{Duration, Instant},
 };
@@ -6,6 +7,8 @@ use std::{
 use log::{info, warn};
 
 use avalanche_network_runner_sdk::{Client, GlobalConfig, StartRequest};
+
+const RELEASE: &str = "v1.7.16";
 
 #[tokio::test]
 async fn e2e() {
@@ -23,8 +26,16 @@ async fn e2e() {
     let resp = cli.ping().await.expect("failed ping");
     info!("network-runner is running (ping response {:?})", resp);
 
-    let (exec_path, is_set) = get_network_runner_avalanchego_path();
-    assert!(is_set);
+    // Download avalanchego
+    let (exec_path, _) =
+        avalanche_installer::avalanchego::download(None, None, Some(String::from(RELEASE)))
+            .await
+            .expect("failed to download avalanchego");
+
+    info!(
+        "running avalanchego version {}",
+        get_avalanchego_version(&exec_path)
+    );
 
     let global_config = GlobalConfig {
         log_level: String::from("info"),
@@ -108,15 +119,16 @@ async fn e2e() {
     info!("successfully stopped network");
 }
 
-fn get_network_runner_grpc_endpoint() -> (String, bool) {
-    match std::env::var("NETWORK_RUNNER_GRPC_ENDPOINT") {
-        Ok(s) => (s, true),
-        _ => (String::new(), false),
-    }
+fn get_avalanchego_version(exec_path: &String) -> String {
+    let output = Command::new(exec_path)
+        .arg("--version")
+        .output()
+        .expect("failed to get avalanchego version");
+    format!("{}", String::from_utf8(output.stdout).unwrap())
 }
 
-fn get_network_runner_avalanchego_path() -> (String, bool) {
-    match std::env::var("NETWORK_RUNNER_AVALANCHEGO_PATH") {
+fn get_network_runner_grpc_endpoint() -> (String, bool) {
+    match std::env::var("NETWORK_RUNNER_GRPC_ENDPOINT") {
         Ok(s) => (s, true),
         _ => (String::new(), false),
     }
