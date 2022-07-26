@@ -4,11 +4,11 @@ use avalanche_types::{ids::Id, rpcchainvm::database::Database};
 
 use ethereum_types::Address;
 use serde::{Deserialize, Serialize};
-use sha3::Keccak256;
+use sha3::{Digest, Keccak256};
 
 use crate::chain::{
-    crypto::derive_sender, genesis::Genesis, storage::set_transaction,
-    unsigned_txn::UnsignedTransaction, vm::Context,
+    crypto, genesis::Genesis, storage::set_transaction, unsigned_txn::UnsignedTransaction,
+    vm::Context,
 };
 
 use super::{activity::Activity, block::StatelessBlock};
@@ -33,75 +33,72 @@ pub struct TransactionInterior {
     #[serde(skip)]
     sender: Address,
 }
-
+#[tonic::async_trait]
 pub trait Transaction {
-    fn init(&self, genesis: &Genesis) -> Result<()>;
-    fn bytes(&self) -> Vec<u8>;
-    fn size(&self) -> u64;
-    fn id(&self) -> Id;
-    fn digest_hash(&self) -> Vec<u8>;
-    fn sender(&self) -> Address;
-    fn execute(
+    async fn init(&self, genesis: &Genesis) -> Result<()>;
+    async fn bytes(&self) -> Vec<u8>;
+    async fn size(&self) -> u64;
+    async fn id(&self) -> Id;
+    async fn digest_hash(&self) -> Vec<u8>;
+    async fn sender(&self) -> Address;
+    async fn execute(
         &self,
         genesis: Genesis,
-        database: Box<dyn Database>,
+        database: Box<dyn Database + Send + Sync>,
         block: StatelessBlock,
         ctx: Context,
     ) -> Result<()>;
-    fn activity(&self) -> &Activity;
+    async fn activity(&self) -> &Activity;
 }
 
+#[tonic::async_trait]
 impl Transaction for TransactionInterior {
-    fn init(&self, genesis: &Genesis) -> Result<()> {
-        let stx = serde_json::to_string(&self);
-        if stx.is_err() {
-            return Err(Error::new(ErrorKind::Other, stx.unwrap_err()));
-        }
-        self.bytes = stx.unwrap();
-        self.id = Id::from_slice_sha256(&Keccak256::digest(&self.bytes));
+    async fn init(&self, genesis: &Genesis) -> Result<()> {
+        let stx =
+            serde_json::to_vec(&self).map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+        self.bytes = stx;
+
+        self.id = Id::from_slice_with_sha256(&Keccak256::digest(&self.bytes));
 
         // Compute digest hash
-        let digest_hash = digest_hash(self.unsigned_transaction);
-        if digest_hash.is_err() {
-            return Err(Error::new(ErrorKind::Other, digest_hash.unwrap_err()));
-        }
-        self.digest_hash = digest_hash.unwrap();
+        let digest_hash = digest_hash(self.unsigned_transaction)
+            .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+        self.digest_hash = digest_hash.to_vec();
 
         // Derive sender
-        let public_key = derive_sender(self.digest_hash.into(), self.signature.into());
-        if public_key.is_err() {
-            return Err(Error::new(ErrorKind::Other, public_key.unwrap_err()));
-        }
-        self.sender = public_key.unwrap();
-        self.size = u64::from(self.bytes.len());
+        let public_key = crypto::derive_sender(self.digest_hash.into(), self.signature.into())
+            .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+        self.sender = crypto::public_to_address(&public_key);
+
+        self.size = self.bytes.len() as u64;
 
         Ok(())
     }
 
-    fn bytes(&self) -> Vec<u8> {
+    async fn bytes(&self) -> Vec<u8> {
         return self.bytes;
     }
 
-    fn size(&self) -> u64 {
+    async fn size(&self) -> u64 {
         return self.size;
     }
 
-    fn id(&self) -> Id {
+    async fn id(&self) -> Id {
         return self.id;
     }
 
-    fn digest_hash(&self) -> Vec<u8> {
+    async fn digest_hash(&self) -> Vec<u8> {
         return self.digest_hash;
     }
 
-    fn sender(&self) -> Address {
+    async fn sender(&self) -> Address {
         return self.sender;
     }
 
-    fn execute(
+    async fn execute(
         &self,
         genesis: Genesis,
-        database: Box<dyn Database>,
+        database: Box<dyn Database + Send + Sync>,
         block: StatelessBlock,
         ctx: Context,
     ) -> Result<()> {
@@ -142,7 +139,7 @@ impl Transaction for TransactionInterior {
         Ok(())
     }
 
-    fn activity(&self) -> &Activity {}
+    async fn activity(&self) -> &Activity {}
 }
 
 pub struct TransactionContext {

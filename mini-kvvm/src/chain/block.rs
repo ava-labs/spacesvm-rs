@@ -1,14 +1,17 @@
-use std::io::{Error, ErrorKind, Result};
+use std::{
+    io::{Error, ErrorKind, Result},
+    ops::Deref,
+};
 
 use avalanche_types::{
-    choices::{status::Status, self},
+    choices::{self, status::Status},
     ids,
     ids::must_deserialize_id,
     rpcchainvm::{concensus::snowman, database::VersionedDatabase},
 };
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
-use sha3::Keccak256;
+use sha3::{Digest, Keccak256};
 
 use super::{genesis::Genesis, txn::Transaction, vm};
 
@@ -52,16 +55,11 @@ pub struct StatelessBlock {
 }
 
 impl StatelessBlock {
-    async fn new(
-        genesis: Genesis,
-        parent: Box<dyn snowman::Block>,
-        timestamp: u64,
-        ctx: vm::Context,
-    ) -> Self {
+    async fn new(genesis: Genesis, parent: Box<dyn snowman::Block>, timestamp: u64) -> Self {
         Self {
             stateful_block: StatefulBlock {
                 parent: parent.id().await,
-                height: parent.height().await,
+                height: parent.height().await + 1,
                 timestamp,
                 data: vec![],
                 txs: vec![],
@@ -132,20 +130,18 @@ impl avalanche_types::rpcchainvm::concensus::snowman::Decidable for StatelessBlo
 impl Initializer for StatelessBlock {
     /// Initializes a stateless block.
     async fn init(&self) -> Result<()> {
-        let bytes = serde_json::to_string(&self);
-        if bytes.is_err() {
-            return Err(Error::new(ErrorKind::Other, bytes.unwrap_err()));
-        }
-        self.bytes = bytes.unwrap();
-        self.id = ids::Id::from_slice_sha256(&Keccak256::digest(&self.bytes));
+        self.bytes = serde_json::to_vec(&self)
+            .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
 
-        self.t = Utc.timestamp(self.stateful_block.timestamp, 0);
+        self.id = ids::Id::from_slice_with_sha256(&Keccak256::digest(&self.bytes));
+
+        self.t = Utc.timestamp(self.stateful_block.timestamp as i64, 0);
+
         for tx in self.stateful_block.txs.iter() {
-            let resp = tx.init(&self.genesis);
-            if resp.is_err() {
-                Err(Error::new(ErrorKind::Other, resp.unwrap_err()))
-            }
+            tx.init(&self.genesis)
+                .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
         }
+
         Ok(())
     }
 }
@@ -161,40 +157,50 @@ pub async fn parse_block(
     genesis: &Genesis,
 ) -> Result<StatelessBlock> {
     // Deserialize json bytes to a StatelessBlock.
-    let mut block: StatelessBlock = serde_json::from_slice(source.as_ref()).map_err(|e| {
+    let block: StatefulBlock = serde_json::from_slice(source.as_ref()).map_err(|e| {
         Error::new(
             ErrorKind::Other,
             format!("failed to deserialize block: {:?}", e),
         )
     })?;
 
-    return parse_stateful_block(block, source, status, genesis);
+    return parse_stateful_block(block, source, status, genesis).await;
 }
 
 pub async fn parse_stateful_block(
     block: StatefulBlock,
-    source: &[u8],
+    source: Vec<u8>,
     status: Status,
-    genesis: &Genesis,
+    genesis: Genesis,
 ) -> Result<StatelessBlock> {
     // If src is empty populate bytes with marshalled block.
     if source.len() == 0 {
-        let b = serde_json::to_string(&block);
-        if b.is_err() {
-            log::error!("failed to marshal block: {:?}", block);
-            return Err(Error::new(ErrorKind::Other, b.unwrap_err()));
-            source = b
-        }
+        let b = serde_json::to_vec(&block).map_err(|e| {
+            Error::new(
+                ErrorKind::Other,
+                format!("failed to deserialize block: {:?}", e),
+            )
+        })?;
+        source = b;
     }
 
-    let b = StatelessBlock::new(source, block, status, genesis);
-    b.id = ids::Id::from_slice_sha256(&Keccak256::digest(&b));
+    let mut b = StatelessBlock {
+        stateful_block: block,
+        t: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(0, 0), Utc),
+        bytes: source,
+        st: status,
+        genesis: genesis,
+        on_accept_db: None,
+        id: ids::Id::empty(),
+        children: vec![],
+    };
+
+    b.id = ids::Id::from_slice_with_sha256(&Keccak256::digest(&b.bytes));
 
     for tx in block.txs.iter() {
-        let resp = tx.init(genesis);
-        if resp.is_err() {
-            Err(Error::new(ErrorKind::Other, resp.unwrap_err()))
-        }
+        tx.init(genesis)
+            .await
+            .map_err(|e| Error::new(ErrorKind::Other, format!("failed to init tx: {:?}", e)))?
     }
-    Ok(block)
+    Ok(b)
 }
