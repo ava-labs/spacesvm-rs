@@ -2,7 +2,7 @@ use std::io::{Error, ErrorKind, Result};
 
 use avalanche_types::key::ECDSA_RECOVERABLE_SIG_LEN;
 use ethereum_types::Address;
-use secp256k1::{self, ecdsa::RecoverableSignature, PublicKey, Secp256k1};
+use secp256k1::{self, ecdsa::RecoverableSignature, PublicKey, Secp256k1, ecdsa};
 use sha3::{Digest, Keccak256};
 
 const V_OFFSET: usize = 64;
@@ -26,7 +26,9 @@ pub fn derive_sender(dh: &[u8], sig: &[u8]) -> Result<PublicKey> {
     }
 
     // TODO what is the proper recovery id in this context?
-    let recovery_sig = RecoverableSignature::from_compact(&sig_copy, 1)
+    let recovery_id = ecdsa::RecoveryId::from_i32(1 as i32).map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+
+    let recovery_sig = RecoverableSignature::from_compact(&sig_copy, recovery_id)
         .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
     
     let message = secp256k1::Message::from_slice(dh).map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;

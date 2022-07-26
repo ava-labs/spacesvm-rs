@@ -3,7 +3,8 @@ use std::io::{Error, ErrorKind, Result};
 use avalanche_types::{ids::Id, rpcchainvm::database::Database};
 
 use ethereum_types::Address;
-use serde::{Deserialize, Serialize};
+// use serde::{Deserialize, Serialize};
+use erased_serde::{Serialize, Deserialize};
 use sha3::{Digest, Keccak256};
 
 use crate::chain::{
@@ -13,7 +14,7 @@ use crate::chain::{
 
 use super::{activity::Activity, block::StatelessBlock};
 
-#[derive(Serialize, Debug, Clone, Deserialize)]
+#[derive(Serialize, Clone, Deserialize)]
 pub struct TransactionInterior {
     pub unsigned_transaction: Box<dyn UnsignedTransaction>,
     signature: Vec<u8>,
@@ -34,7 +35,7 @@ pub struct TransactionInterior {
     sender: Address,
 }
 #[tonic::async_trait]
-pub trait Transaction {
+pub trait Transaction: Send + Sync {
     async fn init(&self, genesis: &Genesis) -> Result<()>;
     async fn bytes(&self) -> Vec<u8>;
     async fn size(&self) -> u64;
@@ -49,6 +50,14 @@ pub trait Transaction {
         ctx: Context,
     ) -> Result<()>;
     async fn activity(&self) -> &Activity;
+
+    async fn clone_dyn(&self) -> Box<dyn Transaction>;
+}
+
+impl Clone for Box<dyn Transaction> {
+    fn clone(&self) -> Self {
+        self.clone_dyn()
+    }
 }
 
 #[tonic::async_trait]
@@ -140,6 +149,10 @@ impl Transaction for TransactionInterior {
     }
 
     async fn activity(&self) -> &Activity {}
+
+    fn clone_dyn(&self) -> Box<dyn Transaction> {
+        Box::new(self.clone())
+    }
 }
 
 pub struct TransactionContext {

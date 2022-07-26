@@ -1,6 +1,5 @@
 use std::{
     io::{Error, ErrorKind, Result},
-    ops::Deref,
 };
 
 use avalanche_types::{
@@ -13,11 +12,11 @@ use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Keccak256};
 
-use super::{genesis::Genesis, txn::Transaction, vm};
+use super::{genesis::Genesis, txn::Transaction};
 
 pub const DATA_LEN: usize = 32;
 
-#[derive(Serialize, Debug, Clone, Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct StatefulBlock {
     #[serde(deserialize_with = "must_deserialize_id")]
     pub parent: ids::Id,
@@ -25,7 +24,7 @@ pub struct StatefulBlock {
     pub timestamp: u64,
     data: Vec<u8>,
     // access_proof: TODO
-    txs: Vec<Box<dyn Transaction + Send + Sync>>,
+    txs: Vec<Box<dyn Transaction + Sync + Send>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -138,7 +137,7 @@ impl Initializer for StatelessBlock {
         self.t = Utc.timestamp(self.stateful_block.timestamp as i64, 0);
 
         for tx in self.stateful_block.txs.iter() {
-            tx.init(&self.genesis)
+            tx.init(&self.genesis).await
                 .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
         }
 
@@ -154,7 +153,7 @@ pub trait Initializer {
 pub async fn parse_block(
     source: &[u8],
     status: Status,
-    genesis: &Genesis,
+    genesis: Genesis,
 ) -> Result<StatelessBlock> {
     // Deserialize json bytes to a StatelessBlock.
     let block: StatefulBlock = serde_json::from_slice(source.as_ref()).map_err(|e| {
@@ -164,12 +163,12 @@ pub async fn parse_block(
         )
     })?;
 
-    return parse_stateful_block(block, source, status, genesis).await;
+    return parse_stateful_block(block, source.to_vec(), status, genesis).await;
 }
 
 pub async fn parse_stateful_block(
     block: StatefulBlock,
-    source: Vec<u8>,
+    mut source: Vec<u8>,
     status: Status,
     genesis: Genesis,
 ) -> Result<StatelessBlock> {
@@ -184,12 +183,13 @@ pub async fn parse_stateful_block(
         source = b;
     }
 
+
     let mut b = StatelessBlock {
         stateful_block: block,
         t: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(0, 0), Utc),
         bytes: source,
         st: status,
-        genesis: genesis,
+        genesis: genesis.clone(),
         on_accept_db: None,
         id: ids::Id::empty(),
         children: vec![],
@@ -198,7 +198,7 @@ pub async fn parse_stateful_block(
     b.id = ids::Id::from_slice_with_sha256(&Keccak256::digest(&b.bytes));
 
     for tx in block.txs.iter() {
-        tx.init(genesis)
+        tx.init(&genesis.clone())
             .await
             .map_err(|e| Error::new(ErrorKind::Other, format!("failed to init tx: {:?}", e)))?
     }
