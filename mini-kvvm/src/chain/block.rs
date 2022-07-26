@@ -1,34 +1,36 @@
 use std::io::{Error, ErrorKind, Result};
 
 use avalanche_types::{
-    choices::status::Status,
-    ids::{must_deserialize_id, Id},
-    rpcchainvm::{block::Block as SnowmanBlock, block::Decidable, database::VersionedDatabase},
+    choices::{status::Status, self},
+    ids,
+    ids::must_deserialize_id,
+    rpcchainvm::{concensus::snowman, database::VersionedDatabase},
 };
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sha3::Keccak256;
 
-use super::{genesis::Genesis, txn::Transaction};
+use super::{genesis::Genesis, txn::Transaction, vm};
 
 pub const DATA_LEN: usize = 32;
 
 #[derive(Serialize, Debug, Clone, Deserialize)]
 pub struct StatefulBlock {
     #[serde(deserialize_with = "must_deserialize_id")]
-    pub parent: Id,
+    pub parent: ids::Id,
     height: u64,
     pub timestamp: u64,
     data: Vec<u8>,
-    txs: Vec<Box<dyn Transaction>>,
+    // access_proof: TODO
+    txs: Vec<Box<dyn Transaction + Send + Sync>>,
 }
 
-#[derive(Serialize, Debug, Clone, Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct StatelessBlock {
     pub stateful_block: StatefulBlock,
 
     #[serde(skip)]
-    id: Id,
+    id: ids::Id,
 
     #[serde(skip)]
     st: Status,
@@ -43,14 +45,40 @@ pub struct StatelessBlock {
     children: Vec<StatelessBlock>,
 
     #[serde(skip)]
-    on_accept_db: Option<Box<dyn VersionedDatabase>>,
+    on_accept_db: Option<Box<dyn VersionedDatabase + Send + Sync>>,
 
     #[serde(skip)]
     genesis: Genesis,
 }
 
+impl StatelessBlock {
+    async fn new(
+        genesis: Genesis,
+        parent: Box<dyn snowman::Block>,
+        timestamp: u64,
+        ctx: vm::Context,
+    ) -> Self {
+        Self {
+            stateful_block: StatefulBlock {
+                parent: parent.id().await,
+                height: parent.height().await,
+                timestamp,
+                data: vec![],
+                txs: vec![],
+            },
+            id: ids::Id::empty(),
+            st: choices::status::Status::Processing,
+            t: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(0, 0), Utc),
+            bytes: vec![],
+            children: vec![],
+            on_accept_db: None,
+            genesis,
+        }
+    }
+}
+
 #[tonic::async_trait]
-impl SnowmanBlock for StatelessBlock {
+impl avalanche_types::rpcchainvm::concensus::snowman::Block for StatelessBlock {
     /// implements "snowman.Block"
     async fn bytes(&self) -> &[u8] {
         return self.stateful_block.bytes.as_ref();
@@ -63,11 +91,11 @@ impl SnowmanBlock for StatelessBlock {
 
     /// implements "snowman.Block"
     async fn timestamp(&self) -> u64 {
-        return self.timestamp;
+        return self.t;
     }
 
     /// implements "snowman.Block"
-    async fn parent(&self) -> Id {
+    async fn parent(&self) -> ids::Id {
         return self.stateful_block.parent;
     }
 
@@ -78,14 +106,14 @@ impl SnowmanBlock for StatelessBlock {
 }
 
 #[tonic::async_trait]
-impl avalanche_types::rpcchainvm::block::Decidable for StatelessBlock {
+impl avalanche_types::rpcchainvm::concensus::snowman::Decidable for StatelessBlock {
     /// implements "snowman.Block.choices.Decidable"
     async fn status(&self) -> Status {
         return self.st;
     }
 
     /// implements "snowman.Block.choices.Decidable"
-    async fn id(&self) -> Id {
+    async fn id(&self) -> ids::Id {
         return self.id;
     }
 
@@ -109,7 +137,7 @@ impl Initializer for StatelessBlock {
             return Err(Error::new(ErrorKind::Other, bytes.unwrap_err()));
         }
         self.bytes = bytes.unwrap();
-        self.id = Id::from_slice_sha256(&Keccak256::digest(&self.bytes));
+        self.id = ids::Id::from_slice_sha256(&Keccak256::digest(&self.bytes));
 
         self.t = Utc.timestamp(self.stateful_block.timestamp, 0);
         for tx in self.stateful_block.txs.iter() {
@@ -160,7 +188,7 @@ pub async fn parse_stateful_block(
     }
 
     let b = StatelessBlock::new(source, block, status, genesis);
-    b.id = Id::from_slice_sha256(&Keccak256::digest(&b));
+    b.id = ids::Id::from_slice_sha256(&Keccak256::digest(&b));
 
     for tx in block.txs.iter() {
         let resp = tx.init(genesis);

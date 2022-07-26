@@ -9,7 +9,7 @@ use crate::{
 };
 
 pub trait UnsignedTransaction {
-    fn copy() -> Box<dyn UnsignedTransaction>;
+    fn copy(&self) -> Box<dyn UnsignedTransaction>;
     fn get_block_id(&self) -> Id;
     fn get_magic(&self) -> u64;
     fn get_price(&self) -> u64;

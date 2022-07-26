@@ -4,15 +4,17 @@ use std::{
 };
 
 use avalanche_proto::rpcdb::database_client::DatabaseClient;
+use avalanche_types::{
+    ids::{Id, ID_LEN},
+    rpcchainvm::database::Database,
+};
 use hmac_sha256::Hash;
 use tokio::sync::RwLock;
 use tonic::transport::Channel;
 
-use crate::chain::{block::StatelessBlock, txn::Transaction};
-
-use avalanche_types::{
-    ids::{Id, ID_LEN},
-    rpcchainvm::database::Database,
+use crate::chain::{
+    block::{StatefulBlock, StatelessBlock},
+    txn::Transaction,
 };
 
 const LAST_ACCEPTED_BLOCK_KEY: &[u8] = b"last_accepted";
@@ -83,7 +85,7 @@ pub async fn get_last_accepted(
 pub async fn get_block(
     db: Box<dyn avalanche_types::rpcchainvm::database::Database + Send + Sync>,
     block_id: Id,
-) -> Result<StatelessBlock> {
+) -> Result<StatefulBlock> {
     match db.get(prefix_block_key(&block_id)).await {
         Ok(value) => Ok(serde_json::from_slice(&value)?),
         Err(e) => {

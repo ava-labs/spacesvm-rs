@@ -166,6 +166,6 @@ pub fn new_tx(utx: Box<dyn UnsignedTransaction>, sig: &[u8]) -> &TransactionInte
     };
 }
 
-pub fn digest_hash(utx: Box<dyn UnsignedTransaction>) -> Result<Vec<[u8]>> {
+pub fn digest_hash(utx: Box<dyn UnsignedTransaction>) -> Result<&'static [u8]> {
     return crate::tdata::digest_hash(utx.typed_data());
 }

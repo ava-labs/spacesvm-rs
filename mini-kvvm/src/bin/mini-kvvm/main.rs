@@ -1,13 +1,14 @@
-use std::io;
+use std::io::Result;
 
+use avalanche_types::rpcchainvm::plugin;
 use clap::{crate_version, Arg, Command};
 use log::info;
-
-use mini_kvvm::genesis;
+use mini_kvvm::{engine, genesis, kvvm};
 
 pub const APP_NAME: &str = "mini-kvvm-rs";
 
-fn main() {
+#[tokio::main]
+async fn main() -> Result<()> {
     let matches = Command::new(APP_NAME)
         .version(crate_version!())
         .about("Mini key-value VM for Avalanche in Rust")
@@ -38,11 +39,11 @@ fn main() {
         let msg = sub_matches.value_of("WELCOME_MESSAGE").unwrap_or("");
         let p = sub_matches.value_of("GENESIS_FILE_PATH").unwrap_or("");
         execute_genesis(author, msg, p).unwrap();
-        return;
+        return Ok(());
     }
 
     info!("starting mini-kvvm-rs");
-    // TODO
+    plugin::serve(kvvm::Vm::new()).await
 }
 
 pub fn command_genesis() -> Command<'static> {
