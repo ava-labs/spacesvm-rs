@@ -130,7 +130,7 @@ impl Transaction for TransactionInterior {
         let tx_ctx = &TransactionContext {
             genesis,
             database,
-            block_time: u64::from(block.stateful_block.timestamp),
+            block_time: block.stateful_block.timestamp as u64,
             tx_id: self.id,
             sender: self.sender,
         };

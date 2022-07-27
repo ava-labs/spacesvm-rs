@@ -1,0 +1,83 @@
+use std::{
+    cmp::Ordering,
+    io::{Error, ErrorKind, Result},
+    sync::Arc,
+};
+
+use avalanche_types::{
+    choices::status::Status,
+    ids::{must_deserialize_id, Id},
+};
+use avalanche_utils::rfc3339;
+use chrono::{DateTime, NaiveDateTime, Utc};
+use hmac_sha256::Hash;
+use serde::{Deserialize, Serialize};
+use tokio::sync::RwLock;
+
+pub const DATA_LEN: usize = 32;
+
+#[derive(Serialize, Debug, Clone, Deserialize)]
+pub struct Block {
+    #[serde(deserialize_with = "must_deserialize_id")]
+    pub parent: Id,
+    pub status: Status,
+    height: u64,
+    #[serde(with = "rfc3339::serde_format")]
+    timestamp: DateTime<Utc>,
+    data: Vec<u8>,
+
+    // generated not serialized
+    #[serde(skip)]
+    id: Option<Id>,
+    // generated not serialized
+    #[serde(skip)]
+    bytes: Vec<u8>,
+}
+
+// TODO is state part of block?
+impl Block {
+    pub fn new(
+        parent: Id,
+        height: u64,
+        data: Vec<u8>,
+        timestamp: DateTime<Utc>,
+        status: Status,
+    ) -> Box<dyn avalanche_types::rpcchainvm::block::Block + Send + Sync> {
+        Box::new(Block {
+            parent,
+            height,
+            timestamp,
+            data,
+            status,
+            id: None,
+            bytes: Vec::default(),
+        })
+    }
+}
+
+impl avalanche_types::rpcchainvm::block::Block for Block {
+    async fn bytes(&self) -> &[u8] {}
+
+    async fn height(&self) -> u64 {}
+
+    async fn timestamp(&self) -> &DateTime<Utc> {}
+
+    async fn parent(&self) -> Id {}
+
+    async fn verify(&self) -> Result<()> {
+        Ok(())
+    }
+}
+
+impl avalanche_types::choices::decidable::Decidable for Block {
+    fn id(&self) -> Id {}
+
+    fn status(&self) -> Status {}
+
+    fn accept(&mut self) -> Result<()> {
+        Ok(())
+    }
+    fn reject(&mut self) -> Result<()> {
+        Ok(())
+    }
+}
