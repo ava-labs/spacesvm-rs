@@ -22,6 +22,7 @@ clap = { version = "3.1.18", features = ["cargo", "derive"] }
 env_logger = "0.9.0"
 secp256k1 = { version = "0.22.1", features = ["global-context", "rand-std", "recovery"] }
 ethereum-types = { version = "0.13.1" }
+hex = "0.4.3"
 hexutil = "0.1.0"
 hmac-sha256 = "1.1"
 log = "0.4.17"

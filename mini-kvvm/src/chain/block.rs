@@ -1,6 +1,4 @@
-use std::{
-    io::{Error, ErrorKind, Result},
-};
+use std::io::{Error, ErrorKind, Result};
 
 use avalanche_types::{
     choices::{self, status::Status},
@@ -137,7 +135,8 @@ impl Initializer for StatelessBlock {
         self.t = Utc.timestamp(self.stateful_block.timestamp as i64, 0);
 
         for tx in self.stateful_block.txs.iter() {
-            tx.init(&self.genesis).await
+            tx.init(&self.genesis)
+                .await
                 .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
         }
 
@@ -182,7 +181,6 @@ pub async fn parse_stateful_block(
         })?;
         source = b;
     }
-
 
     let mut b = StatelessBlock {
         stateful_block: block,

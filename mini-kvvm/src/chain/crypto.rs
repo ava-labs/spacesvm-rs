@@ -2,7 +2,7 @@ use std::io::{Error, ErrorKind, Result};
 
 use avalanche_types::key::ECDSA_RECOVERABLE_SIG_LEN;
 use ethereum_types::Address;
-use secp256k1::{self, ecdsa::RecoverableSignature, PublicKey, Secp256k1, ecdsa};
+use secp256k1::{self, ecdsa, ecdsa::RecoverableSignature, PublicKey, Secp256k1};
 use sha3::{Digest, Keccak256};
 
 const V_OFFSET: usize = 64;
@@ -19,19 +19,20 @@ pub fn derive_sender(dh: &[u8], sig: &[u8]) -> Result<PublicKey> {
     let mut sig_copy: [u8; ECDSA_RECOVERABLE_SIG_LEN] = [0; ECDSA_RECOVERABLE_SIG_LEN];
     sig_copy.clone_from_slice(sig);
 
-
     if usize::from(sig_copy[V_OFFSET]) >= LEGACY_SIG_ADJ {
         let offset = sig_copy[V_OFFSET];
         sig_copy[V_OFFSET] = offset - LEGACY_SIG_ADJ as u8;
     }
 
     // TODO what is the proper recovery id in this context?
-    let recovery_id = ecdsa::RecoveryId::from_i32(1 as i32).map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+    let recovery_id = ecdsa::RecoveryId::from_i32(1 as i32)
+        .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
     let recovery_sig = RecoverableSignature::from_compact(&sig_copy, recovery_id)
         .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
-    
-    let message = secp256k1::Message::from_slice(dh).map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+
+    let message = secp256k1::Message::from_slice(dh)
+        .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
     let vrfy = Secp256k1::verification_only();
     let public_key = vrfy
         .recover_ecdsa(&message, &recovery_sig)

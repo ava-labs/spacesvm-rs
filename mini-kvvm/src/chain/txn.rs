@@ -1,22 +1,26 @@
 use std::io::{Error, ErrorKind, Result};
 
+use avalanche_types::ids;
 use avalanche_types::{ids::Id, rpcchainvm::database::Database};
-
+use erased_serde::serialize_trait_object;
 use ethereum_types::Address;
-// use serde::{Deserialize, Serialize};
-use erased_serde::{Serialize, Deserialize};
+use hex::ToHex;
+use serde::Serialize;
 use sha3::{Digest, Keccak256};
 
 use crate::chain::{
-    crypto, genesis::Genesis, storage::set_transaction, unsigned_txn::UnsignedTransaction,
+    crypto,
+    genesis::Genesis,
+    storage::set_transaction,
+    unsigned_txn::{TransactionContext, UnsignedTransaction},
     vm::Context,
 };
 
 use super::{activity::Activity, block::StatelessBlock};
 
-#[derive(Serialize, Clone, Deserialize)]
+#[derive(Serialize)]
 pub struct TransactionInterior {
-    pub unsigned_transaction: Box<dyn UnsignedTransaction>,
+    unsigned_transaction: Box<dyn UnsignedTransaction + Send + Sync>,
     signature: Vec<u8>,
 
     #[serde(skip)]
@@ -34,8 +38,9 @@ pub struct TransactionInterior {
     #[serde(skip)]
     sender: Address,
 }
+
 #[tonic::async_trait]
-pub trait Transaction: Send + Sync {
+pub trait Transaction: erased_serde::Serialize + Send + Sync {
     async fn init(&self, genesis: &Genesis) -> Result<()>;
     async fn bytes(&self) -> Vec<u8>;
     async fn size(&self) -> u64;
@@ -50,15 +55,11 @@ pub trait Transaction: Send + Sync {
         ctx: Context,
     ) -> Result<()>;
     async fn activity(&self) -> &Activity;
-
-    async fn clone_dyn(&self) -> Box<dyn Transaction>;
 }
 
-impl Clone for Box<dyn Transaction> {
-    fn clone(&self) -> Self {
-        self.clone_dyn()
-    }
-}
+// serde::Serialize does not work with trait objects.
+// ref. https://docs.rs/erased-serde/latest/erased_serde/macro.serialize_trait_object.html
+serialize_trait_object!(Transaction);
 
 #[tonic::async_trait]
 impl Transaction for TransactionInterior {
@@ -75,7 +76,7 @@ impl Transaction for TransactionInterior {
         self.digest_hash = digest_hash.to_vec();
 
         // Derive sender
-        let public_key = crypto::derive_sender(self.digest_hash.into(), self.signature.into())
+        let public_key = crypto::derive_sender(digest_hash, self.signature.as_slice())
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
         self.sender = crypto::public_to_address(&public_key);
 
@@ -111,10 +112,10 @@ impl Transaction for TransactionInterior {
         block: StatelessBlock,
         ctx: Context,
     ) -> Result<()> {
-        let resp = self.unsigned_transaction.execute(genesis);
-        if resp.is_err() {
-            return Err(Error::new(ErrorKind::Other, resp.unwrap_err()));
-        }
+        self.unsigned_transaction
+            .execute_base(&genesis)
+            .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
+
         if !ctx
             .recent_block_ids
             .contains(&self.unsigned_transaction.get_block_id())
@@ -126,7 +127,6 @@ impl Transaction for TransactionInterior {
         }
 
         // TODO Ensure sender has balance
-
         let tx_ctx = &TransactionContext {
             genesis,
             database,
@@ -135,44 +135,34 @@ impl Transaction for TransactionInterior {
             sender: self.sender,
         };
 
-        let resp = self.unsigned_transaction.execute(&tx_ctx);
-        if resp.is_err() {
-            return Err(Error::new(ErrorKind::Other, resp.unwrap_err()));
-        }
+        self.unsigned_transaction
+            .execute(tx_ctx)
+            .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
 
-        let resp = set_transaction(database, self);
-        if resp.is_err() {
-            return Err(Error::new(ErrorKind::Other, resp.unwrap_err()));
-        }
+        set_transaction(database, Box::new(*self))
+            .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
 
         Ok(())
     }
 
-    async fn activity(&self) -> &Activity {}
-
-    fn clone_dyn(&self) -> Box<dyn Transaction> {
-        Box::new(self.clone())
+    async fn activity(&self) -> &Activity {
+        let activity = self.unsigned_transaction.activity();
+        activity.sender = self.sender.encode_hex();
+        activity.tx_id = self.id;
+        &activity
     }
 }
 
-pub struct TransactionContext {
-    genesis: Genesis,
-    database: Box<dyn Database + Send + Sync>,
-    block_time: u64,
-    tx_id: Id,
-    sender: Address,
-}
-
-pub fn new_tx(utx: Box<dyn UnsignedTransaction>, sig: &[u8]) -> &TransactionInterior {
+pub fn new_tx(utx: Box<dyn UnsignedTransaction + Send + Sync>, sig: &[u8]) -> &TransactionInterior {
     return &TransactionInterior {
         unsigned_transaction: utx,
         signature: sig.to_vec(),
 
-        digest_hash: (),
-        bytes: (),
-        id: (),
-        size: (),
-        sender: (),
+        digest_hash: vec![],
+        bytes: vec![],
+        id: ids::Id::empty(),
+        size: 0,
+        sender: ethereum_types::H160::zero(),
     };
 }
 
