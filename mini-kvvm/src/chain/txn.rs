@@ -1,12 +1,7 @@
-use std::io::{Error, ErrorKind, Result};
-
-use avalanche_types::ids;
-use avalanche_types::{ids::Id, rpcchainvm::database::Database};
-use erased_serde::serialize_trait_object;
-use ethereum_types::Address;
-use hex::ToHex;
-use serde::Serialize;
-use sha3::{Digest, Keccak256};
+use std::{
+    io::{Error, ErrorKind, Result},
+    fmt::Debug,
+};
 
 use crate::chain::{
     crypto,
@@ -15,11 +10,18 @@ use crate::chain::{
     unsigned_txn::{TransactionContext, UnsignedTransaction},
     vm::Context,
 };
+use avalanche_types::ids;
+use avalanche_types::{ids::Id, rpcchainvm::database::Database};
+use ethereum_types::Address;
+use hex::ToHex;
+use serde::{Serialize, Deserialize};
+use sha3::{Digest, Keccak256};
 
-use super::{activity::Activity, block::StatelessBlock};
+use super::{activity::Activity, block::StatelessBlock, serde::from_boxed_seq};
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct TransactionInterior {
+    #[serde(deserialize_with = "from_boxed_seq")]
     unsigned_transaction: Box<dyn UnsignedTransaction + Send + Sync>,
     signature: Vec<u8>,
 
@@ -40,7 +42,8 @@ pub struct TransactionInterior {
 }
 
 #[tonic::async_trait]
-pub trait Transaction: erased_serde::Serialize + Send + Sync {
+#[typetag::serde]
+pub trait Transaction: Debug + Send + Sync {
     async fn init(&self, genesis: &Genesis) -> Result<()>;
     async fn bytes(&self) -> Vec<u8>;
     async fn size(&self) -> u64;
@@ -57,10 +60,7 @@ pub trait Transaction: erased_serde::Serialize + Send + Sync {
     async fn activity(&self) -> &Activity;
 }
 
-// serde::Serialize does not work with trait objects.
-// ref. https://docs.rs/erased-serde/latest/erased_serde/macro.serialize_trait_object.html
-serialize_trait_object!(Transaction);
-
+#[typetag::serde]
 #[tonic::async_trait]
 impl Transaction for TransactionInterior {
     async fn init(&self, genesis: &Genesis) -> Result<()> {

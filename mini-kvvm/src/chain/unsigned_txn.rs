@@ -1,15 +1,19 @@
-use std::io::Result;
-
-use avalanche_types::{ids::Id, rpcchainvm::database::Database};
-use erased_serde::serialize_trait_object;
-use ethereum_types::Address;
+use std::{
+io::Result,
+fmt::Debug,
+};
 
 use crate::{
     chain::{activity::Activity, genesis::Genesis},
     tdata::TypedData,
 };
+use avalanche_types::{ids::Id, rpcchainvm::database::Database};
+use ethereum_types::Address;
 
-pub trait UnsignedTransaction: Send + Sync + erased_serde::Serialize {
+
+
+#[typetag::serde]
+pub trait UnsignedTransaction: Debug + Send + Sync {
     fn copy(&self) -> Box<dyn UnsignedTransaction>;
     fn get_block_id(&self) -> Id;
     fn get_magic(&self) -> u64;
@@ -24,10 +28,6 @@ pub trait UnsignedTransaction: Send + Sync + erased_serde::Serialize {
     fn typed_data(&self) -> Box<dyn TypedData>;
     fn activity(&self) -> Activity;
 }
-
-// serde::Serialize does not work with trait objects.
-// ref. https://docs.rs/erased-serde/latest/erased_serde/macro.serialize_trait_object.html
-serialize_trait_object!(UnsignedTransaction);
 
 pub struct TransactionContext {
     genesis: Genesis,

@@ -3,6 +3,7 @@ pub mod block;
 pub mod crypto;
 pub mod genesis;
 pub mod network;
+pub mod serde;
 pub mod set_tx;
 pub mod storage;
 pub mod txn;

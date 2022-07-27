@@ -26,7 +26,7 @@ pub struct StatefulBlock {
     pub timestamp: i64,
     data: Vec<u8>,
     // access_proof: TODO
-    txs: Vec<TransactionInterior>,
+    txs: Vec<Box<dyn Transaction + Send + Sync>>,
 }
 
 #[derive(Serialize)]
