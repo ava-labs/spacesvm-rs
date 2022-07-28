@@ -30,6 +30,7 @@ use crate::chain::{
     // vm::Vm,
     storage::{get_last_accepted, has_last_accepted},
     txn::TransactionInterior,
+    vm::Vm,
 };
 
 use crate::chain;
@@ -144,11 +145,10 @@ impl avalanche_types::rpcchainvm::common::vm::Vm for Vm {
             let genesis_block_vec = genesis_bytes.to_vec();
             let genesis_block_bytes = genesis_block_vec.try_into().unwrap();
 
+            // TODO we need a real genesis is is not going to cut it.
             let mut genesis_block = StatelessBlock::new(
-                ids::Id::empty(),
-                0,
                 genesis_block_bytes,
-                DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(0, 0), Utc),
+                0, // TODO: use timestamp
                 Status::Processing,
             )?;
 
