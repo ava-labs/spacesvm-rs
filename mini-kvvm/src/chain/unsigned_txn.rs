@@ -1,7 +1,4 @@
-use std::{
-io::Result,
-fmt::Debug,
-};
+use std::{fmt::Debug, io::Result};
 
 use crate::{
     chain::{activity::Activity, genesis::Genesis},
@@ -9,8 +6,6 @@ use crate::{
 };
 use avalanche_types::{ids::Id, rpcchainvm::database::Database};
 use ethereum_types::Address;
-
-
 
 #[typetag::serde]
 pub trait UnsignedTransaction: Debug + Send + Sync {

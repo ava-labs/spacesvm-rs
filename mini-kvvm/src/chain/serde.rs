@@ -1,10 +1,6 @@
-use std::{
-    fmt,
-    marker::PhantomData,
-};
+use std::{fmt, marker::PhantomData};
 
-use serde::de::{Deserialize, Deserializer,  MapAccess, Visitor, SeqAccess};
-
+use serde::de::{Deserialize, Deserializer, SeqAccess, Visitor};
 
 /// Custom Serde deserializer for lists of boxed traits. Activate
 /// by adding the following above your structs field.

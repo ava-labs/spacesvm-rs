@@ -1,6 +1,6 @@
 use std::{
-    io::{Error, ErrorKind, Result},
     fmt::Debug,
+    io::{Error, ErrorKind, Result},
 };
 
 use crate::chain::{
@@ -14,14 +14,13 @@ use avalanche_types::ids;
 use avalanche_types::{ids::Id, rpcchainvm::database::Database};
 use ethereum_types::Address;
 use hex::ToHex;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use sha3::{Digest, Keccak256};
 
-use super::{activity::Activity, block::StatelessBlock, serde::from_boxed_seq};
+use super::{activity::Activity, block::StatelessBlock};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TransactionInterior {
-    #[serde(deserialize_with = "from_boxed_seq")]
     unsigned_transaction: Box<dyn UnsignedTransaction + Send + Sync>,
     signature: Vec<u8>,
 
@@ -140,6 +139,7 @@ impl Transaction for TransactionInterior {
             .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
 
         set_transaction(database, Box::new(*self))
+            .await
             .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
 
         Ok(())

@@ -1,5 +1,7 @@
 pub mod activity;
 pub mod block;
+pub mod common;
+pub mod common_tx;
 pub mod crypto;
 pub mod genesis;
 pub mod network;
