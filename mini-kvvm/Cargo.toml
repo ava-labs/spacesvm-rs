@@ -18,6 +18,7 @@ avalanche-proto = { version = "0.15.1" }
 avalanche-consensus = {path = "../../../avalanche-rust/avalanche-rust/crates/avalanche-consensus"}
 avalanche-types = {path = "../../../avalanche-rust/avalanche-rust/crates/avalanche-types"}
 bitvec = "1.0.0"
+byteorder = "1.4.3"
 byte-unit = "4.0.14"
 chrono = "0.4.19"
 clap = { version = "3.1.18", features = ["cargo", "derive"] }

@@ -5,6 +5,8 @@ use std::{
 
 use avalanche_proto::rpcdb::database_client::DatabaseClient;
 use avalanche_types::ids::{Id, ID_LEN};
+use byteorder::{BigEndian, ByteOrder, LittleEndian};
+use ethereum_types::Address;
 // use hmac_sha256::Hash;
 use tokio::sync::RwLock;
 use tonic::transport::Channel;
@@ -57,7 +59,7 @@ pub async fn set_last_accepted(
             )
         })?;
 
-        let og_txs = 
+    // let og_txs = TODO
 
     let stateful_bytes = serde_json::to_vec(&block).map_err(|e| {
         Error::new(
@@ -75,14 +77,13 @@ pub async fn set_last_accepted(
             )
         })?;
 
-        block.stateful_block.txs = 
-
-    Ok(())
+    block.stateful_block.txs = Ok(())
 }
 
-
-pub fn link_values(mut db: Box<dyn avalanche_types::rpcchainvm::database::Database + Send + Sync>, block: &StatelessBlock) -> Result<Vec<Box<dyn Transaction>>> {
-
+pub fn link_values(
+    mut db: Box<dyn avalanche_types::rpcchainvm::database::Database + Send + Sync>,
+    block: &StatelessBlock,
+) -> Result<Vec<Box<dyn Transaction>>> {
 }
 
 /// Attempts to retrieve the last accepted block and return the corresponding
@@ -115,6 +116,24 @@ pub async fn get_block(
             return Err(e);
         }
     }
+}
+
+pub async fn set_balance(
+    db: Box<dyn avalanche_types::rpcchainvm::database::Database + Send + Sync>,
+    address: Address,
+    balance: u64,
+) -> Result<()> {
+    let key = prefix_balance_key(address);
+    let mut value = vec![0; 8];
+    BigEndian::write_u64(value, balance);
+    db.put(key, value).await.map_err(|e| {
+        Error::new(
+            ErrorKind::Other,
+            format!("failed to put new balance: {:?}", e),
+        )
+    })?;
+
+    Ok(())
 }
 
 /// Checks if the last accepted block key exists and returns true if has a value.
@@ -151,6 +170,15 @@ fn prefix_tx_value_key(tx_id: &Id) -> &[u8] {
     k.push(TX_VALUE_PREFIX);
     k.extend_from_slice(BYTE_DELIMITER);
     k.extend_from_slice(&tx_id.to_vec());
+    &k
+}
+
+/// [balancePrefix] + [delimiter] + [address]
+fn prefix_balance_key(address: Address) -> &[u8] {
+    let mut k: Vec<u8> = Vec::with_capacity(HASH_LEN);
+    k.push(BALANCE_PREFIX);
+    k.extend_from_slice(BYTE_DELIMITER);
+    k.extend_from_slice(address.as_bytes());
     &k
 }
 

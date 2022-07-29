@@ -3,9 +3,7 @@ use std::io::{Error, ErrorKind, Result};
 use avalanche_types::ids;
 use serde::{Deserialize, Serialize};
 
-
 use super::genesis::Genesis;
-
 
 #[derive(Serialize, Deserialize)]
 struct BaseTx {
@@ -13,7 +11,7 @@ struct BaseTx {
     block_id: ids::Id,
 
     // Value defined in genesis to protect against replay attacks on
-	// different VMs.
+    // different VMs.
     magic: u64,
 
     // Value per unit to spend on this transaction.
@@ -25,7 +23,7 @@ impl BaseTx {
         self.block_id
     }
 
-    fn set_block_id(&self, id : ids::Id) {
+    fn set_block_id(&self, id: ids::Id) {
         self.block_id = id;
     }
 
@@ -46,40 +44,37 @@ impl BaseTx {
     }
 
     fn execute_base(&self, genesis: Genesis) -> Result<()> {
-           if self.block_id == ids::Id::empty() {
+        if self.block_id == ids::Id::empty() {
             return Err(Error::new(
                 ErrorKind::InvalidData,
                 format!("invalid block id"),
             ));
         }
         if self.magic != genesis.magic {
-            return Err(Error::new(
-                ErrorKind::InvalidData,
-                format!("invalid magic"),
-            ));
+            return Err(Error::new(ErrorKind::InvalidData, format!("invalid magic")));
         }
 
         if self.price < genesis.min_price {
-            return Err(Error::new(
-                ErrorKind::InvalidData,
-                format!("invalid price"),
-            ));
+            return Err(Error::new(ErrorKind::InvalidData, format!("invalid price")));
         }
 
         Ok(())
     }
 
     fn fee_units(&self, genesis: Genesis) -> u64 {
-        return genesis.base_tx_units
+        return genesis.base_tx_units;
     }
 
     fn load_units(&self, genesis: Genesis) -> u64 {
-        return self.fee_units(genesis)
+        return self.fee_units(genesis);
     }
 
     fn copy(&self) -> BaseTx {
         let block_id = ids::Id::from_slice(self.block_id.as_ref());
-        BaseTx { block_id, magic: self.magic, price: self.price }
+        BaseTx {
+            block_id,
+            magic: self.magic,
+            price: self.price,
+        }
     }
-
 }
