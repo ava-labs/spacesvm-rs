@@ -1,7 +1,7 @@
 use hex::{FromHex, ToHex};
 use once_cell::sync::OnceCell;
-pub use primitive_types::U256;
 use primitive_types::H256;
+pub use primitive_types::U256;
 use serde::{
     de::{self, Deserialize, Deserializer, Visitor},
     Serialize, Serializer,
@@ -38,7 +38,6 @@ impl<'a> Serialize for BytesRef<'a> {
         serializer.serialize_str(&format!("0x{:x}", &self))
     }
 }
-
 
 #[derive(Clone, PartialEq, Eq, Hash, Default, Debug)]
 pub struct Hash(H256);
@@ -145,4 +144,3 @@ impl<'de> Visitor<'de> for BytesVisitor {
         }
     }
 }
-

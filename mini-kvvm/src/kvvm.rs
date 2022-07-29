@@ -27,10 +27,8 @@ use crate::chain::{
     block::StatelessBlock,
     genesis::Genesis,
     network::Network,
-    // vm::Vm,
     storage::{get_last_accepted, has_last_accepted},
     txn::TransactionInterior,
-    vm::Vm,
 };
 
 use crate::chain;
@@ -47,7 +45,7 @@ pub struct VmInterior {
     pub preferred: ids::Id,
     pub mempool: Vec<Vec<u8>>,
     pub verified_blocks: HashMap<ids::Id, StatelessBlock>,
-    pub last_accepted: StatelessBlock,
+    pub last_accepted: Option<StatelessBlock>,
     pub preferred_block_id: Option<ids::Id>,
     pub network: Network,
     pub app_sender: Option<Box<dyn common::appsender::AppSender + Send + Sync>>,
@@ -70,7 +68,7 @@ impl Vm {
             preferred: ids::Id::empty(),
             mempool: Vec::new(),
             verified_blocks: HashMap::new(),
-            last_accepted: StatelessBlock::default(),
+            last_accepted: None,
             preferred_block_id: None,
             network: Network::new(),
             app_sender: None,
@@ -190,10 +188,43 @@ impl avalanche_types::rpcchainvm::common::vm::Vm for Vm {
 }
 
 #[tonic::async_trait]
-impl avalanche_types::rpcchainvm::common::apphandler::AppHandler for Vm {}
+impl avalanche_types::rpcchainvm::common::apphandler::AppHandler for Vm {
+    async fn app_request(
+        &self,
+        node_id: &ids::node::Id,
+        request_id: u32,
+        deadline: time::Instant,
+        request: &[u8],
+    ) -> Result<()> {
+        todo!();
+    }
+
+    async fn app_request_failed(&self, node_id: &ids::node::Id, request_id: u32) -> Result<()> {
+        todo!();
+    }
+    async fn app_response(
+        &self,
+        node_id: &ids::node::Id,
+        request_id: u32,
+        response: &[u8],
+    ) -> Result<()> {
+        todo!();
+    }
+
+    async fn app_gossip(&self, node_id: &ids::node::Id, msg: &[u8]) -> Result<()> {
+        todo!();
+    }
+}
 
 #[tonic::async_trait]
-impl avalanche_types::rpcchainvm::common::vm::Connector for Vm {}
+impl avalanche_types::rpcchainvm::common::vm::Connector for Vm {
+    async fn connected(&self, id: &ids::node::Id) -> Result<()> {
+        todo!();
+    }
+    async fn disconnected(&self, id: &ids::node::Id) -> Result<()> {
+        todo!();
+    }
+}
 
 #[tonic::async_trait]
 impl avalanche_types::rpcchainvm::snowman::block::ChainVm for Vm {
@@ -332,4 +363,6 @@ impl avalanche_types::rpcchainvm::snowman::block::Getter for Vm {
 }
 
 #[tonic::async_trait]
-impl avalanche_types::rpcchainvm::snowman::block::Parser for Vm {}
+impl avalanche_types::rpcchainvm::snowman::block::Parser for Vm {
+    async fn parse_block(&self, bytes: &[u8]) -> Result<Box<dyn snowman::Block>> {}
+}

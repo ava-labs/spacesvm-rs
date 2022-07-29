@@ -4,9 +4,7 @@ use std::{
 };
 
 use avalanche_proto::rpcdb::database_client::DatabaseClient;
-use avalanche_types::{
-    ids::{Id, ID_LEN},
-};
+use avalanche_types::ids::{Id, ID_LEN};
 // use hmac_sha256::Hash;
 use tokio::sync::RwLock;
 use tonic::transport::Channel;
@@ -49,19 +47,42 @@ pub async fn set_last_accepted(
     mut db: Box<dyn avalanche_types::rpcchainvm::database::Database + Send + Sync>,
     block: &StatelessBlock,
 ) -> Result<()> {
-    let block_id = block
-        .id;
-    let resp = db.put(LAST_ACCEPTED_BLOCK_KEY, &block_id.to_vec()).await;
-    if resp.is_err() {
-        return Err(Error::new(ErrorKind::Other, resp.unwrap_err()));
-    }
+    let block_id = block.id;
+    db.put(LAST_ACCEPTED_BLOCK_KEY, &block_id.to_vec())
+        .await
+        .map_err(|e| {
+            Error::new(
+                ErrorKind::Other,
+                format!("failed to put last accepted block: {:?}", e),
+            )
+        })?;
 
-    let value = serde_json::to_vec(&block)?;
-    let resp = db.put(prefix_block_key(&block_id), &value).await;
-    if resp.is_err() {
-        return Err(Error::new(ErrorKind::Other, resp.unwrap_err()));
-    }
+        let og_txs = 
+
+    let stateful_bytes = serde_json::to_vec(&block).map_err(|e| {
+        Error::new(
+            ErrorKind::Other,
+            format!("failed deserialize block: {:?}", e),
+        )
+    })?;
+
+    db.put(prefix_block_key(&block_id), &stateful_bytes)
+        .await
+        .map_err(|e| {
+            Error::new(
+                ErrorKind::Other,
+                format!("failed to put last accepted block: {:?}", e),
+            )
+        })?;
+
+        block.stateful_block.txs = 
+
     Ok(())
+}
+
+
+pub fn link_values(mut db: Box<dyn avalanche_types::rpcchainvm::database::Database + Send + Sync>, block: &StatelessBlock) -> Result<Vec<Box<dyn Transaction>>> {
+
 }
 
 /// Attempts to retrieve the last accepted block and return the corresponding
@@ -142,7 +163,10 @@ fn value_key(key: Hash) -> Vec<u8> {
     k
 }
 
-pub async fn set_transaction(mut db: Box<dyn avalanche_types::rpcchainvm::database::Database + Send + Sync>, txn: Box<dyn Transaction>) -> Result<()> {
+pub async fn set_transaction(
+    mut db: Box<dyn avalanche_types::rpcchainvm::database::Database + Send + Sync>,
+    txn: Box<dyn Transaction>,
+) -> Result<()> {
     let id = txn.id().await;
     let k = prefix_tx_key(&id);
     return db.put(k, k).await;

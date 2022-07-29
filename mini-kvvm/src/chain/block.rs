@@ -22,10 +22,10 @@ pub struct StatefulBlock {
     data: Vec<u8>,
     // access_proof: TODO
     #[serde(deserialize_with = "from_boxed_seq")]
-    txs: Vec<Box<dyn Transaction + Send + Sync>>,
+    pub txs: Vec<Box<dyn Transaction + Send + Sync>>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct StatelessBlock {
     pub stateful_block: StatefulBlock,
 

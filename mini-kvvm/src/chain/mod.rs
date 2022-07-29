@@ -1,4 +1,5 @@
 pub mod activity;
+pub mod base_tx;
 pub mod block;
 pub mod common;
 pub mod common_tx;
