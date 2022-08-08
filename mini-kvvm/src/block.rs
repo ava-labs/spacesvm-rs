@@ -1,42 +1,69 @@
 use std::{
     cmp::Ordering,
     io::{Error, ErrorKind, Result},
-    sync::Arc,
 };
 
 use avalanche_types::{
     choices::status::Status,
     ids::{must_deserialize_id, Id},
+    rpcchainvm,
 };
 use avalanche_utils::rfc3339;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use hmac_sha256::Hash;
 use serde::{Deserialize, Serialize};
-use tokio::sync::RwLock;
 
-use crate::kvvm::ChainVmInterior;
+use crate::kvvm::ChainVm;
 
 pub const DATA_LEN: usize = 32;
+
+impl Block {
+    pub fn new(
+        parent: Id,
+        height: u64,
+        data: Vec<u8>,
+        timestamp: DateTime<Utc>,
+        status: Status,
+    ) -> Self {
+        Self {
+            parent,
+            height,
+            timestamp,
+            data,
+            status,
+            id: Id::empty(),
+            bytes: Vec::default(),
+            vm: None,
+        }
+    }
+}
+
+pub trait MiniKvvmBlock: rpcchainvm::concensus::snowman::Block + Serialize {
+    fn data(&self) -> &[u8];
+    fn initialize(&mut self, vm: ChainVm) -> Result<Id>;
+    fn set_status(&mut self, status: Status);
+}
 
 // TODO remove
 // Default is only used as a placeholder for unimplemented block logic
 impl Default for Block {
     fn default() -> Self {
         Self {
-            id: Some(Id::empty()),
+            id: Id::empty(),
             parent: Id::empty(),
             timestamp: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(0, 0), Utc),
             bytes: Vec::default(),
             height: 0,
             status: Status::Unknown("".to_string()),
             data: Vec::default(),
+            vm: None,
         }
     }
 }
 
 /// snow/consensus/snowman/Block
 /// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/snow/consensus/snowman#Block
-#[derive(Serialize, Debug, Clone, Deserialize)]
+#[derive(Serialize, Clone, Deserialize)]
 pub struct Block {
     #[serde(deserialize_with = "must_deserialize_id")]
     pub parent: Id,
@@ -48,65 +75,120 @@ pub struct Block {
 
     // generated not serialized
     #[serde(skip)]
-    id: Option<Id>,
+    id: Id,
     // generated not serialized
     #[serde(skip)]
     bytes: Vec<u8>,
+    #[serde(skip)]
+    vm: Option<ChainVm>,
 }
 
-impl Block {
-    pub fn new(
-        parent: Id,
-        height: u64,
-        data: Vec<u8>,
-        timestamp: DateTime<Utc>,
-        status: Status,
-    ) -> Result<Self> {
-        Ok(Self {
-            parent,
-            height,
-            timestamp,
-            data,
-            status,
-            id: None,
-            bytes: Vec::default(),
-        })
-    }
-
-    pub fn parent(&self) -> Id {
-        self.parent
-    }
-
+#[tonic::async_trait]
+impl rpcchainvm::concensus::snowman::Decidable for Block {
     /// id returns the ID of this block
-    pub fn id(&self) -> Option<Id> {
+    async fn id(&self) -> Id {
         self.id
     }
 
-    pub fn timestamp(&self) -> &DateTime<Utc> {
-        &self.timestamp
+    /// status returns the status of this block
+    async fn status(&self) -> Status {
+        self.status.clone()
+    }
+
+    /// Accepts this element.
+    async fn accept(&mut self) -> Result<()> {
+        let vm = self.vm.clone();
+        let vm = vm.ok_or(Error::new(ErrorKind::Other, "no vm associated with block"))?;
+        let mut inner = vm.inner.write().await;
+
+        self.status = Status::Accepted;
+
+        // add newly accepted block to state
+        inner
+            .state
+            .put_block(self.clone(), vm.clone())
+            .await
+            .map_err(|e| Error::new(ErrorKind::Other, format!("failed to put block: {:?}", e)))?;
+
+        // set last accepted block to this block id
+        inner
+            .state
+            .set_last_accepted_block_id(&self.id)
+            .await
+            .map_err(|e| Error::new(ErrorKind::Other, format!("failed to put block: {:?}", e)))?;
+
+        // remove from verified blocks
+        inner.verified_blocks.remove(&self.id);
+        Ok(())
+    }
+
+    /// Rejects this element.
+    async fn reject(&mut self) -> Result<()> {
+        let vm = self.vm.clone();
+        let vm = vm.ok_or(Error::new(ErrorKind::Other, "no vm associated with block"))?;
+        let mut inner = vm.inner.write().await;
+
+        self.status = Status::Rejected;
+
+        // add newly rejected block to state
+        inner
+            .state
+            .put_block(self.clone(), vm.clone())
+            .await
+            .map_err(|e| Error::new(ErrorKind::Other, format!("failed to put block: {:?}", e)))?;
+
+        // remove from verified, as it is rejected
+        inner.verified_blocks.remove(&self.id);
+        Ok(())
+    }
+}
+
+#[tonic::async_trait]
+impl rpcchainvm::concensus::snowman::Block for Block {
+    /// bytes returns the binary representation of this block
+    async fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    /// height returns this block's height. The genesis block has height 0.
+    async fn height(&self) -> u64 {
+        self.height
+    }
+
+    async fn timestamp(&self) -> u64 {
+        self.timestamp.timestamp() as u64
+    }
+
+    async fn parent(&self) -> Id {
+        self.parent
     }
 
     /// verify ensures that the state of the block is expected.
-    pub async fn verify(&self, inner: &Arc<RwLock<ChainVmInterior>>) -> Result<()> {
-        let vm = inner.read().await;
+    async fn verify(&self) -> Result<()> {
+        let vm = self
+            .vm
+            .clone()
+            .ok_or(Error::new(ErrorKind::Other, "no reference to vm"))?;
+
+        let vm = vm.inner.read().await;
 
         match vm.state.get_block(self.parent).await? {
             Some(parent_block) => {
                 // Ensure block height comes right after its parent's height
-                if parent_block.height() + 1 != self.height() {
+                if parent_block.height().await + 1 != self.height {
                     return Err(Error::new(
                         ErrorKind::InvalidData,
                         "failed to verify block invalid height",
                     ));
                 }
                 // Ensure block timestamp is after its parent's timestamp.
-                if self.timestamp().cmp(parent_block.timestamp()) == Ordering::Less {
+                if self.timestamp().await.cmp(&parent_block.timestamp().await) == Ordering::Less {
                     return Err(Error::new(
                         ErrorKind::InvalidData,
                         format!(
                             "block timestamp: {} is after parents: {}",
-                            self.timestamp(),
-                            parent_block.timestamp()
+                            self.timestamp().await,
+                            parent_block.timestamp().await
                         ),
                     ));
                 }
@@ -118,46 +200,38 @@ impl Block {
             )),
         }
     }
+}
 
+impl MiniKvvmBlock for Block {
     /// data returns the block payload.
-    pub fn data(&self) -> &[u8] {
+    fn data(&self) -> &[u8] {
         &self.data
     }
 
-    /// bytes returns the binary representation of this block
-    pub fn bytes(&self) -> &[u8] {
-        &self.bytes
-    }
-
-    /// height returns this block's height. The genesis block has height 0.
-    pub fn height(&self) -> u64 {
-        self.height
-    }
-
-    /// status returns the status of this block
-    pub fn status(&self) -> Status {
-        self.status.clone()
+    fn set_status(&mut self, status: Status) {
+        self.status = status;
     }
 
     /// initialize populates the generated fields (id, bytes) of the the block and
     /// returns the generated id.
-    pub fn initialize(&mut self) -> Result<Id> {
-        if self.id.is_none() {
+    fn initialize(&mut self, vm: ChainVm) -> Result<Id> {
+        if self.id.is_empty() {
             match serde_json::to_vec(&self) {
                 // Populate generated fields
                 Ok(block_bytes) => {
                     let block_data = block_bytes.as_slice();
                     let block_id = to_block_id(&block_data);
-                    self.id = Some(block_id);
+                    self.id = block_id;
                     self.bytes = block_bytes;
-                    return Ok(self.id.unwrap());
+                    self.vm = Some(vm);
+                    return Ok(self.id);
                 }
                 Err(error) => {
                     return Err(Error::new(ErrorKind::NotFound, error));
                 }
             }
         }
-        Ok(self.id.unwrap())
+        Ok(self.id)
     }
 }
 
@@ -169,10 +243,11 @@ fn new_id(bytes: [u8; DATA_LEN]) -> Id {
     Id::from_slice(&bytes)
 }
 
-#[test]
-fn test_serialization_round_trip() {
+#[tokio::test]
+async fn test_serialization_round_trip() {
+    use rpcchainvm::concensus::snowman::Block as _; //Bring the block trait into scope for [.parent()]
     let block = Block::default();
     let writer = serde_json::to_vec(&block).unwrap();
     let value: Block = serde_json::from_slice(&writer).unwrap();
-    assert_eq!(block.parent(), value.parent());
+    assert_eq!(block.parent().await, value.parent().await);
 }

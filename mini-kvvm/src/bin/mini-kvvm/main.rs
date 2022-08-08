@@ -1,9 +1,9 @@
-use std::io::Result;
+use std::{io::Result, sync::Arc};
 
-use avalanche_types::rpcchainvm::plugin;
 use clap::{crate_version, Arg, Command};
 use log::info;
-use mini_kvvm::{engine, genesis, kvvm};
+use mini_kvvm::{genesis, kvvm};
+use tokio::sync::RwLock;
 
 pub const APP_NAME: &str = "mini-kvvm-rs";
 
@@ -43,7 +43,14 @@ async fn main() -> Result<()> {
     }
 
     info!("starting mini-kvvm-rs");
-    plugin::serve(engine::VmServer::new(kvvm::ChainVmInterior::new())).await
+    let mini_kvvm = kvvm::ChainVm::new(Arc::new(RwLock::new(kvvm::ChainVmInterior::default())));
+    let rpcchain = avalanche_types::rpcchainvm::vm::server::Server::new(mini_kvvm);
+
+    avalanche_types::rpcchainvm::plugin::serve(rpcchain)
+        .await
+        .expect("failed to start server");
+
+    Ok(())
 }
 
 pub fn command_genesis() -> Command<'static> {

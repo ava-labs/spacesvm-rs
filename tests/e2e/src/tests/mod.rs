@@ -1,4 +1,5 @@
 use std::{
+    process::Command,
     thread,
     time::{Duration, Instant},
 };
@@ -7,6 +8,8 @@ use log::{info, warn};
 
 use avalanche_network_runner_sdk::{Client, GlobalConfig, StartRequest};
 
+const RELEASE: &str = "v1.7.16";
+
 #[tokio::test]
 async fn e2e() {
     let _ = env_logger::builder()
@@ -14,45 +17,35 @@ async fn e2e() {
         .is_test(true)
         .try_init();
 
-    let (ep, is_set) = crate::get_network_runner_grpc_endpoint();
+    let (ep, is_set) = get_network_runner_grpc_endpoint();
     assert!(is_set);
 
     let cli = Client::new(&ep).await;
-
-    // Allow server time to become ready.
-    thread::sleep(Duration::from_millis(2000));
 
     info!("ping...");
     let resp = cli.ping().await.expect("failed ping");
     info!("network-runner is running (ping response {:?})", resp);
 
-    let (exec_path, is_set) = crate::get_network_runner_avalanchego_path();
-    assert!(is_set);
-    info!("exec_path {:?})", exec_path);
+    // Download avalanchego
+    let (exec_path, _plugin_path) =
+        avalanche_installer::avalanchego::download(None, None, Some(String::from(RELEASE)))
+            .await
+            .expect("failed to download avalanchego");
 
-    let (whitelisted_subnets, is_set) = crate::get_network_runner_whitelisted_subnets();
-    assert!(is_set);
-    info!("whitelisted_subnets {:?})", whitelisted_subnets);
-
-    let (plugin_dir, is_set) = crate::get_network_runner_plugin_dir_path();
-    assert!(is_set);
-    info!("plugin_dir {:?})", plugin_dir);
-
-    let (custom_vms, is_set) = crate::get_custom_vms();
-    assert!(is_set);
-    info!("custom_vms {:?})", custom_vms);
+    info!(
+        "running avalanchego version {}",
+        get_avalanchego_version(&exec_path)
+    );
 
     let global_config = GlobalConfig {
         log_level: String::from("info"),
     };
 
+    // TODO: add custom vms for "mini-kvvm"
     info!("starting...");
     let resp = cli
         .start(StartRequest {
-            exec_path: exec_path,
-            whitelisted_subnets: Some(whitelisted_subnets),
-            custom_vms: custom_vms,
-            plugin_dir: Some(plugin_dir),
+            exec_path,
             global_node_config: Some(serde_json::to_string(&global_config).unwrap()),
             ..Default::default()
         })
@@ -66,7 +59,7 @@ async fn e2e() {
     // enough time for network-runner to get ready
     thread::sleep(Duration::from_secs(20));
 
-    info!("checking custom vm healthiness...");
+    info!("checking cluster healthiness...");
     let mut ready = false;
     let timeout = Duration::from_secs(300);
     let interval = Duration::from_secs(15);
@@ -88,32 +81,24 @@ async fn e2e() {
         };
         thread::sleep(itv);
 
-        cnt += 1;
         ready = {
-            match cli.status().await {
-                Ok(status) => {
-                    if status.cluster_info.is_some()
-                        && !status.cluster_info.unwrap().custom_vms_healthy
-                    {
-                        warn!("custom vms not healthy yet...");
-                        continue;
-                    }
-                    warn!("custom vms healthy");
+            match cli.health().await {
+                Ok(_) => {
+                    info!("healthy now!");
                     true
                 }
-
                 Err(e) => {
                     warn!("not healthy yet {}", e);
                     false
                 }
             }
         };
-
         if ready {
             break;
         }
-    }
 
+        cnt += 1;
+    }
     assert!(ready);
 
     info!("checking status...");
@@ -132,4 +117,19 @@ async fn e2e() {
     info!("stopping...");
     let _resp = cli.stop().await.expect("failed stop");
     info!("successfully stopped network");
+}
+
+fn get_avalanchego_version(exec_path: &String) -> String {
+    let output = Command::new(exec_path)
+        .arg("--version")
+        .output()
+        .expect("failed to get avalanchego version");
+    format!("{}", String::from_utf8(output.stdout).unwrap())
+}
+
+fn get_network_runner_grpc_endpoint() -> (String, bool) {
+    match std::env::var("NETWORK_RUNNER_GRPC_ENDPOINT") {
+        Ok(s) => (s, true),
+        _ => (String::new(), false),
+    }
 }

@@ -1,15 +1,14 @@
 use std::io::{Error, ErrorKind, Result};
 
-use avalanche_proto::rpcdb::{database_client::*, GetRequest, PutRequest};
-use avalanche_types::{choices::status::Status, ids::Id};
+use avalanche_types::{
+    choices::status::Status,
+    ids::Id,
+    rpcchainvm::{self, database},
+};
 pub use bytes::*;
-use num_derive::FromPrimitive;
-use num_traits::FromPrimitive;
-use tonic::transport::Channel;
 
-use crate::block::Block;
-
-pub type Database = DatabaseClient<Channel>;
+use crate::block::{Block, MiniKvvmBlock};
+use crate::kvvm::ChainVm;
 
 const LAST_ACCEPTED_BLOCK_ID_KEY: &[u8] = b"last_accepted";
 const STATE_INITIALIZED_KEY: &[u8] = b"state_initialized";
@@ -19,15 +18,14 @@ const SINGLETON_STATE_PREFIX: &[u8] = b"singleton";
 pub const BLOCK_DATA_LEN: usize = 32;
 pub const BLOCK_STATE_PREFIX: &[u8] = b"blockStatePrefix";
 
-#[derive(Debug, Default)]
 pub struct State {
-    client: Option<Database>,
+    client: Option<database::manager::versioned_database::VersionedDatabase>,
     last_accepted_block_id_key: Vec<u8>,
     state_initialized_key: Vec<u8>,
 }
 
 impl State {
-    pub fn new(client: Option<Database>) -> Self {
+    pub fn new(client: Option<database::manager::versioned_database::VersionedDatabase>) -> Self {
         Self {
             client,
             last_accepted_block_id_key: Self::prefix(
@@ -46,50 +44,64 @@ impl State {
     }
 
     pub async fn get(&self, key: Vec<u8>) -> Result<Option<Vec<u8>>> {
-        let key = prost::bytes::Bytes::from(key);
-        let mut client = self.client.clone().unwrap();
+        let client = self.client.clone().ok_or(Error::new(
+            ErrorKind::Other,
+            "no database associated with this client",
+        ))?;
 
-        let resp = client.get(GetRequest { key }).await.unwrap().into_inner();
+        let client = client.inner.write().await;
+        let resp = client.get(key.as_slice()).await;
 
         log::info!("state get response: {:?}", resp);
 
-        let err = DatabaseError::from_u32(resp.err);
+        let err = match &resp {
+            Ok(_) => database::DatabaseError::None as u32,
+            Err(e) => rpcchainvm::database::rpcdb::error_to_error_code(&e.to_string()).unwrap(),
+        };
+        let err = num_traits::FromPrimitive::from_u32(err);
+
         match err {
-            Some(DatabaseError::Closed) => Err(Error::new(
+            Some(database::DatabaseError::Closed) => Err(Error::new(
                 ErrorKind::Other,
                 format!("failed to get: {:?}", err),
             )),
-            Some(DatabaseError::NotFound) => Ok(None),
-            _ => Ok(Some(Vec::from(resp.value.as_ref()))),
+            Some(database::DatabaseError::NotFound) => Ok(None),
+            _ => {
+                let resp = resp.map_err(|e| Error::new(ErrorKind::Other, format!("{:?}", e)))?; //this should never panic, but this handles errors in case it should happen
+                Ok(Some(resp))
+            }
         }
     }
 
     pub async fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
-        let key = key.into();
-        let value = value.into();
-        let mut client = self.client.clone().unwrap();
+        let client = self.client.clone().ok_or(Error::new(
+            ErrorKind::Other,
+            "no database associated with this client",
+        ))?;
+        let mut client = client.inner.write().await;
+        let resp = client.put(key.as_slice(), value.as_slice()).await;
 
-        let resp = client
-            .put(PutRequest { key, value })
-            .await
-            .unwrap()
-            .into_inner();
+        let err = match &resp {
+            Ok(_) => database::DatabaseError::None as u32,
+            Err(e) => rpcchainvm::database::rpcdb::error_to_error_code(&e.to_string()).unwrap(),
+        };
 
-        let err = DatabaseError::from_u32(resp.err);
+        let err = num_traits::FromPrimitive::from_u32(err);
+
         match err {
-            Some(DatabaseError::None) => Ok(()),
-            Some(DatabaseError::Closed) => Err(Error::new(
+            Some(database::DatabaseError::None) => Ok(()),
+            Some(database::DatabaseError::Closed) => Err(Error::new(
                 ErrorKind::Other,
                 format!("failed to put: {:?}", err),
             )),
-            Some(DatabaseError::NotFound) => Err(Error::new(
+            Some(database::DatabaseError::NotFound) => Err(Error::new(
                 ErrorKind::NotFound,
                 format!("failed to put: {:?}", err),
             )),
-            _ => Err(Error::new(
-                ErrorKind::Other,
-                format!("failed to put: {:?}", resp.err),
-            )),
+            _ => {
+                resp.map_err(|e| Error::new(ErrorKind::Other, format!("{:?}", e)))?; //this should never panic, but this handles errors in case it should happen
+                Ok(())
+            }
         }
     }
 
@@ -109,14 +121,14 @@ impl State {
                 format!("failed deserialize block: {:?}", e),
             )
         })?;
-        log::info!("state get_block value: {:?}", block);
+        //log::info!("state get_block value: {:?}", block); //TODO implement debug block trait
 
         Ok(block)
     }
 
-    pub async fn put_block(&mut self, mut block: Block) -> Result<()> {
+    pub async fn put_block(&mut self, mut block: impl MiniKvvmBlock, vm: ChainVm) -> Result<()> {
         let value = serde_json::to_vec(&block)?;
-        let key = Self::prefix(BLOCK_STATE_PREFIX, block.initialize()?.as_ref());
+        let key = Self::prefix(BLOCK_STATE_PREFIX, block.initialize(vm)?.as_ref());
         self.put(key, value).await
     }
 
@@ -159,24 +171,15 @@ impl State {
         .await
     }
 
-    pub async fn accept_block(&mut self, mut block: Block) -> Result<Id> {
-        block.status = Status::Accepted;
+    pub async fn accept_block(&mut self, mut block: impl MiniKvvmBlock, vm: ChainVm) -> Result<Id> {
+        block.set_status(Status::Accepted);
         let block_id = block
-            .initialize()
+            .initialize(vm.clone())
             .map_err(|e| Error::new(ErrorKind::Other, format!("failed to init block: {:?}", e)))?;
         log::info!("accepting block with id: {}", block_id);
-        self.put_block(block).await?;
+        self.put_block(block, vm).await?;
         self.set_last_accepted_block_id(&block_id).await?;
 
         Ok(block_id)
     }
-}
-
-/// database/errors
-/// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/database#ErrClosed
-#[derive(Debug, FromPrimitive, Clone, Copy)]
-pub enum DatabaseError {
-    None = 0,
-    Closed = 1,
-    NotFound = 2,
 }
