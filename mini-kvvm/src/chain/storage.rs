@@ -4,7 +4,7 @@ use std::{
 };
 
 use avalanche_proto::rpcdb::database_client::DatabaseClient;
-use avalanche_types::ids::{Id, ID_LEN};
+use avalanche_types::ids;
 use byteorder::{BigEndian, ByteOrder, LittleEndian};
 use ethereum_types::Address;
 // use hmac_sha256::Hash;
@@ -17,6 +17,8 @@ use crate::chain::{
     txn::Transaction,
 };
 
+use super::common;
+
 const LAST_ACCEPTED_BLOCK_KEY: &[u8] = b"last_accepted";
 const BLOCK_PREFIX: u8 = 0x0;
 const TX_PREFIX: u8 = 0x1;
@@ -25,7 +27,14 @@ const KEY_PREFIX: u8 = 0x3;
 const BALANCE_PREFIX: u8 = 0x4;
 pub const BYTE_DELIMITER: &[u8] = b"/";
 
-pub const HASH_LEN: usize = ID_LEN + 2;
+pub const HASH_LEN: usize = ids::ID_LEN + 2;
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize, Default)]
+pub struct ValueMeta {
+    size: u64,
+    tx_id: ids::Id,
+}
 
 pub struct StateInterior {
     db: DatabaseClient<Channel>,
@@ -92,10 +101,10 @@ pub async fn get_last_accepted(
     db: Box<dyn avalanche_types::rpcchainvm::database::Database + Send + Sync>,
 ) -> Result<Id> {
     match db.get(LAST_ACCEPTED_BLOCK_KEY).await {
-        Ok(value) => Ok(Id::from_slice(&value)),
+        Ok(value) => Ok(ids::Id::from_slice(&value)),
         Err(e) => {
             if e.kind() == ErrorKind::Other && e.to_string().contains("not found") {
-                return Ok(Id::empty());
+                return Ok(ids::Id::empty());
             }
             return Err(e);
         }
@@ -105,7 +114,7 @@ pub async fn get_last_accepted(
 /// Attempts to return block from state given a valid block id.
 pub async fn get_block(
     db: Box<dyn avalanche_types::rpcchainvm::database::Database + Send + Sync>,
-    block_id: Id,
+    block_id: ids::Id,
 ) -> Result<Option<StatefulBlock>> {
     match db.get(prefix_block_key(&block_id)).await {
         Ok(value) => Ok(Some(serde_json::from_slice(&value)?)),
@@ -146,8 +155,35 @@ pub async fn has_last_accepted(
     }
 }
 
+pub async fn get_value_meta(
+    db: Box<dyn avalanche_types::rpcchainvm::database::Database + Send + Sync>,
+    key: common::Hash,
+) -> Result<(ValueMeta, bool)> {
+    // [keyPrefix] + [delimiter] + [key]
+    let k = value_key(key);
+
+    match db.get(&k).await {
+        Ok(value) => {
+            let value_meta: ValueMeta = serde_json::from_slice(&value).map_err(|e| {
+                Error::new(
+                    ErrorKind::Other,
+                    format!("failed to deserialize value meta: {:?}", e),
+                )
+            })?;
+
+            return Ok((value_meta, true));
+        }
+        Err(e) => {
+            if e.kind() == ErrorKind::Other && e.to_string().contains("not found") {
+                return Ok((ValueMeta::default(), false));
+            }
+            return Err(e);
+        }
+    }
+}
+
 /// 'BLOCK_PREFIX' + 'BYTE_DELIMITER' + 'block_id'
-fn prefix_block_key(block_id: &Id) -> &[u8] {
+fn prefix_block_key(block_id: &ids::Id) -> &[u8] {
     let mut k: Vec<u8> = Vec::with_capacity(HASH_LEN);
     k.push(BLOCK_PREFIX);
     k.extend_from_slice(BYTE_DELIMITER);
@@ -156,7 +192,7 @@ fn prefix_block_key(block_id: &Id) -> &[u8] {
 }
 
 /// 'TX_PREFIX' + 'BYTE_DELIMITER' + 'tx_id'
-fn prefix_tx_key(tx_id: &Id) -> &[u8] {
+fn prefix_tx_key(tx_id: &ids::Id) -> &[u8] {
     let mut k: Vec<u8> = Vec::with_capacity(HASH_LEN);
     k.push(TX_PREFIX);
     k.extend_from_slice(BYTE_DELIMITER);
@@ -165,7 +201,7 @@ fn prefix_tx_key(tx_id: &Id) -> &[u8] {
 }
 
 /// 'TX_VALUE_PREFIX' + 'BYTE_DELIMITER' + 'tx_id'
-fn prefix_tx_value_key(tx_id: &Id) -> &[u8] {
+fn prefix_tx_value_key(tx_id: &ids::Id) -> &[u8] {
     let mut k: Vec<u8> = Vec::with_capacity(HASH_LEN);
     k.push(TX_VALUE_PREFIX);
     k.extend_from_slice(BYTE_DELIMITER);

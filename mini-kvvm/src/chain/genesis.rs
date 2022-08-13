@@ -1,6 +1,6 @@
 use std::{
     fmt,
-    io::{Error, ErrorKind, Write, Result},
+    io::{Error, ErrorKind, Result, Write},
     time::Instant,
 };
 
@@ -22,7 +22,7 @@ pub struct Genesis {
 
     /// SetTx params
     pub value_unit_size: u64,
-    pub max_value_sized: u64,
+    pub max_value_size: u64,
 
     /// Fee Mechanism Params
     pub min_price: u64,
@@ -60,7 +60,7 @@ impl Genesis {
 
             /// SetTx params
             value_unit_size: DEFAULT_VALUE_UNIT_SIZE,
-            max_value_sized: 200 * 1024, // 200 Kib
+            max_value_size: 200 * 1024, // 200 Kib
 
             /// Fee Mechanism Params
             min_price: 1,

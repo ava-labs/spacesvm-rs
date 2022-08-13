@@ -25,9 +25,9 @@ pub trait UnsignedTransaction: Debug + Send + Sync {
 }
 
 pub struct TransactionContext {
-    genesis: Genesis,
-    database: Box<dyn Database + Send + Sync>,
-    block_time: u64,
-    tx_id: Id,
-    sender: Address,
+    pub genesis: Genesis,
+    pub database: Box<dyn Database + Send + Sync>,
+    pub block_time: u64,
+    pub tx_id: Id,
+    pub sender: Address,
 }

@@ -6,16 +6,16 @@ use serde::{Deserialize, Serialize};
 use super::genesis::Genesis;
 
 #[derive(Serialize, Deserialize)]
-struct BaseTx {
+pub struct BaseTx {
     /// ID of a block in the [lookbackWindow].
-    block_id: ids::Id,
+    pub block_id: ids::Id,
 
     // Value defined in genesis to protect against replay attacks on
     // different VMs.
-    magic: u64,
+    pub magic: u64,
 
     // Value per unit to spend on this transaction.
-    price: u64,
+    pub price: u64,
 }
 
 impl BaseTx {
