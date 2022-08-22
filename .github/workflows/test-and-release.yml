@@ -57,6 +57,10 @@ jobs:
       - uses: Swatinem/rust-cache@v1
         with:
           cache-on-failure: true
+      - name: Install protoc
+        uses: arduino/setup-protoc@v1
+        with:
+          version: '3.x'
       - name: Check unused Cargo dependencies
         shell: bash
         run: scripts/tests.unused.sh
@@ -78,6 +82,10 @@ jobs:
       - uses: Swatinem/rust-cache@v1
         with:
           cache-on-failure: true
+      - name: Install protoc
+        uses: arduino/setup-protoc@v1
+        with:
+          version: '3.x'
       - name: Run unit tests
         run: scripts/tests.unit.sh
 
@@ -139,6 +147,10 @@ jobs:
       - uses: Swatinem/rust-cache@v1
         with:
           cache-on-failure: true
+      - name: Install protoc
+        uses: arduino/setup-protoc@v1
+        with:
+          version: '3.x'
 
       # ref. https://github.com/gakonst/foundry/blob/master/.github/workflows/cross-platform.yml
       - name: Apple M1 setup
