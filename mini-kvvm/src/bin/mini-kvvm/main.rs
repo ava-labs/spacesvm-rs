@@ -1,13 +1,14 @@
-use std::io;
+use std::io::Result;
 
+use avalanche_types::rpcchainvm;
 use clap::{crate_version, Arg, Command};
 use log::info;
-
-use mini_kvvm::genesis;
+use mini_kvvm::{genesis, kvvm};
 
 pub const APP_NAME: &str = "mini-kvvm-rs";
 
-fn main() {
+#[tokio::main]
+async fn main() -> Result<()> {
     let matches = Command::new(APP_NAME)
         .version(crate_version!())
         .about("Mini key-value VM for Avalanche in Rust")
@@ -38,11 +39,18 @@ fn main() {
         let msg = sub_matches.value_of("WELCOME_MESSAGE").unwrap_or("");
         let p = sub_matches.value_of("GENESIS_FILE_PATH").unwrap_or("");
         execute_genesis(author, msg, p).unwrap();
-        return;
+        return Ok(());
     }
 
     info!("starting mini-kvvm-rs");
-    // TODO
+    let vm = kvvm::ChainVm::new();
+    let vm_server = avalanche_types::rpcchainvm::vm::server::Server::new(vm);
+
+    rpcchainvm::plugin::serve(vm_server)
+        .await
+        .expect("failed to start gRPC server");
+
+    Ok(())
 }
 
 pub fn command_genesis() -> Command<'static> {
@@ -79,12 +87,10 @@ pub fn command_genesis() -> Command<'static> {
         )
 }
 
-pub fn execute_genesis(author: &str, msg: &str, p: &str) -> io::Result<()> {
+pub fn execute_genesis(author: &str, msg: &str, p: &str) -> Result<()> {
     let g = genesis::Genesis {
         author: String::from(author),
         welcome_message: String::from(msg),
     };
-    g.sync(p)?;
-
-    Ok(())
+    g.sync(p)
 }
