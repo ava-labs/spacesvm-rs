@@ -27,7 +27,7 @@ pub struct ChainVmInterior {
     pub preferred: ids::Id,
     pub mempool: Vec<Vec<u8>>,
     pub verified_blocks:
-        HashMap<ids::Id, Box<dyn rpcchainvm::concensus::snowman::Block + Sync + Send>>,
+        Arc<RwLock<HashMap<ids::Id, Box<dyn rpcchainvm::concensus::snowman::Block + Sync + Send>>>>,
     pub last_accepted: Block,
     pub to_engine: Option<Sender<rpcchainvm::common::message::Message>>,
     pub preferred_block_id: Option<ids::Id>,
@@ -46,7 +46,7 @@ impl Default for ChainVmInterior {
             state: State::default(),
             preferred: ids::Id::empty(),
             mempool: Vec::new(),
-            verified_blocks: HashMap::new(),
+            verified_blocks: Arc::new(RwLock::new(HashMap::new())),
             last_accepted: Block::default(),
             to_engine: None,
             preferred_block_id: None,
@@ -166,7 +166,7 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
     }
 
     /// Communicates to Vm the next state it starts.
-    async fn set_state(&self, _snow_state: rpcchainvm::state::State) -> Result<()> {
+    async fn set_state(&self, _snow_state: rpcchainvm::snow::State) -> Result<()> {
         Err(Error::new(
             ErrorKind::Unsupported,
             "set_state not implemented",
@@ -218,7 +218,7 @@ impl rpcchainvm::snowman::block::Getter for ChainVm {
     async fn get_block(
         &self,
         _id: ids::Id,
-    ) -> Result<Box<dyn rpcchainvm::concensus::snowman::Block>> {
+    ) -> Result<Box<dyn rpcchainvm::concensus::snowman::Block + Send + Sync>> {
         Err(Error::new(
             ErrorKind::Unsupported,
             "get_block not implemented",
@@ -232,7 +232,7 @@ impl rpcchainvm::snowman::block::Parser for ChainVm {
     async fn parse_block(
         &self,
         _bytes: &[u8],
-    ) -> Result<Box<dyn rpcchainvm::concensus::snowman::Block>> {
+    ) -> Result<Box<dyn rpcchainvm::concensus::snowman::Block + Send + Sync>> {
         Err(Error::new(
             ErrorKind::Unsupported,
             "parse_block not implemented",
@@ -243,7 +243,9 @@ impl rpcchainvm::snowman::block::Parser for ChainVm {
 #[tonic::async_trait]
 impl rpcchainvm::snowman::block::ChainVm for ChainVm {
     /// Attempt to create a new block.
-    async fn build_block(&self) -> Result<Box<dyn rpcchainvm::concensus::snowman::Block>> {
+    async fn build_block(
+        &self,
+    ) -> Result<Box<dyn rpcchainvm::concensus::snowman::Block + Send + Sync>> {
         Err(Error::new(
             ErrorKind::Unsupported,
             "build_block not implemented",
@@ -267,7 +269,9 @@ impl rpcchainvm::snowman::block::ChainVm for ChainVm {
     }
 
     /// Attempts to issue a transaction into consensus.
-    async fn issue_tx(&self) -> Result<Box<dyn rpcchainvm::concensus::snowman::Block>> {
+    async fn issue_tx(
+        &self,
+    ) -> Result<Box<dyn rpcchainvm::concensus::snowman::Block + Send + Sync>> {
         Err(Error::new(
             ErrorKind::Unsupported,
             "issue tx not implemented",
