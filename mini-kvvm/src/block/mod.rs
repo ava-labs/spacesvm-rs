@@ -40,7 +40,7 @@ pub struct Block {
 }
 
 impl Block {
-    pub async fn new(
+    pub fn new(
         parent: ids::Id,
         height: u64,
         data: &[u8],
@@ -233,8 +233,7 @@ async fn genesis_test() {
         DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(0, 0), Utc).timestamp() as u64;
 
     // create genesis block
-    let mut block =
-        crate::block::Block::new(ids::Id::empty(), 0, genesis_bytes, timestamp, state).await;
+    let mut block = crate::block::Block::new(ids::Id::empty(), 0, genesis_bytes, timestamp, state);
 
     let bytes = block.to_bytes().await;
     block
@@ -262,7 +261,7 @@ async fn genesis_test() {
     let block_bytes = "{\"author\":\"subnet user\",\"welcome_message\":\"Sup!?\"}".as_bytes();
     let timestamp = Utc::now().timestamp() as u64;
     // create 2nd block
-    let mut block = crate::block::Block::new(genesis_id, 1, block_bytes, timestamp, state).await;
+    let mut block = crate::block::Block::new(genesis_id, 1, block_bytes, timestamp, state);
 
     // initialize 2nd block
     let bytes = block.to_bytes().await;
