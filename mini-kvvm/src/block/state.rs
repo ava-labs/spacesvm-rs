@@ -215,7 +215,7 @@ async fn block_test() {
         "{\"author\":\"subnet creator\",\"welcome_message\":\"Hello from Rust VM!\"}".as_bytes();
 
     // create genesis block
-    let mut block = crate::block::Block::new(ids::Id::empty(), 0, genesis_bytes, 0, state).await;
+    let mut block = crate::block::Block::new(ids::Id::empty(), 0, genesis_bytes, 0, state);
 
     // initialize block
     let bytes = block.to_bytes().await;
