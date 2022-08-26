@@ -3,7 +3,7 @@ use std::io::Result;
 use avalanche_types::rpcchainvm;
 use clap::{crate_version, Arg, Command};
 use log::info;
-use mini_kvvm::{genesis, kvvm};
+use mini_kvvm::{genesis, vm};
 
 pub const APP_NAME: &str = "mini-kvvm-rs";
 
@@ -43,7 +43,7 @@ async fn main() -> Result<()> {
     }
 
     info!("starting mini-kvvm-rs");
-    let vm = kvvm::ChainVm::new();
+    let vm = vm::ChainVm::new();
     let vm_server = avalanche_types::rpcchainvm::vm::server::Server::new(vm);
 
     rpcchainvm::plugin::serve(vm_server)

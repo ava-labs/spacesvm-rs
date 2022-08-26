@@ -1,13 +1,13 @@
-use crate::{api::*, kvvm};
+use crate::{api::*, vm};
 
 use avalanche_types::ids;
 
 pub struct Service {
-    pub vm: kvvm::ChainVm,
+    pub vm: vm::ChainVm,
 }
 
 impl Service {
-    pub fn new(vm: kvvm::ChainVm) -> Self {
+    pub fn new(vm: vm::ChainVm) -> Self {
         Self { vm }
     }
 }
