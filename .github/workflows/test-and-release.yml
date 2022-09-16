@@ -106,6 +106,10 @@ jobs:
       - uses: Swatinem/rust-cache@v1
         with:
           cache-on-failure: true
+      - name: Install protoc
+        uses: arduino/setup-protoc@v1
+        with:
+          version: '3.x'
       - name: Run e2e tests
         run: scripts/tests.e2e.sh 1.7.14
 
