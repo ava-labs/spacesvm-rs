@@ -11,10 +11,12 @@ use derivative::{self, Derivative};
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Sha3_256};
 
+use crate::chain::tx::tx::Transaction;
+
 pub const DATA_LEN: usize = 32;
 
 #[derive(Serialize, Deserialize, Clone, Derivative)]
-#[derivative(Debug)]
+#[derivative(Debug, Default)]
 pub struct Block {
     #[serde(deserialize_with = "ids::must_deserialize_id")]
     pub parent: ids::Id,
@@ -37,6 +39,12 @@ pub struct Block {
     #[derivative(Debug = "ignore")]
     #[serde(skip)]
     pub state: state::State,
+
+    #[serde(skip)]
+    pub txs: Vec<Transaction>,
+
+    #[serde(skip)]
+    pub children: Vec<Block>,
 }
 
 impl Block {
@@ -58,6 +66,26 @@ impl Block {
             id: ids::Id::empty(),
             st: choices::status::Status::Unknown("initialized".to_string()),
             bytes: vec![],
+            txs: vec![],
+            children: vec![],
+        }
+    }
+
+    /// Used for validating new txs and some tests
+    pub fn new_dummy(timestamp: u64, tx: Transaction) -> Self {
+        let mut txs: Vec<Transaction> = Vec::with_capacity(0);
+        txs.push(tx);
+        Self {
+            parent: ids::Id::empty(),
+            height: 0,
+            data: vec![],
+            timestamp,
+            state: state::State::default(),
+            id: ids::Id::empty(),
+            st: choices::status::Status::Unknown("dummy".to_string()),
+            bytes: vec![],
+            txs,
+            children: vec![],
         }
     }
 }
@@ -100,7 +128,7 @@ impl avalanche_types::rpcchainvm::concensus::snowman::Block for Block {
     async fn verify(&mut self) -> Result<()> {
         let parent_id = self.parent().await;
 
-        let parent_block = self.state.get_block(parent_id).await.map_err(|e| {
+        let mut parent_block = self.state.get_block(parent_id).await.map_err(|e| {
             Error::new(
                 ErrorKind::Other,
                 format!("failed to verify parent block not found: {}", e.to_string()),
@@ -128,6 +156,23 @@ impl avalanche_types::rpcchainvm::concensus::snowman::Block for Block {
                 ),
             ));
         }
+
+        let state = self.state.clone();
+        state
+            .set_last_accepted(self.to_owned())
+            .await
+            .map_err(|e| {
+                Error::new(
+                    ErrorKind::Other,
+                    format!("set last accepteted failed: {}", e.to_string()),
+                )
+            })?;
+
+        parent_block.children.push(self.to_owned());
+
+        let mut verified_blocks = state.verified_blocks.write().await;
+        verified_blocks.insert(self.id, self.to_owned());
+
         return Ok(());
     }
 }
@@ -158,7 +203,7 @@ impl avalanche_types::rpcchainvm::concensus::snowman::Decidable for Block {
         })?;
 
         self.state
-            .set_last_accepted(block_id)
+            .set_last_accepted(block)
             .await
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
@@ -167,7 +212,6 @@ impl avalanche_types::rpcchainvm::concensus::snowman::Decidable for Block {
         verified_blocks.remove(&block_id);
 
         // TODO: add support for versiondb
-        // self.state.commit()
 
         Ok(())
     }
@@ -209,76 +253,4 @@ impl avalanche_types::rpcchainvm::concensus::snowman::StatusWriter for Block {
     async fn set_status(&mut self, status: Status) {
         self.st = status;
     }
-}
-
-#[tokio::test]
-async fn genesis_test() {
-    use crate::block::state::State;
-    use avalanche_types::rpcchainvm::concensus::snowman::*;
-    use avalanche_types::rpcchainvm::database::memdb::Database;
-    use chrono::{DateTime, NaiveDateTime, Utc};
-    use std::collections::HashMap;
-    use std::sync::Arc;
-    use tokio::sync::RwLock;
-
-    let verified_blocks = Arc::new(RwLock::new(HashMap::new()));
-
-    let db = Database::new();
-    let state = State::new(db, verified_blocks);
-
-    let genesis_bytes =
-        "{\"author\":\"subnet creator\",\"welcome_message\":\"Hello from Rust VM!\"}".as_bytes();
-
-    let timestamp =
-        DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(0, 0), Utc).timestamp() as u64;
-
-    // create genesis block
-    let mut block = crate::block::Block::new(ids::Id::empty(), 0, genesis_bytes, timestamp, state);
-
-    let bytes = block.to_bytes().await;
-    block
-        .init(&bytes.unwrap(), Status::Processing)
-        .await
-        .unwrap();
-
-    // clone state
-    let mut state = block.state.clone();
-
-    // put block
-    let resp = state.put_block(&block).await;
-    assert!(!resp.is_err());
-
-    // accept block
-    let resp = block.accept().await;
-    assert!(!resp.is_err());
-
-    // ensure last accepted is genesis
-    let resp = state.get_last_accepted().await;
-    assert!(!resp.is_err());
-    let genesis_id = resp.unwrap();
-    assert_eq!(genesis_id, block.id);
-
-    let block_bytes = "{\"author\":\"subnet user\",\"welcome_message\":\"Sup!?\"}".as_bytes();
-    let timestamp = Utc::now().timestamp() as u64;
-    // create 2nd block
-    let mut block = crate::block::Block::new(genesis_id, 1, block_bytes, timestamp, state);
-
-    // initialize 2nd block
-    let bytes = block.to_bytes().await;
-    block
-        .init(&bytes.unwrap(), Status::Processing)
-        .await
-        .unwrap();
-
-    // put block
-    let mut state = block.state.clone();
-    let resp = state.put_block(&block).await;
-    assert!(!resp.is_err());
-
-    // accept block
-    let resp = block.accept().await;
-    assert!(!resp.is_err());
-
-    // verify
-    assert_eq!(block.verify().await.is_err(), false);
 }
