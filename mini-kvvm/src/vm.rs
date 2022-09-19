@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     io::{Error, ErrorKind, Result},
     sync::Arc,
     time,
@@ -55,7 +55,7 @@ impl Default for ChainVmInterior {
 #[derive(Clone)]
 pub struct ChainVm {
     pub db: Box<dyn rpcchainvm::database::Database + Sync + Send>,
-    pub mempool: Arc<RwLock<Vec<chain::tx::tx::Transaction>>>,
+    pub mempool: Arc<RwLock<VecDeque<chain::tx::tx::Transaction>>>,
     pub inner: Arc<RwLock<ChainVmInterior>>,
     pub verified_blocks: Arc<RwLock<HashMap<ids::Id, crate::block::Block>>>,
 }
@@ -65,7 +65,7 @@ impl ChainVm {
     pub fn new() -> Box<dyn rpcchainvm::vm::Vm + Send + Sync> {
         let inner = Arc::new(RwLock::new(ChainVmInterior::default()));
         let db = rpcchainvm::database::memdb::Database::new();
-        let mempool = Arc::new(RwLock::new(Vec::new()));
+        let mempool = Arc::new(RwLock::new(VecDeque::new()));
         let verified_blocks = Arc::new(RwLock::new(HashMap::new()));
 
         Box::new(ChainVm {
@@ -77,7 +77,7 @@ impl ChainVm {
     }
 
     pub fn new_with_state(db: &Box<dyn rpcchainvm::database::Database + Sync + Send>) -> Self {
-        let mempool = Arc::new(RwLock::new(Vec::new()));
+        let mempool = Arc::new(RwLock::new(VecDeque::new()));
         let verified_blocks = &Arc::new(RwLock::new(HashMap::new()));
         let inner = ChainVmInterior {
             ctx: None,
@@ -125,7 +125,7 @@ impl crate::chain::vm::Vm for ChainVm {
                 .await
                 .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
             let mut mempool = self.mempool.write().await;
-            mempool.push(tx.to_owned());
+            mempool.push_front(tx.to_owned());
         }
         Ok(())
     }
@@ -397,7 +397,7 @@ impl rpcchainvm::snowman::block::ChainVm for ChainVm {
         let mut txs = Vec::new();
 
         loop {
-            match mempool.pop() {
+            match mempool.pop_back() {
                 Some(tx) => {
                     log::debug!("writing tx{:?}\n", tx);
                     // verify
