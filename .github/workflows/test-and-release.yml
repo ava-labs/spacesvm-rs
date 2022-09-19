@@ -194,7 +194,6 @@ jobs:
         run: |
           if [ "$PLATFORM_NAME" == "linux" ]; then
 
-            ./target/${TARGET}/release/mini-kvvm
             cp ./target/${TARGET}/release/mini-kvvm mini-kvvm.${TARGET}
             echo "::set-output name=file_name_mini-kvvm::mini-kvvm.${TARGET}"
             tar -czvf mini-kvvm_${TARGET}.tar.gz -C ./target/${TARGET}/release mini-kvvm
