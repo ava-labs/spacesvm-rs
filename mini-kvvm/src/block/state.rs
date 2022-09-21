@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     io::{Error, ErrorKind, Result},
+    num::NonZeroUsize,
     sync::Arc,
 };
 
@@ -78,7 +79,8 @@ impl State {
         db: Box<dyn rpcchainvm::database::Database + Send + Sync>,
         verified_blocks: Arc<RwLock<HashMap<ids::Id, Block>>>,
     ) -> Self {
-        let cache: LruCache<ids::Id, Block> = LruCache::new(BLOCKS_LRU_SIZE);
+        let cache: LruCache<ids::Id, Block> =
+            LruCache::new(NonZeroUsize::new(BLOCKS_LRU_SIZE).unwrap());
         return Self {
             inner: InnerState {
                 db: Arc::new(RwLock::new(db)),
@@ -250,6 +252,26 @@ impl State {
             })?;
 
         Ok(())
+    }
+
+    /// Attempts to parse a byte array into a block. If the source is empty
+    /// bytes will be marshalled from a default block.
+    pub async fn parse_block(&self, mut source: Vec<u8>, status: Status) -> Result<Block> {
+        let mut block = Block::default();
+
+        if source.is_empty() {
+            source = serde_json::to_vec(&block)?;
+        }
+        block.bytes = source.to_vec();
+        block.id = ids::Id::from_slice_with_sha256(&Sha3_256::digest(source));
+        block.st = status;
+        block.state = self.clone();
+
+        for tx in block.txs.iter_mut() {
+            tx.init().await?;
+        }
+
+        Ok(block.to_owned())
     }
 
     /// Checks if the last accepted block key exists and returns true if has a value.

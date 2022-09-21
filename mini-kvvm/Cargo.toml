@@ -15,12 +15,12 @@ path = "src/bin/mini-kvvm/main.rs"
 
 [dependencies]
 avalanche-proto = { version = "0.16.0" }
-avalanche-types = { version = "0.0.32" }
+avalanche-types = { version = "0.0.34" }
 byteorder = "1.4.3"
 chrono = "0.4.19"
 derivative = "2.2.0"
 dyn-clone = "1.0.9"
-ethereum-types = { version = "0.13.1" }
+ethereum-types = { version = "0.14.0" }
 clap = { version = "3.1.17", features = ["cargo", "derive"] }
 env_logger = "0.9.0"
 hex = "0.4.3"
@@ -28,7 +28,7 @@ jsonrpc-core = "18.0.0"
 jsonrpc-core-client = { version = "18.0.0" }
 jsonrpc-derive = "18.0"
 log = "0.4.17"
-lru = "0.7.8"
+lru = "0.8.0"
 prost = "0.11.0"
 semver = "1.0.13"
 serde = { version = "1.0.144", features = ["derive"] }
