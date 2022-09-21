@@ -6,7 +6,7 @@ use std::{
 };
 
 use avalanche_types::{
-    choices::status,
+    choices::status::{self, Status},
     ids,
     rpcchainvm::{
         self,
@@ -18,11 +18,15 @@ use semver::Version;
 use tokio::sync::{mpsc::Sender, RwLock};
 
 use crate::{
+    api,
     block::Block as StatefulBlock,
     block::{self, state::State},
     chain::{self, tx::Transaction},
     genesis::Genesis,
 };
+
+const PUBLIC_API_ENDPOINT: &str = "/public";
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub struct ChainVmInterior {
     pub ctx: Option<rpcchainvm::context::Context>,
@@ -176,27 +180,20 @@ impl rpcchainvm::common::apphandler::AppHandler for ChainVm {
 #[tonic::async_trait]
 impl rpcchainvm::common::vm::Connector for ChainVm {
     async fn connected(&self, _id: &ids::node::Id) -> Result<()> {
-        Err(Error::new(
-            ErrorKind::Unsupported,
-            "connected not implemented",
-        ))
+        // no-op
+        Ok(())
     }
 
     async fn disconnected(&self, _id: &ids::node::Id) -> Result<()> {
-        Err(Error::new(
-            ErrorKind::Unsupported,
-            "disconnected not implemented",
-        ))
+        // no-op
+        Ok(())
     }
 }
 
 #[tonic::async_trait]
 impl rpcchainvm::health::Checkable for ChainVm {
     async fn health_check(&self) -> Result<Vec<u8>> {
-        Err(Error::new(
-            ErrorKind::Unsupported,
-            "health check not implemented",
-        ))
+        Ok("200".as_bytes().to_vec())
     }
 }
 
@@ -216,6 +213,10 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
     ) -> Result<()> {
         let mut vm = self.inner.write().await;
         vm.ctx = ctx;
+
+        let version =
+            Version::parse(VERSION).map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+        vm.version = version;
 
         let current = db_manager.current().await?;
         self.db = current.db.clone();
@@ -282,44 +283,70 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
 
     /// Called when the node is shutting down.
     async fn shutdown(&self) -> Result<()> {
-        Err(Error::new(
-            ErrorKind::Unsupported,
-            "shutdown not implemented",
-        ))
+        // grpc servers are shutdown via broadcast channel
+        // if additional shutdown is required we can extend.
+        Ok(())
     }
 
-    /// Communicates to Vm the next state it starts.
-    async fn set_state(&self, _snow_state: rpcchainvm::snow::State) -> Result<()> {
-        Err(Error::new(
-            ErrorKind::Unsupported,
-            "set_state not implemented",
-        ))
+    /// Communicates to Vm the next state phase.
+    async fn set_state(&self, snow_state: rpcchainvm::snow::State) -> Result<()> {
+        let mut vm = self.inner.write().await;
+        match snow_state.try_into() {
+            // Initializing is called by chains manager when it is creating the chain.
+            Ok(rpcchainvm::snow::State::Initializing) => {
+                log::debug!("set_state: initializing");
+                vm.bootstrapped = false;
+                Ok(())
+            }
+            Ok(rpcchainvm::snow::State::StateSyncing) => {
+                log::debug!("set_state: state syncing");
+                Err(Error::new(ErrorKind::Other, "state sync is not supported"))
+            }
+            // Bootstrapping is called by the bootstrapper to signal bootstrapping has started.
+            Ok(rpcchainvm::snow::State::Bootstrapping) => {
+                log::debug!("set_state: bootstrapping");
+                vm.bootstrapped = false;
+                Ok(())
+            }
+            // NormalOp os called when consensus has started signalling bootstrap phase is complete.
+            Ok(rpcchainvm::snow::State::NormalOp) => {
+                log::debug!("set_state: normal op");
+                vm.bootstrapped = true;
+                Ok(())
+            }
+            Err(_) => Err(Error::new(ErrorKind::Other, "unknown state")),
+        }
     }
 
     /// Returns the version of the VM this node is running.
     async fn version(&self) -> Result<String> {
-        Err(Error::new(
-            ErrorKind::Unsupported,
-            "version not implemented",
-        ))
+        Ok(String::from(VERSION))
     }
 
-    /// Creates the HTTP handlers for custom Vm network calls.
+    /// Creates the HTTP handlers for custom Vm network calls
+    /// for "ext/vm/[vmId]"
     async fn create_static_handlers(
         &self,
     ) -> std::io::Result<
-        std::collections::HashMap<
-            String,
-            avalanche_types::rpcchainvm::common::http_handler::HttpHandler,
-        >,
+        std::collections::HashMap<String, rpcchainvm::common::http_handler::HttpHandler>,
     > {
-        Err(Error::new(
-            ErrorKind::Unsupported,
-            "create_static_handlers not implemented",
-        ))
+        log::debug!("create_static_handlers called");
+
+        // Initialize the jsonrpc public service and handler
+        let service = api::service::Service::new(self.clone());
+        let mut handler = jsonrpc_core::IoHandler::new();
+        handler.extend_with(api::Service::to_delegate(service));
+
+        let http_handler = rpcchainvm::common::http_handler::HttpHandler::new_from_u8(0, handler)
+            .map_err(|_| Error::from(ErrorKind::InvalidData))?;
+
+        let mut handlers = HashMap::new();
+        handlers.insert(String::from(PUBLIC_API_ENDPOINT), http_handler);
+        Ok(handlers)
     }
 
-    /// Creates the HTTP handlers for custom chain network calls.
+    /// Creates the HTTP handlers for custom chain network calls
+    /// for "ext/vm/[chainId]"
     async fn create_handlers(
         &self,
     ) -> std::io::Result<
@@ -328,10 +355,7 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
             avalanche_types::rpcchainvm::common::http_handler::HttpHandler,
         >,
     > {
-        Err(Error::new(
-            ErrorKind::Unsupported,
-            "create_handlers not implemented",
-        ))
+        Ok(HashMap::new())
     }
 }
 
@@ -340,12 +364,16 @@ impl rpcchainvm::snowman::block::Getter for ChainVm {
     /// Attempt to load a block.
     async fn get_block(
         &self,
-        _id: ids::Id,
+        id: ids::Id,
     ) -> Result<Box<dyn rpcchainvm::concensus::snowman::Block + Send + Sync>> {
-        Err(Error::new(
-            ErrorKind::Unsupported,
-            "get_block not implemented",
-        ))
+        let mut vm = self.inner.write().await;
+
+        let block =
+            vm.state.get_block(id).await.map_err(|e| {
+                Error::new(ErrorKind::Other, format!("failed to get block: {:?}", e))
+            })?;
+
+        Ok(Box::new(block))
     }
 }
 
@@ -354,12 +382,25 @@ impl rpcchainvm::snowman::block::Parser for ChainVm {
     /// Attempt to create a block from a stream of bytes.
     async fn parse_block(
         &self,
-        _bytes: &[u8],
+        bytes: &[u8],
     ) -> Result<Box<dyn rpcchainvm::concensus::snowman::Block + Send + Sync>> {
-        Err(Error::new(
-            ErrorKind::Unsupported,
-            "parse_block not implemented",
-        ))
+        let mut vm = self.inner.write().await;
+
+        let new_block = vm
+            .state
+            .parse_block(bytes.to_vec(), Status::Processing)
+            .await
+            .map_err(|e| Error::new(ErrorKind::Other, format!("failed to parse block: {:?}", e)))?;
+
+        log::debug!("parsed block id: {}", new_block.id);
+
+        match vm.state.get_block(new_block.id).await {
+            Ok(old_block) => {
+                log::debug!("returning previously parsed block id: {}", old_block.id);
+                return Ok(Box::new(old_block));
+            }
+            Err(_) => return Ok(Box::new(new_block)),
+        };
     }
 }
 
@@ -429,19 +470,20 @@ impl rpcchainvm::snowman::block::ChainVm for ChainVm {
     }
 
     /// Notify the Vm of the currently preferred block.
-    async fn set_preference(&self, _id: ids::Id) -> Result<()> {
-        Err(Error::new(
-            ErrorKind::Unsupported,
-            "set_preference not implemented",
-        ))
+    async fn set_preference(&self, id: ids::Id) -> Result<()> {
+        let mut vm = self.inner.write().await;
+        vm.preferred_block_id = Some(id);
+
+        Ok(())
     }
 
     // Returns the Id of the last accepted block.
     async fn last_accepted(&self) -> Result<ids::Id> {
-        Err(Error::new(
-            ErrorKind::Unsupported,
-            "last_accepted not implemented",
-        ))
+        let vm = self.inner.write().await;
+        let state = vm.state.clone();
+        let last_accepted_id = state.get_last_accepted().await?;
+
+        Ok(last_accepted_id)
     }
 
     /// Attempts to issue a transaction into consensus.

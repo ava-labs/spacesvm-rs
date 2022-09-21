@@ -4,6 +4,7 @@ use avalanche_types::rpcchainvm;
 use clap::{crate_version, Arg, Command};
 use log::info;
 use mini_kvvm::{genesis, vm};
+use tokio::sync::broadcast::{Receiver, Sender};
 
 pub const APP_NAME: &str = "mini-kvvm-rs";
 
@@ -42,11 +43,14 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    info!("starting mini-kvvm-rs");
-    let vm = vm::ChainVm::new();
-    let vm_server = avalanche_types::rpcchainvm::vm::server::Server::new(vm);
+    // Initialize broadcast stop channel used to terminate gRPC servers during shutdown.
+    let (stop_ch_tx, stop_ch_rx): (Sender<()>, Receiver<()>) = tokio::sync::broadcast::channel(1);
 
-    rpcchainvm::plugin::serve(vm_server)
+    info!("starting mini-kvvm-rs");
+    let vm_server =
+        avalanche_types::rpcchainvm::vm::server::Server::new(vm::ChainVm::new(), stop_ch_tx);
+
+    rpcchainvm::plugin::serve(vm_server, stop_ch_rx)
         .await
         .expect("failed to start gRPC server");
 
