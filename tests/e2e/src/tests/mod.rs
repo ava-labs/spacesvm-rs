@@ -8,7 +8,7 @@ use log::{info, warn};
 
 use avalanche_network_runner_sdk::{Client, GlobalConfig, StartRequest};
 
-const RELEASE: &str = "v1.7.16";
+const RELEASE: &str = "v1.8.6";
 
 #[tokio::test]
 async fn e2e() {
