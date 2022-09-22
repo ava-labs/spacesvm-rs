@@ -118,11 +118,15 @@ impl avalanche_types::rpcchainvm::vm::Vm for ChainVm {}
 #[tonic::async_trait]
 impl crate::chain::vm::Vm for ChainVm {
     async fn is_bootstrapped(&self) -> bool {
+        log::debug!("vm::is_bootstrapped called");
+
         let vm = self.inner.read().await;
         return vm.bootstrapped;
     }
 
     async fn submit(&self, mut txs: Vec<chain::tx::tx::Transaction>) -> Result<()> {
+        log::debug!("vm::submit called");
+
         let now = Utc::now().timestamp() as u64;
 
         // TODO append errors instead of fail
@@ -150,6 +154,8 @@ impl crate::chain::vm::Vm for ChainVm {
     /// Sends a signal to the consensus engine that a new block
     /// is ready to be created.
     async fn notify_block_ready(&self) {
+        log::debug!("vm::notify_block_ready called");
+
         let vm = self.inner.read().await;
 
         if let Some(engine) = &vm.to_engine {
@@ -176,6 +182,8 @@ impl rpcchainvm::common::apphandler::AppHandler for ChainVm {
         _deadline: time::Instant,
         _request: &[u8],
     ) -> Result<()> {
+        log::debug!("vm::app_request called");
+
         Err(Error::new(
             ErrorKind::Unsupported,
             "app request not implemented",
@@ -183,6 +191,8 @@ impl rpcchainvm::common::apphandler::AppHandler for ChainVm {
     }
 
     async fn app_request_failed(&self, _node_id: &ids::node::Id, _request_id: u32) -> Result<()> {
+        log::debug!("vm::app_request_failed called");
+
         Err(Error::new(
             ErrorKind::Unsupported,
             "app request failed not implemented",
@@ -195,6 +205,8 @@ impl rpcchainvm::common::apphandler::AppHandler for ChainVm {
         _request_id: u32,
         _response: &[u8],
     ) -> Result<()> {
+        log::debug!("vm::app_response called");
+
         Err(Error::new(
             ErrorKind::Unsupported,
             "app response not implemented",
@@ -202,6 +214,8 @@ impl rpcchainvm::common::apphandler::AppHandler for ChainVm {
     }
 
     async fn app_gossip(&self, _node_id: &ids::node::Id, _msg: &[u8]) -> Result<()> {
+        log::debug!("vm::app_gossip called");
+
         Err(Error::new(
             ErrorKind::Unsupported,
             "app gossip not implemented",
@@ -212,11 +226,15 @@ impl rpcchainvm::common::apphandler::AppHandler for ChainVm {
 #[tonic::async_trait]
 impl rpcchainvm::common::vm::Connector for ChainVm {
     async fn connected(&self, _id: &ids::node::Id) -> Result<()> {
+        log::debug!("vm::connected called");
+
         // no-op
         Ok(())
     }
 
     async fn disconnected(&self, _id: &ids::node::Id) -> Result<()> {
+        log::debug!("vm::disconnected called");
+
         // no-op
         Ok(())
     }
@@ -243,6 +261,8 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
         _fxs: &[rpcchainvm::common::vm::Fx],
         app_sender: Box<dyn rpcchainvm::common::appsender::AppSender + Send + Sync>,
     ) -> Result<()> {
+        log::debug!("vm::initialize called");
+
         let mut vm = self.inner.write().await;
         vm.ctx = ctx;
 
@@ -318,6 +338,8 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
 
     /// Called when the node is shutting down.
     async fn shutdown(&self) -> Result<()> {
+        log::debug!("vm::shutdown called");
+
         // grpc servers are shutdown via broadcast channel
         // if additional shutdown is required we can extend.
         Ok(())
@@ -325,7 +347,10 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
 
     /// Communicates to Vm the next state phase.
     async fn set_state(&self, snow_state: rpcchainvm::snow::State) -> Result<()> {
+        log::debug!("vm::set_state called");
+
         let mut vm = self.inner.write().await;
+
         match snow_state.try_into() {
             // Initializing is called by chains manager when it is creating the chain.
             Ok(rpcchainvm::snow::State::Initializing) => {
@@ -355,6 +380,8 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
 
     /// Returns the version of the VM this node is running.
     async fn version(&self) -> Result<String> {
+        log::debug!("vm::shutdown called");
+
         Ok(String::from(VERSION))
     }
 
@@ -365,7 +392,7 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
     ) -> std::io::Result<
         std::collections::HashMap<String, rpcchainvm::common::http_handler::HttpHandler>,
     > {
-        log::debug!("create_static_handlers called");
+        log::debug!("vm::create_static_handlers called");
 
         // Initialize the jsonrpc public service and handler
         let service = api::service::Service::new(self.clone());
@@ -390,6 +417,8 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
             avalanche_types::rpcchainvm::common::http_handler::HttpHandler,
         >,
     > {
+        log::debug!("vm::create_handlers called");
+
         Ok(HashMap::new())
     }
 }
@@ -401,6 +430,8 @@ impl rpcchainvm::snowman::block::Getter for ChainVm {
         &self,
         id: ids::Id,
     ) -> Result<Box<dyn rpcchainvm::concensus::snowman::Block + Send + Sync>> {
+        log::debug!("vm::get_block called");
+
         let mut vm = self.inner.write().await;
 
         let block =
@@ -419,6 +450,8 @@ impl rpcchainvm::snowman::block::Parser for ChainVm {
         &self,
         bytes: &[u8],
     ) -> Result<Box<dyn rpcchainvm::concensus::snowman::Block + Send + Sync>> {
+        log::debug!("vm::get_block called");
+
         let mut vm = self.inner.write().await;
 
         let new_block = vm
@@ -445,6 +478,8 @@ impl rpcchainvm::snowman::block::ChainVm for ChainVm {
     async fn build_block(
         &self,
     ) -> Result<Box<dyn rpcchainvm::concensus::snowman::Block + Send + Sync>> {
+        log::debug!("vm::build_block called");
+
         let mempool = self.mempool.read().await;
         if mempool.len() == 0 {
             return Err(Error::new(ErrorKind::Other, "no pending blocks"));
@@ -508,6 +543,8 @@ impl rpcchainvm::snowman::block::ChainVm for ChainVm {
 
     /// Notify the Vm of the currently preferred block.
     async fn set_preference(&self, id: ids::Id) -> Result<()> {
+        log::debug!("vm::set_preference called");
+
         let mut vm = self.inner.write().await;
         vm.preferred_block_id = Some(id);
 
@@ -516,6 +553,8 @@ impl rpcchainvm::snowman::block::ChainVm for ChainVm {
 
     // Returns the Id of the last accepted block.
     async fn last_accepted(&self) -> Result<ids::Id> {
+        log::debug!("vm::last_accepted called");
+
         let vm = self.inner.write().await;
         let state = vm.state.clone();
         let last_accepted_id = state.get_last_accepted().await?;
@@ -527,6 +566,8 @@ impl rpcchainvm::snowman::block::ChainVm for ChainVm {
     async fn issue_tx(
         &self,
     ) -> Result<Box<dyn rpcchainvm::concensus::snowman::Block + Send + Sync>> {
+        log::debug!("vm::issue_tx called");
+
         Err(Error::new(
             ErrorKind::Unsupported,
             "issue tx not implemented",
