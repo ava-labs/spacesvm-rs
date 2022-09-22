@@ -257,7 +257,7 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
         genesis_bytes: &[u8],
         _upgrade_bytes: &[u8],
         _config_bytes: &[u8],
-        _to_engine: Sender<rpcchainvm::common::message::Message>,
+        to_engine: Sender<rpcchainvm::common::message::Message>,
         _fxs: &[rpcchainvm::common::vm::Fx],
         app_sender: Box<dyn rpcchainvm::common::appsender::AppSender + Send + Sync>,
     ) -> Result<()> {
@@ -265,6 +265,7 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
 
         let mut vm = self.inner.write().await;
         vm.ctx = ctx;
+        vm.to_engine = Some(to_engine);
 
         let version =
             Version::parse(VERSION).map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
