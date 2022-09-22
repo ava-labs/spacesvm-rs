@@ -21,7 +21,7 @@ use crate::{
     api,
     block::Block as StatefulBlock,
     block::{self, state::State},
-    chain::{self, tx::Transaction},
+    chain::{self, tx::Transaction, vm::Vm},
     genesis::Genesis,
 };
 
@@ -132,6 +132,25 @@ impl crate::chain::vm::Vm for ChainVm {
             mempool.push_front(tx.to_owned());
         }
         Ok(())
+    }
+
+    /// Sends a signal to the consensus engine that a new block
+    /// is ready to be created.
+    async fn notify_block_ready(&self) {
+        let vm = self.inner.read().await;
+
+        if let Some(engine) = &vm.to_engine {
+            if let Err(_) = engine
+                .send(rpcchainvm::common::message::Message::PendingTxs)
+                .await
+            {
+                log::warn!("dropping message to consensus engine");
+            };
+            return;
+        }
+
+        log::error!("consensus engine channel failed to initialized");
+        return;
     }
 }
 
@@ -465,6 +484,8 @@ impl rpcchainvm::snowman::block::ChainVm for ChainVm {
             .verify()
             .await
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+
+        self.notify_block_ready().await;
 
         Ok(Box::new(block))
     }
