@@ -100,7 +100,7 @@ impl State {
         // persist last_accepted Id to database with fixed key
         let mut db = self.inner.db.write().await;
 
-        log::debug!("set_last_accepted key value: {:?}\n", block_id);
+        log::info!("set_last_accepted key value: {}\n", block_id);
         db.put(LAST_ACCEPTED_BLOCK_KEY, &block_id.to_vec())
             .await
             .map_err(|e| {
@@ -122,11 +122,11 @@ impl State {
                     continue;
                 }
                 let set_tx = maybe_set_tx.unwrap();
-                log::debug!(
+                log::info!(
                     "set_last_accepted put prefix_tx_value_key: {:?}\n",
                     prefix_tx_value_key(&tx.id)
                 );
-                log::debug!(
+                log::info!(
                     "set_last_accepted put prefix_tx_value_key value: {:?}\n",
                     &set_tx.value
                 );
@@ -220,38 +220,8 @@ impl State {
             tx.init().await?;
         }
 
-        log::debug!("get block found called\n");
+        log::info!("get block found: {:?}", block);
         Ok(block)
-    }
-
-    /// Attempts to return block from state given a valid block id.
-    pub async fn put_block(&mut self, block: &Block) -> Result<()> {
-        let mut db = self.inner.db.write().await;
-        let mut cache = self.lru.cache.write().await;
-
-        let wrapped_block = BlockWrapper {
-            block: block.to_owned().bytes,
-            status: block.to_owned().st,
-        };
-        // encode block wrapper to its byte representation
-        let wrapped_bytes = serde_json::to_vec(&wrapped_block)?;
-
-        let block_copy = block.clone();
-
-        // put actual block to cache, so we can directly fetch it from cache
-        cache.put(block_copy.id, block.to_owned());
-
-        // put wrapped block into database
-        db.put(&block_copy.id.to_vec(), &wrapped_bytes)
-            .await
-            .map_err(|e| {
-                Error::new(
-                    ErrorKind::Other,
-                    format!("failed to put last accepted block: {:?}", e),
-                )
-            })?;
-
-        Ok(())
     }
 
     /// Attempts to parse a byte array into a block. If the source is empty

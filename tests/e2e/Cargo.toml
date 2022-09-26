@@ -2,7 +2,7 @@
 name = "e2e"
 version = "0.0.0"
 edition = "2021"
-rust-version = "1.60"
+rust-version = "1.64"
 publish = false
 description = "E2E tests"
 license = "BSD-3-Clause"
