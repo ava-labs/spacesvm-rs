@@ -2,7 +2,6 @@ pub mod base;
 pub mod bucket;
 pub mod decoder;
 pub mod delete;
-pub mod heap;
 pub mod set;
 pub mod tx;
 pub mod unsigned;

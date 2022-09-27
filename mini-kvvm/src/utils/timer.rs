@@ -1,4 +1,6 @@
 use std::{
+    future::Future,
+    pin::Pin,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -11,11 +13,13 @@ use tokio::{
     time::{sleep, Instant},
 };
 
+type CallbackType = Pin<Box<dyn Future<Output = ()> + Send + Sync + 'static>>;
+
 #[derive(Clone)]
 /// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/utils/timer#Timer
 pub struct Timer {
     /// Optional handler function that will fire when should_execute is true.
-    handler: Option<fn()>,
+    handler: Option<Arc<CallbackType>>,
 
     // Timeout broadcast channel is used to reset ticker threads.
     timeout_ch: broadcast::Sender<()>,
@@ -31,16 +35,31 @@ pub struct Timer {
 }
 
 impl Timer {
-    pub fn new(handler: Option<fn()>) -> Self {
+    pub fn new() -> Self {
         let (timeout_ch, _): (broadcast::Sender<()>, broadcast::Receiver<()>) =
             broadcast::channel(1);
         Self {
             finished: Arc::new(AtomicBool::new(false)),
             should_execute: Arc::new(AtomicBool::new(false)),
-            handler,
+            handler: None,
             timeout_ch,
             duration: Arc::new(RwLock::new(None)),
         }
+    }
+
+    pub async fn set_handler(
+        &self,
+        handler: impl Future<Output = (Duration, bool)> + Send + Sync + 'static,
+    ) -> Pin<Box<impl std::future::Future<Output = ()>>> {
+        let timer = Timer::new();
+        let staged = Box::pin(async move {
+            let (delay, repeat) = handler.await;
+            if repeat {
+                &timer.set_handler_duration(delay).await;
+            }
+        });
+
+        return staged;
     }
 
     /// Defines the duration until the handler function will be executed.
@@ -48,7 +67,7 @@ impl Timer {
         let mut timer = self.duration.write().await;
         *timer = Some(duration);
         self.should_execute.store(true, Ordering::Relaxed);
-        self.reset().await;
+        self.reset();
     }
 
     /// Cancel the currently scheduled event.
@@ -137,11 +156,11 @@ async fn timer_test() {
     fn echo() {
         println!("echo!!")
     }
-    let timer = Timer::new(Some(echo));
+    let timer = Timer::new();
     let mut timer_clone = timer.clone();
     tokio::spawn(async move {
         // echo will fire after 10ms
-        timer.set_handler_duration(Duration::from_millis(10)).await;
+        timer.set_handler_duration(Duration::from_millis(10));
         sleep(Duration::from_millis(15)).await;
         // unblock dispatch
         timer.stop().await;

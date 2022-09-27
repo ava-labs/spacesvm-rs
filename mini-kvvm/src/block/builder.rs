@@ -12,7 +12,7 @@ use chan::chan_select;
 use crossbeam_channel::TryRecvError;
 use tokio::sync::RwLock;
 
-use crate::vm;
+use crate::{utils, vm};
 
 // TODO: make configurable
 const GOSSIP_INTERVAL: Duration = Duration::from_secs(1);

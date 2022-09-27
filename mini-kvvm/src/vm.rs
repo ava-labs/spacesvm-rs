@@ -17,7 +17,7 @@ use chrono::Utc;
 use semver::Version;
 use tokio::sync::{
     mpsc::{self, Sender},
-    RwLock,
+    Mutex, RwLock,
 };
 
 use crate::{
@@ -75,6 +75,8 @@ pub struct ChainVm {
     pub inner: Arc<RwLock<ChainVmInterior>>,
     pub builder: Option<Box<dyn block::builder::Builder + Sync + Send>>,
 
+    pub stop: Arc<mpsc::Receiver<()>>,
+    pub builder_stop: Arc<mpsc::Receiver<()>>,
     pub done_build: Arc<mpsc::Receiver<()>>,
     pub done_gossip: Arc<mpsc::Receiver<()>>,
 }
@@ -185,10 +187,20 @@ impl crate::chain::vm::Vm for ChainVm {
     }
 
     async fn new_timed_builder(self) -> Box<dyn block::builder::Builder + Send + Sync> {
-        // block::builder::Timed {
-        //     vm: self,
-        //     status: block::builder::Status::DontBuild,
-        // }
+        let mut builder = block::builder::Timed {
+            vm: self,
+            status: Arc::new(Mutex::new(block::builder::Status::DontBuild)),
+            build_block_timer: None,
+            builder_stop: self.builder_stop,
+            stop: self.stop,
+            done_build: self.done_build,
+            done_gossip: self.done_gossip,
+        };
+
+        let tuple = builder.build_block_two_stage_timer();
+        builder.build_block_timer = Some(Timer::new_staged_timer(
+            block::builder::Timed::build_block_two_stage_timer,
+        ));
     }
 }
 
