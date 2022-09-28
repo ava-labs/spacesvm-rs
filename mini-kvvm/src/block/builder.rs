@@ -7,6 +7,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use chan::chan_select;
 use avalanche_types::rpcchainvm;
 use tokio::sync::RwLock;
 
@@ -264,6 +265,29 @@ impl Timed {
                     log::debug!("stop called\n");
                     break
                 }
+            }
+        }
+    }
+
+    pub async fn gossip(&self) {
+        log::debug!("starting gossip loops");
+
+        let gossip = chan::tick(Duration::from_millis(100));
+        let regossip = chan::tick(Duration::from_millis(100));
+        let stop_ch = self.stop.clone();
+
+        loop {
+            
+            chan_select! {
+                gossip.recv() => {
+                    let mut mempool = self.vm.mempool.write().await;
+                    let new_txs = mempool.new_txs();
+                    drop(mempool)
+
+                },
+                regossip.recv() => {
+                    
+                },
             }
         }
     }
