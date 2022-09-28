@@ -23,7 +23,7 @@ use crate::{
     block::{self, state::State},
     chain::{self, tx::Transaction, vm::Vm},
     genesis::Genesis,
-    mempool,
+    mempool, network,
 };
 
 const PUBLIC_API_ENDPOINT: &str = "/public";
@@ -63,7 +63,9 @@ impl Default for ChainVmInterior {
 #[derive(Clone)]
 pub struct ChainVm {
     pub db: Box<dyn rpcchainvm::database::Database + Sync + Send>,
+    pub app_sender: Option<Box<dyn rpcchainvm::common::appsender::AppSender + Send + Sync>>,
     pub mempool: Arc<RwLock<mempool::Mempool>>,
+    pub network: Option<Arc<RwLock<network::Push>>>,
     pub inner: Arc<RwLock<ChainVmInterior>>,
     pub verified_blocks: Arc<RwLock<HashMap<ids::Id, block::Block>>>,
 }
@@ -81,6 +83,8 @@ impl ChainVm {
             inner,
             mempool: Arc::new(RwLock::new(mempool)),
             verified_blocks,
+            app_sender: None,
+            network: None,
         })
     }
 
@@ -103,6 +107,8 @@ impl ChainVm {
             inner: Arc::new(RwLock::new(inner)),
             mempool: Arc::new(RwLock::new(mempool)),
             verified_blocks: Arc::clone(verified_blocks),
+            app_sender: None,
+            network: None,
         }
     }
 }
@@ -235,7 +241,7 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
         _config_bytes: &[u8],
         _to_engine: Sender<rpcchainvm::common::message::Message>,
         _fxs: &[rpcchainvm::common::vm::Fx],
-        _app_sender: Box<dyn rpcchainvm::common::appsender::AppSender + Send + Sync>,
+        app_sender: Box<dyn rpcchainvm::common::appsender::AppSender + Send + Sync>,
     ) -> Result<()> {
         let mut vm = self.inner.write().await;
         vm.ctx = ctx;
@@ -246,6 +252,9 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
 
         let current = db_manager.current().await?;
         self.db = current.db.clone();
+
+        self.app_sender = Some(app_sender);
+        self.network = Some(Arc::new(RwLock::new(network::Push::new(self.clone()))));
 
         let verified_blocks = self.verified_blocks.clone();
 

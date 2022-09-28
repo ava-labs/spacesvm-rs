@@ -7,9 +7,11 @@ use std::{
     time::{Duration, Instant},
 };
 
-use chan::chan_select;
 use avalanche_types::rpcchainvm;
-use tokio::sync::RwLock;
+use chan::chan_select;
+use tokio::sync::{RwLock};
+use crossbeam_channel::TryRecvError;
+
 
 use crate::vm;
 
@@ -276,17 +278,19 @@ impl Timed {
         let regossip = chan::tick(Duration::from_millis(100));
         let stop_ch = self.stop.clone();
 
-        loop {
-            
+        while stop_ch.try_recv() == Err(TryRecvError::Empty) {
             chan_select! {
                 gossip.recv() => {
-                    let mut mempool = self.vm.mempool.write().await;
-                    let new_txs = mempool.new_txs();
-                    drop(mempool)
+                    let mempool = &mut self.vm.mempool.write().await;
+                    let new_txs = mempool.new_txs().unwrap();
+                    drop(mempool);
 
+                    let mut network = self.vm.network.as_ref().unwrap().write().await;
+                    let _ = network.gossip_new_txs(new_txs).await;
                 },
                 regossip.recv() => {
-                    
+                    let mut network = self.vm.network.as_ref().unwrap().write().await;
+                    let _ = network.regossip_txs().await;
                 },
             }
         }
