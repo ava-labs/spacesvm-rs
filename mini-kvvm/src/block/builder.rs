@@ -1,7 +1,7 @@
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
+        Arc,
     },
     thread,
     time::{Duration, Instant},
@@ -9,11 +9,14 @@ use std::{
 
 use avalanche_types::rpcchainvm;
 use chan::chan_select;
-use tokio::sync::{RwLock};
 use crossbeam_channel::TryRecvError;
-
+use tokio::sync::RwLock;
 
 use crate::vm;
+
+// TODO: make configurable
+const GOSSIP_INTERVAL: Duration = Duration::from_secs(1);
+const REGOSSIP_INTERVAL: Duration = Duration::from_secs(30);
 
 pub trait Builder {
     fn build(&self);
@@ -28,7 +31,7 @@ pub struct Timed {
     /// [DontBuild] indicates there's no need to build a block.
     /// [MayBuild] indicates the Vm should proceed to build a block.
     /// [Building] indicates the Vm has sent a request to the engine to build a block.
-    pub status: Arc<Mutex<Status>>,
+    pub status: Arc<RwLock<Status>>,
 
     pub build_block_timer: Timer,
 
@@ -54,10 +57,10 @@ pub enum Status {
 }
 
 pub struct Timer {
-    // Timeout Tx channel is used to reset ticker threads.
+    /// Timeout Tx channel is used to reset ticker threads.
     timeout_tx: crossbeam_channel::Sender<()>,
 
-    // Timeout Rx channel listens.
+    /// Timeout Rx channel listens.
     timeout_rx: crossbeam_channel::Receiver<()>,
 
     /// New timer creation stops when true.
@@ -70,14 +73,14 @@ pub struct Timer {
     duration: Arc<RwLock<Duration>>,
 }
 
-// Directs the engine when to build blocks and gossip transactions.
+/// Directs the engine when to build blocks and gossip transactions.
 impl Timed {
     /// Sets the initial timeout on the two stage timer if the process
     /// has not already begun from an earlier notification. If [buildStatus] is anything
     /// other than [DontBuild], then the attempt has already begun and this notification
     /// can be safely skipped.
     async fn signal_txs_ready(&mut self) {
-        if *self.status.lock().unwrap() == Status::DontBuild {
+        if *self.status.read().await == Status::DontBuild {
             return;
         }
 
@@ -99,7 +102,7 @@ impl Timed {
         // release lock
         drop(vm);
 
-        let mut status = self.status.lock().unwrap();
+        let mut status = self.status.write().await;
         *status = Status::Building;
         return;
     }
@@ -108,7 +111,7 @@ impl Timed {
     // [HandleGenerateBlock] invocation could lead to quiescence, building a block with
     // some delay, or attempting to build another block immediately
     pub async fn handle_generate_block(&mut self) {
-        let mut status = self.status.lock().unwrap();
+        let mut status = self.status.write().await;
 
         if self.need_to_build().await {
             *status = Status::MayBuild;
@@ -118,7 +121,7 @@ impl Timed {
         }
     }
 
-    // needToBuild returns true if there are outstanding transactions to be issued
+    // Returns true if there are outstanding transactions to be issued
     // into a block.
     async fn need_to_build(&self) -> bool {
         let mempool = self.vm.mempool.read().await;
@@ -128,7 +131,7 @@ impl Timed {
     /// Parses the block current status and
     pub async fn build_block_parse_status(&mut self) {
         let mut mark_building = false;
-        match &*self.status.lock().unwrap() {
+        match &*self.status.read().await {
             Status::DontBuild => {
                 // no op
             }
@@ -223,14 +226,14 @@ impl Timed {
                             ticker_duration = *duration;
                         }
                         reset.store(true, Ordering::Relaxed);
-                        log::debug!("timeout\n");
+                        log::debug!("timeout");
                         break
                     }
 
                     // ticker
                     recv(ticker_rx) -> _ => {
                         cleared.store(true, Ordering::Relaxed);
-                        log::debug!("tick\n");
+                        log::debug!("tick");
                         break
                      }
                 }
@@ -242,10 +245,12 @@ impl Timed {
     /// considered for the next block.
     pub async fn build(&mut self) {
         log::debug!("starting build loops");
+
         self.signal_txs_ready().await;
         let mempool = self.vm.mempool.read().await;
         let mempool_pending_ch = mempool.subscribe_pending();
         drop(mempool);
+
         let stop_ch = self.stop.clone();
         let builder_stop_ch = self.builder_stop.clone();
 
@@ -274,8 +279,8 @@ impl Timed {
     pub async fn gossip(&self) {
         log::debug!("starting gossip loops");
 
-        let gossip = chan::tick(Duration::from_millis(100));
-        let regossip = chan::tick(Duration::from_millis(100));
+        let gossip = chan::tick(GOSSIP_INTERVAL);
+        let regossip = chan::tick(REGOSSIP_INTERVAL);
         let stop_ch = self.stop.clone();
 
         while stop_ch.try_recv() == Err(TryRecvError::Empty) {
