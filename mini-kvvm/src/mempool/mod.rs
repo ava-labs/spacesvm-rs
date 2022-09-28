@@ -6,7 +6,6 @@ use std::{
 };
 
 use avalanche_types::ids;
-use tokio::sync::broadcast;
 
 use crate::chain::tx::tx::Transaction;
 
@@ -17,7 +16,8 @@ pub struct Mempool {
 
     /// Channel of length one, which the mempool ensures has an item on
     /// it as long as there is an unissued transaction remaining in [txs].
-    pending_tx: broadcast::Sender<()>,
+    pending_tx: crossbeam_channel::Sender<()>,
+    pending_rx: crossbeam_channel::Receiver<()>,
 
     /// Vec of [Tx] that are ready to be gossiped.
     new_txs: Vec<Transaction>,
@@ -26,18 +26,21 @@ pub struct Mempool {
 impl Mempool {
     pub fn new(max_size: usize) -> Self {
         // initialize broadcast channel
-        let (pending_tx, _rx): (broadcast::Sender<()>, broadcast::Receiver<()>) =
-            tokio::sync::broadcast::channel(1);
+        let (pending_tx, pending_rx): (
+            crossbeam_channel::Sender<()>,
+            crossbeam_channel::Receiver<()>,
+        ) = crossbeam_channel::bounded(1);
         Self {
             data: Arc::new(RwLock::new(Data::new(max_size))),
             pending_tx,
+            pending_rx,
             new_txs: Vec::new(),
         }
     }
 
     /// Returns a broadcast receiver for the pending tx channel.
-    pub fn subscribe_pending(&self) -> broadcast::Receiver<()> {
-        self.pending_tx.subscribe()
+    pub fn subscribe_pending(&self) -> crossbeam_channel::Receiver<()> {
+        self.pending_rx.clone()
     }
 
     /// Returns Tx from Id if it exists.
@@ -177,7 +180,7 @@ async fn test_mempool() {
 
     // init mempool
     let mut mempool = Mempool::new(10);
-    let mut pending_rx = mempool.subscribe_pending();
+    let pending_rx = mempool.subscribe_pending();
 
     // create tx_1
     let tx_data_1 = unsigned::TransactionData {
@@ -195,7 +198,7 @@ async fn test_mempool() {
     let tx_1_id = tx_1.id;
     assert_eq!(mempool.add(tx_1).unwrap(), true);
     // drain channel
-    let resp = pending_rx.recv().await;
+    let resp = pending_rx.recv();
     assert!(resp.is_ok());
     assert_eq!(mempool.len(), 1);
 
@@ -221,7 +224,7 @@ async fn test_mempool() {
     assert_eq!(mempool.len(), 2);
 
     // drain channel
-    let resp = pending_rx.recv().await;
+    let resp = pending_rx.recv();
     assert!(resp.is_ok());
 
     // prune tx_2 as invalid

@@ -1,3 +1,5 @@
+use std::thread;
+
 use avalanche_types::rpcchainvm::database::memdb::Database as MemDb;
 use jsonrpc_core::futures::{self, FutureExt};
 use jsonrpc_core_client::transports::local;
@@ -17,12 +19,12 @@ async fn service_test() {
 
     // get a broadcast tx pending receiver for new blocks;
     let mempool = vm.mempool.read().await;
-    let mut pending_rx = mempool.subscribe_pending();
+    let pending_rx = mempool.subscribe_pending();
     drop(mempool);
     // unblock channel
-    tokio::spawn(async move {
-        loop {
-            pending_rx.recv().await.unwrap();
+    thread::spawn(move || loop {
+        crossbeam_channel::select! {
+            recv(pending_rx) -> _ => {}
         }
     });
 
