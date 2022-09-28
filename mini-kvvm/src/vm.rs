@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::HashMap,
     io::{Error, ErrorKind, Result},
     sync::Arc,
     time,
@@ -23,10 +23,14 @@ use crate::{
     block::{self, state::State},
     chain::{self, tx::Transaction, vm::Vm},
     genesis::Genesis,
+    mempool,
 };
 
 const PUBLIC_API_ENDPOINT: &str = "/public";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+// TODO: make configurable
+const MEMPOOL_SIZE: usize = 1024;
 
 pub struct ChainVmInterior {
     pub ctx: Option<rpcchainvm::context::Context>,
@@ -59,9 +63,9 @@ impl Default for ChainVmInterior {
 #[derive(Clone)]
 pub struct ChainVm {
     pub db: Box<dyn rpcchainvm::database::Database + Sync + Send>,
-    pub mempool: Arc<RwLock<VecDeque<chain::tx::tx::Transaction>>>,
+    pub mempool: Arc<RwLock<mempool::Mempool>>,
     pub inner: Arc<RwLock<ChainVmInterior>>,
-    pub verified_blocks: Arc<RwLock<HashMap<ids::Id, crate::block::Block>>>,
+    pub verified_blocks: Arc<RwLock<HashMap<ids::Id, block::Block>>>,
 }
 
 impl ChainVm {
@@ -69,19 +73,19 @@ impl ChainVm {
     pub fn new() -> Box<dyn rpcchainvm::vm::Vm + Send + Sync> {
         let inner = Arc::new(RwLock::new(ChainVmInterior::default()));
         let db = rpcchainvm::database::memdb::Database::new();
-        let mempool = Arc::new(RwLock::new(VecDeque::new()));
+        let mempool = mempool::Mempool::new(MEMPOOL_SIZE);
         let verified_blocks = Arc::new(RwLock::new(HashMap::new()));
 
         Box::new(ChainVm {
             db,
             inner,
-            mempool,
+            mempool: Arc::new(RwLock::new(mempool)),
             verified_blocks,
         })
     }
 
     pub fn new_with_state(db: &Box<dyn rpcchainvm::database::Database + Sync + Send>) -> Self {
-        let mempool = Arc::new(RwLock::new(VecDeque::new()));
+        let mempool = mempool::Mempool::new(MEMPOOL_SIZE);
         let verified_blocks = &Arc::new(RwLock::new(HashMap::new()));
         let inner = ChainVmInterior {
             ctx: None,
@@ -97,7 +101,7 @@ impl ChainVm {
         Self {
             db: db.clone(),
             inner: Arc::new(RwLock::new(inner)),
-            mempool,
+            mempool: Arc::new(RwLock::new(mempool)),
             verified_blocks: Arc::clone(verified_blocks),
         }
     }
@@ -112,7 +116,7 @@ impl crate::chain::vm::Vm for ChainVm {
         return vm.bootstrapped;
     }
 
-    async fn submit(&self, mut txs: Vec<crate::chain::tx::tx::Transaction>) -> Result<()> {
+    async fn submit(&self, mut txs: Vec<chain::tx::tx::Transaction>) -> Result<()> {
         let now = Utc::now().timestamp() as u64;
 
         // TODO append errors instead of fail
@@ -128,8 +132,11 @@ impl crate::chain::vm::Vm for ChainVm {
             tx.execute(self.db.clone(), dummy_block)
                 .await
                 .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+
             let mut mempool = self.mempool.write().await;
-            mempool.push_front(tx.to_owned());
+            let _ = mempool
+                .add(tx.to_owned())
+                .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
         }
         Ok(())
     }
@@ -429,7 +436,7 @@ impl rpcchainvm::snowman::block::ChainVm for ChainVm {
     async fn build_block(
         &self,
     ) -> Result<Box<dyn rpcchainvm::concensus::snowman::Block + Send + Sync>> {
-        let mut mempool = self.mempool.write().await;
+        let mempool = self.mempool.read().await;
         if mempool.len() == 0 {
             return Err(Error::new(ErrorKind::Other, "no pending blocks"));
         }

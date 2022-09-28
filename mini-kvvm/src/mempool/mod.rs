@@ -14,7 +14,12 @@ use self::data::{Data, Entry};
 
 pub struct Mempool {
     data: Arc<RwLock<Data>>,
+
+    /// Channel of length one, which the mempool ensures has an item on
+    /// it as long as there is an unissued transaction remaining in [txs].
     pending_tx: broadcast::Sender<()>,
+
+    /// Vec of [Tx] that are ready to be gossiped.
     new_txs: Vec<Transaction>,
 }
 
@@ -25,8 +30,6 @@ impl Mempool {
             tokio::sync::broadcast::channel(1);
         Self {
             data: Arc::new(RwLock::new(Data::new(max_size))),
-            /// Channel of length one, which the mempool ensures has an item on
-            /// it as long as there is an unissued transaction remaining in [txs].
             pending_tx,
             new_txs: Vec::new(),
         }
@@ -74,6 +77,15 @@ impl Mempool {
         Ok(true)
     }
 
+    /// Return
+    pub fn pop_back(&self) -> Option<Transaction> {
+        let mut data = self.data.write().unwrap();
+        match data.items.pop_back() {
+            Some(entry) => entry.tx,
+            None => None,
+        }
+    }
+
     /// Returns len of mempool data.
     pub fn len(&self) -> usize {
         let data = self.data.read().unwrap();
@@ -83,6 +95,25 @@ impl Mempool {
     pub fn is_empty(&self) -> bool {
         let data = self.data.read().unwrap();
         data.is_empty()
+    }
+
+    /// Returns the vec of transactions ready to gossip and replaces it with an empty vec.
+    pub fn new_txs(&mut self) -> Result<Vec<Transaction>> {
+        let data = self.data.read().unwrap();
+
+        let mut selected: Vec<Transaction> = Vec::new();
+
+        // It is possible that a block may have been accepted that contains some
+        // new transactions before [new_txs] is called.
+        for tx in self.new_txs.iter() {
+            if data.has(&tx.id)? {
+                continue;
+            }
+            selected.push(tx.to_owned())
+        }
+        self.new_txs = Vec::new();
+
+        Ok(selected)
     }
 
     /// Prunes any Ids not included in valid hashes set.

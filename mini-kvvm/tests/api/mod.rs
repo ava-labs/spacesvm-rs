@@ -15,13 +15,23 @@ async fn service_test() {
     let db = MemDb::new();
     let vm = vm::ChainVm::new_with_state(&db);
 
-    {
-        // initialize genesis block
-        let mut inner = vm.inner.write().await;
-        let resp = create_genesis_block(&inner.state.clone(), vec![]).await;
-        assert!(resp.is_ok());
-        inner.preferred = resp.unwrap();
-    }
+    // get a broadcast tx pending receiver for new blocks;
+    let mempool = vm.mempool.read().await;
+    let mut pending_rx = mempool.subscribe_pending();
+    drop(mempool);
+    // unblock channel
+    tokio::spawn(async move {
+        loop {
+            pending_rx.recv().await.unwrap();
+        }
+    });
+
+    // initialize genesis block
+    let mut inner = vm.inner.write().await;
+    let resp = create_genesis_block(&inner.state.clone(), vec![]).await;
+    assert!(resp.is_ok());
+    inner.preferred = resp.unwrap();
+    drop(inner);
 
     let service = api::service::Service::new(vm);
     let mut io = jsonrpc_core::IoHandler::new();
