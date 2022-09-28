@@ -1,3 +1,4 @@
+pub mod builder;
 pub mod state;
 
 use std::io::{Error, ErrorKind, Result};
