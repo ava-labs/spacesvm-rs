@@ -71,6 +71,10 @@ pub fn create_typed_data(
 ) -> TypedData {
     let mut types = Types::new();
     types.insert("txType".to_owned(), tx_fields);
+    types.insert("EIP712Domain".to_owned(), vec![
+        Type{name: "name".to_owned(), type_: "string".to_owned()},
+        Type{name: "magic".to_owned(), type_: "uint64".to_owned()},
+    ]);
     return TypedData {
         types,
         message,

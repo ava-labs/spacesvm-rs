@@ -192,7 +192,7 @@ async fn test_mempool() {
     let resp = tx_data_1.decode();
     assert!(resp.is_ok());
     let utx_1 = resp.unwrap();
-    let tx_1 = Transaction::new(utx_1);
+    let tx_1 = Transaction::new(utx_1, vec![]);
 
     // add tx_1 to mempool
     let tx_1_id = tx_1.id;
@@ -216,7 +216,7 @@ async fn test_mempool() {
     let resp = tx_data_2.decode();
     assert!(resp.is_ok());
     let utx_2 = resp.unwrap();
-    let mut tx_2 = Transaction::new(utx_2);
+    let mut tx_2 = Transaction::new(utx_2, vec![]);
     tx_2.id = ids::Id::from_slice("sup".as_bytes());
 
     // add tx_2 to mempool
