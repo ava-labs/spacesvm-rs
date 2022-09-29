@@ -1,6 +1,6 @@
 use std::{
     fmt::Debug,
-    io::{Error, ErrorKind, Result}, vec,
+    io::{Error, ErrorKind, Result},
 };
 
 use avalanche_types::{ids, rpcchainvm};
