@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
     io::{Error, ErrorKind, Result},
-    num::NonZeroUsize,
     sync::Arc,
 };
 
@@ -9,7 +8,6 @@ use avalanche_types::{
     choices::status::{self, Status},
     ids, rpcchainvm,
 };
-use lru::LruCache;
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Sha3_256};
 use tokio::sync::RwLock;
@@ -42,23 +40,8 @@ pub struct BlockWrapper {
 #[derive(Default, Clone)]
 pub struct State {
     pub verified_blocks: Arc<RwLock<HashMap<ids::Id, Block>>>,
-    // Block cache put only after it is accepted.
-    pub blocks: Blocks,
     pub inner: InnerState,
     pub last_accepted: Arc<RwLock<ids::Id>>,
-}
-
-#[derive(Clone, Debug)]
-pub struct Blocks {
-    pub lru: Arc<RwLock<LruCache<ids::Id, Block>>>,
-}
-
-impl Default for Blocks {
-    fn default() -> Self {
-        Self {
-            lru: Arc::new(RwLock::new(LruCache::unbounded())),
-        }
-    }
 }
 
 #[derive(Clone)]
@@ -80,14 +63,9 @@ impl State {
         db: Box<dyn rpcchainvm::database::Database + Send + Sync>,
         verified_blocks: Arc<RwLock<HashMap<ids::Id, Block>>>,
     ) -> Self {
-        let cache: LruCache<ids::Id, Block> =
-            LruCache::new(NonZeroUsize::new(BLOCKS_LRU_SIZE).unwrap());
         return Self {
             inner: InnerState {
                 db: Arc::new(RwLock::new(db)),
-            },
-            blocks: Blocks {
-                lru: Arc::new(RwLock::new(cache)),
             },
             verified_blocks,
             last_accepted: Arc::new(RwLock::new(ids::Id::empty())),
@@ -169,18 +147,9 @@ impl State {
         }
     }
 
-    /// Attempts to return block from cache given a valid block id.
-    /// If the cache is not hit check the database.
+    /// Attempts to return block on disk state.
     pub async fn get_block(&mut self, block_id: ids::Id) -> Result<Block> {
         log::debug!("get block called\n");
-
-        let mut cache = self.blocks.lru.write().await;
-
-        // check cache for block
-        let cached = cache.get(&block_id);
-        if cached.is_some() {
-            return Ok(cached.unwrap().to_owned());
-        }
 
         let db = self.inner.db.read().await;
 
@@ -277,42 +246,42 @@ async fn is_set_tx(tx: &chain::tx::tx::Transaction) -> bool {
 
 #[tokio::test]
 async fn block_test() {
-    use avalanche_types::rpcchainvm::{concensus::snowman::*, database::memdb::Database};
+    // use avalanche_types::rpcchainvm::{concensus::snowman::*, database::memdb::Database};
 
-    use crate::block::state::State;
+    // use crate::block::state::State;
 
-    // initialize state
-    let verified_blocks = Arc::new(RwLock::new(HashMap::new()));
-    let db = Database::new();
-    let state = State::new(db, verified_blocks);
-    let genesis_bytes =
-        "{\"author\":\"subnet creator\",\"welcome_message\":\"Hello from Rust VM!\"}".as_bytes();
+    // // initialize state
+    // let verified_blocks = Arc::new(RwLock::new(HashMap::new()));
+    // let db = Database::new();
+    // let state = State::new(db, verified_blocks);
+    // let genesis_bytes =
+    //     "{\"author\":\"subnet creator\",\"welcome_message\":\"Hello from Rust VM!\"}".as_bytes();
 
-    // create genesis block
-    let mut block = crate::block::Block::new(ids::Id::empty(), 0, genesis_bytes, 0, state);
+    // // create genesis block
+    // let mut block = crate::block::Block::new(ids::Id::empty(), 0, genesis_bytes, 0, state);
 
-    // initialize block
-    let bytes = block.to_bytes().await;
-    block
-        .init(&bytes.unwrap(), Status::Processing)
-        .await
-        .unwrap();
+    // // initialize block
+    // let bytes = block.to_bytes().await;
+    // block
+    //     .init(&bytes.unwrap(), Status::Processing)
+    //     .await
+    //     .unwrap();
 
-    // write block
-    let mut state = block.state;
-    let resp = state.put_block(&block).await;
-    assert!(!resp.is_err());
+    // // write block
+    // let mut state = block.state;
+    // let resp = state.put_block(&block).await;
+    // assert!(!resp.is_err());
 
-    // verify cache was populated then release read lock
-    {
-        let lru = state.blocks.cache.read().await;
-        assert_eq!(lru.len(), 1);
-    }
+    // // verify cache was populated then release read lock
+    // {
+    //     let lru = state.blocks.cache.read().await;
+    //     assert_eq!(lru.len(), 1);
+    // }
 
-    // get block by id from cache
-    let mut state = block.state.clone();
-    let resp = state.get_block(block.id().await).await;
-    assert!(!resp.is_err());
+    // // get block by id from cache
+    // let mut state = block.state.clone();
+    // let resp = state.get_block(block.id().await).await;
+    // assert!(!resp.is_err());
 }
 
 #[tokio::test]

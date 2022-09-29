@@ -15,7 +15,8 @@ use crate::common::create_genesis_block;
 #[tokio::test]
 async fn service_test() {
     let db = MemDb::new();
-    let vm = vm::ChainVm::new_with_state(&db);
+    let mut vm = vm::ChainVm::new();
+    
 
     // get a broadcast tx pending receiver for new blocks;
     let mempool = vm.mempool.read().await;

@@ -196,12 +196,12 @@ impl avalanche_types::rpcchainvm::concensus::snowman::Decidable for Block {
 
         let block_id = self.id().await;
         let block = self.clone();
-        self.state.put_block(&block).await.map_err(|e| {
-            Error::new(
-                ErrorKind::Other,
-                format!("accept block failed: {}", e.to_string()),
-            )
-        })?;
+        // self.state.put_block(&block).await.map_err(|e| {
+        //     Error::new(
+        //         ErrorKind::Other,
+        //         format!("accept block failed: {}", e.to_string()),
+        //     )
+        // })?;
 
         self.state
             .set_last_accepted(block)

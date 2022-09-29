@@ -74,17 +74,17 @@ impl crate::api::Service for Service {
 
     fn resolve(&self, params: ResolveArgs) -> BoxFuture<Result<ResolveResponse>> {
         log::debug!("resolve called");
-        let vm = self.vm.clone();
+        let db = self.vm.db.as_ref().unwrap().clone();
 
         Box::pin(async move {
-            let value = chain::storage::get_value(&vm.db, &params.bucket, &params.key)
+            let value = chain::storage::get_value(&db, &params.bucket, &params.key)
                 .await
                 .map_err(create_jsonrpc_error)?;
             if value.is_none() {
                 return Ok(ResolveResponse::default());
             }
 
-            let meta = chain::storage::get_value_meta(&vm.db, &params.bucket, &params.key)
+            let meta = chain::storage::get_value_meta(&db, &params.bucket, &params.key)
                 .await
                 .map_err(create_jsonrpc_error)?;
             if meta.is_none() {

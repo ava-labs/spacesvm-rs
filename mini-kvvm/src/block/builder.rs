@@ -55,13 +55,7 @@ pub struct Timed {
 
     pub build_block_timer: Timer,
 
-    // default to 500ms
     pub build_interval: Duration,
-
-    pub stop: crossbeam_channel::Receiver<()>,
-    pub builder_stop: crossbeam_channel::Receiver<()>,
-    pub done_gossip: crossbeam_channel::Receiver<()>,
-    pub done_build: crossbeam_channel::Receiver<()>,
 }
 
 #[derive(PartialEq)]
@@ -117,10 +111,6 @@ impl Timed {
             vm,
             status: Arc::new(RwLock::new(Status::DontBuild)),
             build_block_timer: Timer::new(),
-            builder_stop: vm.builder_stop_rx.clone(),
-            stop: vm.stop_rx.clone(),
-            done_build: vm.done_build_rx.clone(),
-            done_gossip: vm.done_gossip_rx.clone(),
             build_interval: BUILD_INTERVAL,
         }
     }
@@ -301,8 +291,8 @@ impl Timed {
         let mempool_pending_ch = mempool.subscribe_pending();
         drop(mempool);
 
-        let stop_ch = self.stop.clone();
-        let builder_stop_ch = self.builder_stop.clone();
+        let stop_ch = self.vm.stop_rx.clone();
+        let builder_stop_ch = self.vm.builder_stop_rx.clone();
 
         loop {
             // select will block until a signal is received
@@ -331,7 +321,7 @@ impl Timed {
 
         let gossip = chan::tick(GOSSIP_INTERVAL);
         let regossip = chan::tick(REGOSSIP_INTERVAL);
-        let stop_ch = self.stop.clone();
+        let stop_ch = self.vm.stop_rx.clone();
 
         while stop_ch.try_recv() == Err(TryRecvError::Empty) {
             chan_select! {
