@@ -3,3 +3,6 @@ members = [
     "mini-kvvm",
     "tests/e2e"
 ]
+
+[patch.crates-io]
+eip-712 = {path="../openethereum/crates/util/EIP-712"}
