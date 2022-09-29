@@ -60,11 +60,14 @@ pub struct Transaction {
     pub size: u64,
 
     #[serde(skip)]
-    pub sender: Address
+    pub sender: Address,
 }
 
 impl Transaction {
-    pub fn new(unsigned_transaction: Box<dyn super::unsigned::Transaction + Send + Sync>, signature: Vec<u8>) -> Self {
+    pub fn new(
+        unsigned_transaction: Box<dyn super::unsigned::Transaction + Send + Sync>,
+        signature: Vec<u8>,
+    ) -> Self {
         Self {
             unsigned_transaction,
             signature,
@@ -126,7 +129,10 @@ impl crate::chain::tx::Transaction for Transaction {
     }
 }
 
-pub fn new_tx(utx: Box<dyn super::unsigned::Transaction + Send + Sync>, signature: Vec<u8>) -> Transaction {
+pub fn new_tx(
+    utx: Box<dyn super::unsigned::Transaction + Send + Sync>,
+    signature: Vec<u8>,
+) -> Transaction {
     return Transaction {
         unsigned_transaction: utx,
         signature,

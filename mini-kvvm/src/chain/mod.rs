@@ -5,8 +5,8 @@ pub mod vm;
 
 #[cfg(test)]
 mod tests {
-    use super::{*, crypto::derive_sender};
-    use secp256k1::{rand, SecretKey, PublicKey};
+    use super::{crypto::derive_sender, *};
+    use secp256k1::{rand, PublicKey, SecretKey};
 
     #[test]
     fn signature_recovers() {
@@ -16,9 +16,6 @@ mod tests {
         let hash = keccak_hash::keccak("yolo message".as_bytes());
         let sig = crypto::sign(&hash.as_bytes(), &secret_key).unwrap();
         let sender = derive_sender(&hash.as_bytes(), &sig).unwrap();
-        assert_eq!(
-            public_key.to_string(),
-            sender.to_string(),
-        )
+        assert_eq!(public_key.to_string(), sender.to_string(),)
     }
 }

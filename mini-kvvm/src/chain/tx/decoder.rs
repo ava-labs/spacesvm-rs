@@ -4,12 +4,12 @@ use std::{
 };
 
 use avalanche_types::ids;
-use serde::{Deserialize, Serialize};
-use radix_fmt::radix;
-use keccak_hash::keccak;
-use serde_json::to_value;
 use eip_712::parser::Type as ParserType;
 use ethereum_types::H256;
+use keccak_hash::keccak;
+use radix_fmt::radix;
+use serde::{Deserialize, Serialize};
+use serde_json::to_value;
 
 use super::{base, bucket, delete, set, tx::TransactionType, unsigned};
 
@@ -71,10 +71,19 @@ pub fn create_typed_data(
 ) -> TypedData {
     let mut types = Types::new();
     types.insert("txType".to_owned(), tx_fields);
-    types.insert("EIP712Domain".to_owned(), vec![
-        Type{name: "name".to_owned(), type_: "string".to_owned()},
-        Type{name: "magic".to_owned(), type_: "uint64".to_owned()},
-    ]);
+    types.insert(
+        "EIP712Domain".to_owned(),
+        vec![
+            Type {
+                name: "name".to_owned(),
+                type_: "string".to_owned(),
+            },
+            Type {
+                name: "magic".to_owned(),
+                type_: "uint64".to_owned(),
+            },
+        ],
+    );
     return TypedData {
         types,
         message,
@@ -163,12 +172,11 @@ impl TypedData {
     }
 }
 
-
 pub fn hash_structured_data(typed_data: &TypedData) -> eip_712::error::Result<H256> {
     // EIP-191 compliant
     let prefix = (b"\x19\x01").to_vec();
     let domain = to_value(&typed_data.domain).unwrap();
-    let message= to_value(&typed_data.message).unwrap();
+    let message = to_value(&typed_data.message).unwrap();
     let (domain_hash, data_hash) = (
         eip_712::encode_data(
             &ParserType::Custom("EIP712Domain".into()),

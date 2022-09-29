@@ -2,17 +2,21 @@ use std::io::{Error, ErrorKind, Result};
 
 use avalanche_types::key::ECDSA_RECOVERABLE_SIG_LEN;
 use ethereum_types::Address;
-use secp256k1::{self, ecdsa::{self, RecoverableSignature, RecoveryId}, PublicKey, Message, SecretKey, Secp256k1, Verification, Signing};
+use secp256k1::{
+    self,
+    ecdsa::{RecoverableSignature, RecoveryId},
+    Message, PublicKey, Secp256k1, SecretKey,
+};
 use sha3::{Digest, Keccak256};
 
 const LEGACY_SIG_ADJ: usize = 27;
 pub const MESSAGE_SIZE: usize = 32;
 
 pub fn sign(dh: &[u8], secret: &SecretKey) -> Result<Vec<u8>> {
-    let secp= Secp256k1::signing_only();
+    let secp = Secp256k1::signing_only();
     let sig = secp.sign_ecdsa_recoverable(&Message::from_slice(dh).unwrap(), secret);
     let (recovery_id, sig_bytes) = sig.serialize_compact();
-    let mut sig_vec= sig_bytes.to_vec();
+    let mut sig_vec = sig_bytes.to_vec();
     sig_vec.push(recovery_id.to_i32() as u8 + LEGACY_SIG_ADJ as u8);
     Ok(sig_vec)
 }
