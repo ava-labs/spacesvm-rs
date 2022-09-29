@@ -49,7 +49,6 @@ tokio-stream = { version = "0.1.9", features = ["net"] }
 tonic = { version = "0.8.1", features = ["gzip"] }
 tonic-health = "0.7"
 typetag = "0.2"
-validator = "0.16.0"
 
 [[test]]
 name = "integration"
