@@ -170,9 +170,7 @@ impl avalanche_types::rpcchainvm::concensus::snowman::Block for Block {
             })?;
 
         parent_block.children.push(self.to_owned());
-
-        let mut verified_blocks = state.verified_blocks.write().await;
-        verified_blocks.insert(self.id, self.to_owned());
+        state.set_verified_block(self.to_owned()).await;
 
         return Ok(());
     }
@@ -208,11 +206,8 @@ impl avalanche_types::rpcchainvm::concensus::snowman::Decidable for Block {
             .await
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
-        let mut verified_blocks = self.state.verified_blocks.write().await;
         // remove this block from verified blocks as it's accepted.
-        verified_blocks.remove(&block_id);
-
-        // TODO: add support for versiondb
+        let _ = self.state.remove_verified_block(block_id).await;
 
         Ok(())
     }
@@ -221,10 +216,8 @@ impl avalanche_types::rpcchainvm::concensus::snowman::Decidable for Block {
     async fn reject(&mut self) -> Result<()> {
         self.set_status(Status::Rejected).await;
 
-        let mut verified_blocks = self.state.verified_blocks.write().await;
-
         // remove this block from verified blocks as it's rejected.
-        verified_blocks.remove(&self.id);
+        let _ = self.state.remove_verified_block(self.id).await;
 
         Ok(())
     }

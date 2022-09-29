@@ -21,7 +21,7 @@ use tokio::sync::{mpsc, Mutex, RwLock};
 
 use crate::{
     api, block,
-    chain::{self, tx::Transaction, vm::Vm},
+    chain::{self, storage, tx::Transaction, vm::Vm},
     genesis::Genesis,
     mempool, network,
 };
@@ -41,6 +41,7 @@ pub struct ChainVmInterior {
     pub preferred: ids::Id,
     pub last_accepted: block::Block,
     pub to_engine: Option<mpsc::Sender<rpcchainvm::common::message::Message>>,
+    pub state: block::state::State,
 
     /// The block that is currently preferred by the consensus engine.
     pub preferred_block_id: ids::Id,
@@ -57,6 +58,7 @@ impl Default for ChainVmInterior {
             last_accepted: block::Block::default(),
             to_engine: None,
             preferred_block_id: ids::Id::empty(),
+            state: block::state::State::default(),
         }
     }
 }
@@ -70,13 +72,15 @@ pub struct ChainVm {
     // still requires DerefMut.
     pub accepted_blocks: Arc<Mutex<LruCache<ids::Id, block::Block>>>,
     pub mempool: Arc<RwLock<mempool::Mempool>>,
-    pub state: Arc<RwLock<block::state::State>>,
+
     /// Map of blocks which have been verified but pending
     /// consensus accept/reject.
     pub verified_blocks: Arc<RwLock<HashMap<ids::Id, block::Block>>>,
 
     pub app_sender: Option<Box<dyn rpcchainvm::common::appsender::AppSender + Send + Sync>>,
-    pub builder: Option<Box<dyn block::builder::Builder + Sync + Send>>,
+
+    /// Timed builder manages block creation and gossiping loops.
+    pub builder: Option<block::builder::Timed>,
     pub db: Option<Box<dyn rpcchainvm::database::Database + Sync + Send>>,
     pub network: Option<Arc<RwLock<network::Push>>>,
 
@@ -92,7 +96,7 @@ pub struct ChainVm {
 
 impl ChainVm {
     /// Returns initialized ChainVm Boxed as rpcchainvm::vm::Vm trait.
-    pub fn new() -> Box<dyn rpcchainvm::vm::Vm + Send + Sync> {
+    pub fn new() -> Self {
         let (stop_tx, stop_rx): (
             crossbeam_channel::Sender<()>,
             crossbeam_channel::Receiver<()>,
@@ -113,14 +117,13 @@ impl ChainVm {
             crossbeam_channel::Receiver<()>,
         ) = crossbeam_channel::bounded(1);
 
-        Box::new(ChainVm {
+        Self {
             inner: Arc::new(RwLock::new(ChainVmInterior::default())),
 
             accepted_blocks: Arc::new(Mutex::new(LruCache::new(
                 NonZeroUsize::new(BLOCKS_LRU_SIZE).unwrap(),
             ))),
             mempool: Arc::new(RwLock::new(mempool::Mempool::new(MEMPOOL_SIZE))),
-            state: Arc::new(RwLock::new(block::state::State::default())),
             verified_blocks: Arc::new(RwLock::new(HashMap::new())),
 
             app_sender: None,
@@ -136,7 +139,7 @@ impl ChainVm {
             done_gossip_tx,
             stop_rx,
             stop_tx,
-        })
+        }
     }
 }
 
@@ -154,24 +157,11 @@ impl crate::chain::vm::Vm for ChainVm {
     async fn submit(&self, mut txs: Vec<chain::tx::tx::Transaction>) -> Result<()> {
         log::debug!("vm::submit called");
 
-        let now = Utc::now().timestamp() as u64;
+        storage::submit(&self.db.as_ref().unwrap().clone(), &mut txs)
+            .await
+            .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
-        // TODO append errors instead of fail
         for tx in txs.iter_mut() {
-            tx.init()
-                .await
-                .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
-            if tx.id().await == ids::Id::empty() {
-                return Err(Error::new(ErrorKind::Other, "invalid block id"));
-            }
-            let dummy_block = block::Block::new_dummy(now, tx.to_owned());
-
-            if let Some(db) = self.db.clone() {
-                tx.execute(db, dummy_block)
-                    .await
-                    .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
-            }
-
             let mut mempool = self.mempool.write().await;
             let _ = mempool
                 .add(tx.to_owned())
@@ -296,26 +286,38 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
         vm.ctx = ctx;
         vm.to_engine = Some(to_engine);
 
+
+
         let version =
             Version::parse(VERSION).map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
         vm.version = version;
 
         let current = db_manager.current().await?;
         self.db = Some(current.db.clone());
+        vm.state = block::state::State::new(current.db.clone());
 
         self.app_sender = Some(app_sender);
-        self.network = Some(Arc::new(RwLock::new(network::Push::new(self.clone()))));
 
-        let verified_blocks = self.verified_blocks.clone();
 
-        self.state = Arc::new(RwLock::new(block::state::State::new(
-            current.db.clone(),
-            verified_blocks,
-        )));
+        self.network = Some(Arc::new(RwLock::new(network::Push::new(
+            self.app_sender.as_ref().unwrap().clone(),
+            self.db.as_ref().unwrap().clone(),
+            Arc::clone(&self.mempool),
+        ))));
+
+        // builder must be initialized network
+        if self.builder.is_none() {
+            self.builder = Some(block::builder::Timed::new(
+                Arc::clone(&self.mempool),
+                Some(Arc::clone(self.network.as_ref().unwrap())),
+                vm.to_engine.as_ref().unwrap().clone(),
+                self.builder_stop_rx.clone(),
+                self.stop_rx.clone(),
+            ))
+        }
 
         // Try to load last accepted
-        let mut state = self.state.write().await;
-        let resp = state.has_last_accepted().await;
+        let resp = vm.state.has_last_accepted().await;
         if resp.is_err() {
             log::error!("could not determine last accepted block");
             return Err(Error::new(ErrorKind::Other, resp.unwrap_err()));
@@ -328,12 +330,14 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
 
         // Check if last accepted block exists
         if has {
-            let block_id = state
+            let block_id = vm
+                .state
                 .get_last_accepted()
                 .await
                 .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
-            let block = state
+            let block = vm
+                .state
                 .get_block(block_id)
                 .await
                 .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
@@ -343,7 +347,7 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
             log::info!("initialized vm from last accepted block id: {:?}", block_id)
         } else {
             let mut genesis_block =
-                crate::block::Block::new(ids::Id::empty(), 0, genesis_bytes, 0, state.clone());
+                crate::block::Block::new(ids::Id::empty(), 0, genesis_bytes, 0, vm.state.clone());
 
             let bytes = genesis_block
                 .to_bytes()
@@ -356,7 +360,7 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
                 .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
             let genesis_block_id = genesis_block.id;
-            state
+            vm.state
                 .set_last_accepted(genesis_block.clone())
                 .await
                 .map_err(|e| {
@@ -485,14 +489,15 @@ impl rpcchainvm::snowman::block::Getter for ChainVm {
         }
 
         // check on disk state
-        let mut state = self.state.write().await;
+        let mut vm = self.inner.write().await;
         let block =
-            state.get_block(id).await.map_err(|e| {
+            vm.state.get_block(id).await.map_err(|e| {
                 Error::new(ErrorKind::Other, format!("failed to get block: {:?}", e))
             })?;
 
         // If block on disk, it must've been accepted
-        let block = state
+        let block = vm
+            .state
             .parse_block(Some(block.to_owned()), vec![], Status::Accepted)
             .await
             .map_err(|e| Error::new(ErrorKind::Other, format!("failed to get block: {:?}", e)))?;
@@ -510,15 +515,16 @@ impl rpcchainvm::snowman::block::Parser for ChainVm {
     ) -> Result<Box<dyn rpcchainvm::concensus::snowman::Block + Send + Sync>> {
         log::debug!("vm::get_block called");
 
-        let mut state = self.state.write().await;
-        let new_block = state
+        let mut vm = self.inner.write().await;
+        let new_block = vm
+            .state
             .parse_block(None, bytes.to_vec(), Status::Processing)
             .await
             .map_err(|e| Error::new(ErrorKind::Other, format!("failed to parse block: {:?}", e)))?;
 
         log::debug!("parsed block id: {}", new_block.id);
 
-        match state.get_block(new_block.id).await {
+        match vm.state.get_block(new_block.id).await {
             Ok(old_block) => {
                 log::debug!("returning previously parsed block id: {}", old_block.id);
                 return Ok(Box::new(old_block));
@@ -542,9 +548,8 @@ impl rpcchainvm::snowman::block::ChainVm for ChainVm {
         }
 
         let vm = self.inner.read().await;
-        let state = self.state.read().await;
-
-        let parent = state
+        let parent = vm
+            .state
             .clone()
             .get_block(vm.preferred)
             .await
@@ -553,8 +558,13 @@ impl rpcchainvm::snowman::block::ChainVm for ChainVm {
         let next_time = Utc::now().timestamp() as u64;
 
         // new block
-        let mut block =
-            crate::block::Block::new(parent.id, parent.height + 1, &[], next_time, state.to_owned());
+        let mut block = crate::block::Block::new(
+            parent.id,
+            parent.height + 1,
+            &[],
+            next_time,
+            vm.state.clone(),
+        );
 
         let txs = Vec::new();
         loop {

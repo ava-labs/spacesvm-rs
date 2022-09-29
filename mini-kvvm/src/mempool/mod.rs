@@ -11,6 +11,7 @@ use crate::chain::tx::tx::Transaction;
 
 use self::data::{Data, Entry};
 
+#[derive(Clone)]
 pub struct Mempool {
     data: Arc<RwLock<Data>>,
 

@@ -45,16 +45,14 @@ pub struct State {
 }
 
 #[derive(Clone)]
-pub struct StateInterior{
+pub struct StateInterior {
     db: Box<dyn rpcchainvm::database::Database + Send + Sync>,
     last_accepted: ids::Id,
     verified_blocks: HashMap<ids::Id, Block>,
 }
 
 impl State {
-    pub fn new(
-        db: Box<dyn rpcchainvm::database::Database + Send + Sync>,
-    ) -> Self {
+    pub fn new(db: Box<dyn rpcchainvm::database::Database + Send + Sync>) -> Self {
         return Self {
             inner: Some(Arc::new(RwLock::new(StateInterior {
                 db,
@@ -64,7 +62,21 @@ impl State {
         };
     }
 
-    /// Persists last accepted block Id into both cache and database.
+    /// Adds a verified block to the verified_blocks hash. Returns the old value of the block
+    /// if a key is updated. If the key is new it returns None.
+    pub async fn set_verified_block(&self, block: Block) -> Option<Block> {
+        let mut inner = self.inner.as_ref().unwrap().write().await;
+        inner.verified_blocks.insert(block.id, block)
+    }
+
+    /// Remove verified block from the verified_blocks hash. Returns the block if it existed and
+    /// otherwise None.
+    pub async fn remove_verified_block(&self, id: ids::Id) -> Option<Block> {
+        let mut inner = self.inner.as_ref().unwrap().write().await;
+        inner.verified_blocks.remove(&id)
+    }
+
+    /// Persists last accepted block Id into database.
     pub async fn set_last_accepted(&self, mut block: Block) -> Result<()> {
         let block_id = block.id;
 
@@ -72,7 +84,9 @@ impl State {
         let mut inner = self.inner.as_ref().unwrap().write().await;
 
         log::info!("set_last_accepted key value: {}", block_id);
-        inner.db.put(LAST_ACCEPTED_BLOCK_KEY, &block_id.to_vec())
+        inner
+            .db
+            .put(LAST_ACCEPTED_BLOCK_KEY, &block_id.to_vec())
             .await
             .map_err(|e| {
                 Error::new(
@@ -101,7 +115,9 @@ impl State {
                     "set_last_accepted put prefix_tx_value_key value: {:?}\n",
                     &set_tx.value
                 );
-                inner.db.put(&prefix_tx_value_key(&tx.id), &set_tx.value)
+                inner
+                    .db
+                    .put(&prefix_tx_value_key(&tx.id), &set_tx.value)
                     .await
                     .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
             }
@@ -109,7 +125,9 @@ impl State {
 
         let bytes = &serde_json::to_vec(&block)?;
 
-        inner.db.put(&prefix_block_key(&block_id), &bytes)
+        inner
+            .db
+            .put(&prefix_block_key(&block_id), &bytes)
             .await
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
@@ -162,7 +180,8 @@ impl State {
 
                 let tx_id = &ids::Id::from_slice(&set_tx.value);
 
-                let value = inner.db
+                let value = inner
+                    .db
                     .get(&prefix_tx_value_key(tx_id))
                     .await
                     .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
