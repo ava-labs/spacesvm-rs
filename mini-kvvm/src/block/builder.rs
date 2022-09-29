@@ -12,16 +12,36 @@ use chan::chan_select;
 use crossbeam_channel::TryRecvError;
 use tokio::sync::RwLock;
 
-use crate::{utils, vm};
+use crate::vm;
 
 // TODO: make configurable
 const GOSSIP_INTERVAL: Duration = Duration::from_secs(1);
 const REGOSSIP_INTERVAL: Duration = Duration::from_secs(30);
+const BUILD_INTERVAL: Duration = Duration::from_millis(500);
 
-pub trait Builder {
+pub trait Builder: CloneBox {
     fn build(&self);
     fn gossip(&self);
     fn handle_generate_block(&self);
+}
+
+pub trait CloneBox {
+    fn clone_box(&self) -> Box<dyn Builder + Send + Sync>;
+}
+
+impl<T> CloneBox for T
+where
+    T: 'static + Builder + Clone + Send + Sync,
+{
+    fn clone_box(&self) -> Box<dyn Builder + Send + Sync> {
+        Box::new(self.clone())
+    }
+}
+
+impl Clone for Box<dyn Builder + Send + Sync> {
+    fn clone(&self) -> Box<dyn Builder + Send + Sync> {
+        self.clone_box()
+    }
 }
 
 pub struct Timed {
@@ -56,6 +76,7 @@ pub enum Status {
     Building,
 }
 
+#[derive(Clone)]
 pub struct Timer {
     /// Timeout Tx channel is used to reset ticker threads.
     timeout_tx: crossbeam_channel::Sender<()>,
@@ -73,8 +94,37 @@ pub struct Timer {
     duration: Arc<RwLock<Duration>>,
 }
 
+impl Timer {
+    pub fn new() -> Self {
+        let (timeout_tx, timeout_rx): (
+            crossbeam_channel::Sender<()>,
+            crossbeam_channel::Receiver<()>,
+        ) = crossbeam_channel::bounded(1);
+        Self {
+            finished: Arc::new(AtomicBool::new(false)),
+            should_execute: Arc::new(AtomicBool::new(false)),
+            timeout_tx,
+            timeout_rx,
+            duration: Arc::new(RwLock::new(Duration::from_secs(1))),
+        }
+    }
+}
+
 /// Directs the engine when to build blocks and gossip transactions.
 impl Timed {
+    fn new(vm: vm::ChainVm) -> Self {
+        Self {
+            vm,
+            status: Arc::new(RwLock::new(Status::DontBuild)),
+            build_block_timer: Timer::new(),
+            builder_stop: vm.builder_stop_rx.clone(),
+            stop: vm.stop_rx.clone(),
+            done_build: vm.done_build_rx.clone(),
+            done_gossip: vm.done_gossip_rx.clone(),
+            build_interval: BUILD_INTERVAL,
+        }
+    }
+
     /// Sets the initial timeout on the two stage timer if the process
     /// has not already begun from an earlier notification. If [buildStatus] is anything
     /// other than [DontBuild], then the attempt has already begun and this notification

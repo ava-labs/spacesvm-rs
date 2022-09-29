@@ -42,20 +42,21 @@ pub struct BlockWrapper {
 #[derive(Default, Clone)]
 pub struct State {
     pub verified_blocks: Arc<RwLock<HashMap<ids::Id, Block>>>,
-    pub lru: Lru,
+    // Block cache put only after it is accepted.
+    pub blocks: Blocks,
     pub inner: InnerState,
     pub last_accepted: Arc<RwLock<ids::Id>>,
 }
 
 #[derive(Clone, Debug)]
-pub struct Lru {
-    cache: Arc<RwLock<LruCache<ids::Id, Block>>>,
+pub struct Blocks {
+    pub lru: Arc<RwLock<LruCache<ids::Id, Block>>>,
 }
 
-impl Default for Lru {
-    fn default() -> Lru {
-        Lru {
-            cache: Arc::new(RwLock::new(LruCache::unbounded())),
+impl Default for Blocks {
+    fn default() -> Self {
+        Self {
+            lru: Arc::new(RwLock::new(LruCache::unbounded())),
         }
     }
 }
@@ -85,8 +86,8 @@ impl State {
             inner: InnerState {
                 db: Arc::new(RwLock::new(db)),
             },
-            lru: Lru {
-                cache: Arc::new(RwLock::new(cache)),
+            blocks: Blocks {
+                lru: Arc::new(RwLock::new(cache)),
             },
             verified_blocks,
             last_accepted: Arc::new(RwLock::new(ids::Id::empty())),
@@ -100,7 +101,7 @@ impl State {
         // persist last_accepted Id to database with fixed key
         let mut db = self.inner.db.write().await;
 
-        log::info!("set_last_accepted key value: {}\n", block_id);
+        log::info!("set_last_accepted key value: {}", block_id);
         db.put(LAST_ACCEPTED_BLOCK_KEY, &block_id.to_vec())
             .await
             .map_err(|e| {
@@ -173,7 +174,7 @@ impl State {
     pub async fn get_block(&mut self, block_id: ids::Id) -> Result<Block> {
         log::debug!("get block called\n");
 
-        let mut cache = self.lru.cache.write().await;
+        let mut cache = self.blocks.lru.write().await;
 
         // check cache for block
         let cached = cache.get(&block_id);
@@ -226,8 +227,18 @@ impl State {
 
     /// Attempts to parse a byte array into a block. If the source is empty
     /// bytes will be marshalled from a default block.
-    pub async fn parse_block(&self, mut source: Vec<u8>, status: Status) -> Result<Block> {
-        let mut block = Block::default();
+    pub async fn parse_block(
+        &self,
+        maybe_block: Option<Block>,
+        mut source: Vec<u8>,
+        status: Status,
+    ) -> Result<Block> {
+        let mut block: Block;
+        if maybe_block.is_none() {
+            block = Block::default();
+        } else {
+            block = maybe_block.unwrap();
+        }
 
         if source.is_empty() {
             source = serde_json::to_vec(&block)?;
@@ -294,7 +305,7 @@ async fn block_test() {
 
     // verify cache was populated then release read lock
     {
-        let lru = state.lru.cache.read().await;
+        let lru = state.blocks.cache.read().await;
         assert_eq!(lru.len(), 1);
     }
 

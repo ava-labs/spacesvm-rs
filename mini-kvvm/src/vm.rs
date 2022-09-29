@@ -16,8 +16,8 @@ use avalanche_types::{
 use chrono::Utc;
 use semver::Version;
 use tokio::sync::{
-    mpsc::{self, Sender},
-    Mutex, RwLock,
+    mpsc::Sender,
+    RwLock,
 };
 
 use crate::{
@@ -38,11 +38,11 @@ pub struct ChainVmInterior {
     pub bootstrapped: bool,
     pub version: Version,
     pub genesis: Genesis,
-    pub state: block::state::State,
     pub preferred: ids::Id,
     pub last_accepted: block::Block,
     pub to_engine: Option<Sender<rpcchainvm::common::message::Message>>,
     pub preferred_block_id: Option<ids::Id>,
+    pub verified_blocks: HashMap<ids::Id, block::Block>,
 }
 
 impl Default for ChainVmInterior {
@@ -52,33 +52,38 @@ impl Default for ChainVmInterior {
             bootstrapped: false,
             version: Version::new(0, 0, 0),
             genesis: Genesis::default(),
-            state: block::state::State::default(),
             preferred: ids::Id::empty(),
             last_accepted: block::Block::default(),
             to_engine: None,
             preferred_block_id: None,
+            verified_blocks: HashMap::new(),
         }
     }
 }
 
-// #[derive(Clone)]
+#[derive(Clone)]
 pub struct ChainVm {
-    pub db: Box<dyn rpcchainvm::database::Database + Sync + Send>,
-    pub app_sender: Option<Box<dyn rpcchainvm::common::appsender::AppSender + Send + Sync>>,
     pub mempool: Arc<RwLock<mempool::Mempool>>,
-    pub network: Option<Arc<RwLock<network::Push>>>,
     pub inner: Arc<RwLock<ChainVmInterior>>,
     pub verified_blocks: Arc<RwLock<HashMap<ids::Id, block::Block>>>,
-    pub appsender: Option<Box<dyn rpcchainvm::common::appsender::AppSender + Send + Sync>>,
+    pub state: block::state::State,
+
+    pub network: Option<Arc<RwLock<network::Push>>>,
+    pub app_sender: Option<Box<dyn rpcchainvm::common::appsender::AppSender + Send + Sync>>,
     pub db: Option<Box<dyn rpcchainvm::database::Database + Sync + Send>>,
-    pub mempool: Arc<chain::Mempool>,
-    pub inner: Arc<RwLock<ChainVmInterior>>,
     pub builder: Option<Box<dyn block::builder::Builder + Sync + Send>>,
 
-    pub stop: Arc<mpsc::Receiver<()>>,
-    pub builder_stop: Arc<mpsc::Receiver<()>>,
-    pub done_build: Arc<mpsc::Receiver<()>>,
-    pub done_gossip: Arc<mpsc::Receiver<()>>,
+    pub stop_rx: crossbeam_channel::Receiver<()>,
+    pub stop_tx: crossbeam_channel::Sender<()>,
+
+    pub builder_stop_rx: crossbeam_channel::Receiver<()>,
+    pub builder_stop_tx: crossbeam_channel::Sender<()>,
+
+    pub done_build_rx: crossbeam_channel::Receiver<()>,
+    pub done_build_tx: crossbeam_channel::Sender<()>,
+
+    pub done_gossip_rx: crossbeam_channel::Receiver<()>,
+    pub done_gossip_tx: crossbeam_channel::Sender<()>,
 }
 
 impl ChainVm {
@@ -88,40 +93,48 @@ impl ChainVm {
         let mempool = mempool::Mempool::new(MEMPOOL_SIZE);
         let verified_blocks = Arc::new(RwLock::new(HashMap::new()));
 
+        let (stop_tx, stop_rx): (
+            crossbeam_channel::Sender<()>,
+            crossbeam_channel::Receiver<()>,
+        ) = crossbeam_channel::bounded(1);
+
+        let (builder_stop_tx, builder_stop_rx): (
+            crossbeam_channel::Sender<()>,
+            crossbeam_channel::Receiver<()>,
+        ) = crossbeam_channel::bounded(1);
+
+        let (done_build_tx, done_build_rx): (
+            crossbeam_channel::Sender<()>,
+            crossbeam_channel::Receiver<()>,
+        ) = crossbeam_channel::bounded(1);
+
+        let (done_gossip_tx, done_gossip_rx): (
+            crossbeam_channel::Sender<()>,
+            crossbeam_channel::Receiver<()>,
+        ) = crossbeam_channel::bounded(1);
+
         Box::new(ChainVm {
-            appsender: None,
+            app_sender: None,
             db: None,
+            state: block::state::State::default(),
             inner,
             mempool: Arc::new(RwLock::new(mempool)),
             verified_blocks,
-            app_sender: None,
             network: None,
-        })
-    }
+            builder: None,
 
-    pub fn new_with_state(db: &Box<dyn rpcchainvm::database::Database + Sync + Send>) -> Self {
-        let mempool = mempool::Mempool::new(MEMPOOL_SIZE);
-        let verified_blocks = &Arc::new(RwLock::new(HashMap::new()));
-        let inner = ChainVmInterior {
-            ctx: None,
-            bootstrapped: false,
-            version: Version::new(0, 0, 0),
-            genesis: Genesis::default(),
-            state: block::state::State::new(db.clone(), Arc::clone(verified_blocks)),
-            preferred: ids::Id::empty(),
-            last_accepted: block::Block::default(),
-            to_engine: None,
-            preferred_block_id: None,
-        };
-        Self {
-            db: Some(db.clone()),
-            appsender: None,
-            inner: Arc::new(RwLock::new(inner)),
-            mempool: Arc::new(RwLock::new(mempool)),
-            verified_blocks: Arc::clone(verified_blocks),
-            app_sender: None,
-            network: None,
-        }
+            stop_rx,
+            stop_tx,
+
+            builder_stop_rx,
+            builder_stop_tx,
+
+            done_build_rx,
+            done_build_tx,
+
+            done_gossip_rx,
+            done_gossip_tx,
+        })
     }
 }
 
@@ -184,23 +197,6 @@ impl crate::chain::vm::Vm for ChainVm {
 
         log::error!("consensus engine channel failed to initialized");
         return;
-    }
-
-    async fn new_timed_builder(self) -> Box<dyn block::builder::Builder + Send + Sync> {
-        let mut builder = block::builder::Timed {
-            vm: self,
-            status: Arc::new(Mutex::new(block::builder::Status::DontBuild)),
-            build_block_timer: None,
-            builder_stop: self.builder_stop,
-            stop: self.stop,
-            done_build: self.done_build,
-            done_gossip: self.done_gossip,
-        };
-
-        let tuple = builder.build_block_two_stage_timer();
-        builder.build_block_timer = Some(Timer::new_staged_timer(
-            block::builder::Timed::build_block_two_stage_timer,
-        ));
     }
 }
 
@@ -310,12 +306,12 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
 
         let verified_blocks = self.verified_blocks.clone();
 
-        vm.state = block::state::State::new(current.db.clone(), verified_blocks);
+        self.state = block::state::State::new(current.db.clone(), verified_blocks);
 
         // Try to load last accepted
-        let resp = vm.state.has_last_accepted().await;
+        let resp = self.state.has_last_accepted().await;
         if resp.is_err() {
-            log::error!("could not determine if have last accepted");
+            log::error!("could not determine last accepted block");
             return Err(Error::new(ErrorKind::Other, resp.unwrap_err()));
         }
         let has = resp.unwrap();
@@ -324,17 +320,15 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
         let genesis = Genesis::from_json(genesis_bytes)?;
         vm.genesis = genesis;
 
-        self.mempool = Some(chain::Mempool::new());
-
         // Check if last accepted block exists
         if has {
-            let block_id = vm
+            let block_id = self
                 .state
                 .get_last_accepted()
                 .await
                 .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
-            let block = vm
+            let block = self
                 .state
                 .get_block(block_id)
                 .await
@@ -345,7 +339,7 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
             log::info!("initialized vm from last accepted block id: {:?}", block_id)
         } else {
             let mut genesis_block =
-                crate::block::Block::new(ids::Id::empty(), 0, genesis_bytes, 0, vm.state.clone());
+                crate::block::Block::new(ids::Id::empty(), 0, genesis_bytes, 0, self.state);
 
             let bytes = genesis_block
                 .to_bytes()
@@ -358,7 +352,7 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
                 .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
             let genesis_block_id = genesis_block.id;
-            vm.state
+            self.state
                 .set_last_accepted(genesis_block.clone())
                 .await
                 .map_err(|e| {
@@ -377,8 +371,8 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
         log::debug!("vm::shutdown called");
 
         // wait for gossiper and builder to be shutdown
-        self.done_build.recv().await;
-        self.done_gossip.recv().await;
+        self.done_build_rx.recv();
+        self.done_gossip_rx.recv();
 
         // grpc servers are shutdown via broadcast channel
         if let Some(db) = self.db.clone() {
@@ -474,12 +468,31 @@ impl rpcchainvm::snowman::block::Getter for ChainVm {
     ) -> Result<Box<dyn rpcchainvm::concensus::snowman::Block + Send + Sync>> {
         log::debug!("vm::get_block called");
 
-        let mut vm = self.inner.write().await;
+        let mut cache = self.state.blocks.lru.read().await;
+
+        // has the block been cached from previous "Accepted" call
+        let cached = cache.get(&id);
+        if cached.is_some() {
+            return Ok(Box::new(cached.unwrap().to_owned()));
+        }
+
+        // has the block been verified, but not yet accepted
+        let mut vm = self.inner.read().await;
+        if let Some(block) = vm.verified_blocks.get(&id) {
+            return Ok(Box::new(block.to_owned()));
+        }
 
         let block =
-            vm.state.get_block(id).await.map_err(|e| {
+            self.state.get_block(id).await.map_err(|e| {
                 Error::new(ErrorKind::Other, format!("failed to get block: {:?}", e))
             })?;
+
+        // If block on disk, it must've been accepted
+        let block = self
+            .state
+            .parse_block(Some(block), vec![], Status::Accepted)
+            .await
+            .map_err(|e| Error::new(ErrorKind::Other, format!("failed to get block: {:?}", e)))?;
 
         Ok(Box::new(block))
     }
@@ -494,17 +507,15 @@ impl rpcchainvm::snowman::block::Parser for ChainVm {
     ) -> Result<Box<dyn rpcchainvm::concensus::snowman::Block + Send + Sync>> {
         log::debug!("vm::get_block called");
 
-        let mut vm = self.inner.write().await;
-
-        let new_block = vm
+        let new_block = self
             .state
-            .parse_block(bytes.to_vec(), Status::Processing)
+            .parse_block(None, bytes.to_vec(), Status::Processing)
             .await
             .map_err(|e| Error::new(ErrorKind::Other, format!("failed to parse block: {:?}", e)))?;
 
         log::debug!("parsed block id: {}", new_block.id);
 
-        match vm.state.get_block(new_block.id).await {
+        match self.state.get_block(new_block.id).await {
             Ok(old_block) => {
                 log::debug!("returning previously parsed block id: {}", old_block.id);
                 return Ok(Box::new(old_block));
@@ -529,7 +540,7 @@ impl rpcchainvm::snowman::block::ChainVm for ChainVm {
 
         let vm = self.inner.read().await;
 
-        let parent = vm
+        let parent = self
             .state
             .clone()
             .get_block(vm.preferred)
@@ -539,13 +550,8 @@ impl rpcchainvm::snowman::block::ChainVm for ChainVm {
         let next_time = Utc::now().timestamp() as u64;
 
         // new block
-        let mut block = crate::block::Block::new(
-            parent.id,
-            parent.height + 1,
-            &[],
-            next_time,
-            vm.state.clone(),
-        );
+        let mut block =
+            crate::block::Block::new(parent.id, parent.height + 1, &[], next_time, self.state);
 
         let mut txs = Vec::new();
 
@@ -554,10 +560,11 @@ impl rpcchainvm::snowman::block::ChainVm for ChainVm {
                 Some(tx) => {
                     log::debug!("writing tx{:?}\n", tx);
                     // verify
-                    tx.execute(self.db.clone(), block.clone())
-                        .await
-                        .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
-                    txs.push(tx)
+                    if let Some(db) = self.db.clone() {
+                        tx.execute(db, block)
+                            .await
+                            .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+                    }
                 }
                 _ => break,
             }
