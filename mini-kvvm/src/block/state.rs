@@ -299,7 +299,7 @@ async fn block_test() {
         .unwrap();
 
     // write block
-    let mut state = block.state.clone();
+    let mut state = block.state;
     let resp = state.put_block(&block).await;
     assert!(!resp.is_err());
 
