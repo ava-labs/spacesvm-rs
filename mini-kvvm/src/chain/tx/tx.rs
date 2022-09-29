@@ -1,9 +1,10 @@
 use std::{
     fmt::Debug,
-    io::{Error, ErrorKind, Result},
+    io::{Error, ErrorKind, Result}, vec,
 };
 
 use avalanche_types::{ids, rpcchainvm};
+use ethereum_types::Address;
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Sha3_256};
 
@@ -33,6 +34,10 @@ impl Default for TransactionType {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Transaction {
     pub unsigned_transaction: Box<dyn super::unsigned::Transaction + Send + Sync>,
+    pub signature: Vec<u8>,
+
+    #[serde(skip)]
+    pub digestHash: Vec<u8>,
 
     #[serde(skip)]
     pub bytes: Vec<u8>,
@@ -42,15 +47,21 @@ pub struct Transaction {
 
     #[serde(skip)]
     pub size: u64,
+
+    #[serde(skip)]
+    pub sender: Address
 }
 
 impl Transaction {
-    pub fn new(unsigned_transaction: Box<dyn super::unsigned::Transaction + Send + Sync>) -> Self {
+    pub fn new(unsigned_transaction: Box<dyn super::unsigned::Transaction + Send + Sync>, signature: Vec<u8>) -> Self {
         Self {
             unsigned_transaction,
+            signature,
+            digestHash: vec![],
             bytes: vec![],
             id: ids::Id::empty(),
             size: 0,
+            sender: Address::zero(),
         }
     }
 }
@@ -104,13 +115,16 @@ impl crate::chain::tx::Transaction for Transaction {
     }
 }
 
-pub fn new_tx(utx: Box<dyn super::unsigned::Transaction + Send + Sync>) -> Transaction {
+pub fn new_tx(utx: Box<dyn super::unsigned::Transaction + Send + Sync>, signature: Vec<u8>) -> Transaction {
     return Transaction {
         unsigned_transaction: utx,
+        signature,
 
         // defaults
+        digestHash: vec![],
         bytes: vec![],
         id: ids::Id::empty(),
         size: 0,
+        sender: Address::zero(),
     };
 }
