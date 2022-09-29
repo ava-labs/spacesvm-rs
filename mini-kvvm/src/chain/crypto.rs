@@ -27,20 +27,19 @@ pub fn derive_sender(dh: &[u8], sig: &[u8]) -> Result<PublicKey> {
     }
 
     // Avoid modifying the signature in place in case it is used elsewhere
+    let error_handling = |e: secp256k1::Error| Error::new(ErrorKind::Other, e.to_string());
     let mut sig_copy = Vec::new();
     sig_copy.extend_from_slice(sig);
     let recovery_id = RecoveryId::from_i32(sig_copy.pop().unwrap() as i32 - LEGACY_SIG_ADJ as i32)
-        .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+        .map_err(error_handling)?;
 
-    let recovery_sig = RecoverableSignature::from_compact(&sig_copy, recovery_id)
-        .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
-
-    let message = secp256k1::Message::from_slice(dh)
-        .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+    let recovery_sig =
+        RecoverableSignature::from_compact(&sig_copy, recovery_id).map_err(error_handling)?;
+    let message = secp256k1::Message::from_slice(dh).map_err(error_handling)?;
     let vrfy = Secp256k1::verification_only();
     let public_key = vrfy
         .recover_ecdsa(&message, &recovery_sig)
-        .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+        .map_err(error_handling)?;
 
     Ok(public_key)
 }

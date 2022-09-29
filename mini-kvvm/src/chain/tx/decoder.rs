@@ -4,7 +4,7 @@ use std::{
 };
 
 use avalanche_types::ids;
-use eip_712::parser::Type as ParserType;
+use eip_712::Type as ParserType;
 use ethereum_types::H256;
 use keccak_hash::keccak;
 use radix_fmt::radix;
@@ -21,7 +21,7 @@ pub const TD_BUCKET: &str = "bucket";
 pub const TD_KEY: &str = "key";
 pub const TD_VALUE: &str = "value";
 
-pub type Type = eip_712::eip712::FieldType;
+pub type Type = eip_712::FieldType;
 
 pub type Types = HashMap<String, Vec<Type>>;
 
@@ -172,8 +172,9 @@ impl TypedData {
     }
 }
 
-pub fn hash_structured_data(typed_data: &TypedData) -> eip_712::error::Result<H256> {
+pub fn hash_structured_data(typed_data: &TypedData) -> Result<H256> {
     // EIP-191 compliant
+    let error_handling = |e: eip_712::Error| Error::new(ErrorKind::Other, e.to_string());
     let prefix = (b"\x19\x01").to_vec();
     let domain = to_value(&typed_data.domain).unwrap();
     let message = to_value(&typed_data.message).unwrap();
@@ -183,13 +184,15 @@ pub fn hash_structured_data(typed_data: &TypedData) -> eip_712::error::Result<H2
             &typed_data.types,
             &domain,
             None,
-        )?,
+        )
+        .map_err(error_handling)?,
         eip_712::encode_data(
             &ParserType::Custom(typed_data.primary_type.to_string()),
             &typed_data.types,
             &message,
             None,
-        )?,
+        )
+        .map_err(error_handling)?,
     );
     let concat = [&prefix[..], &domain_hash[..], &data_hash[..]].concat();
     Ok(keccak(concat))
