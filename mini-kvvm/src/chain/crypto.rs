@@ -2,30 +2,30 @@ use std::io::{Error, ErrorKind, Result};
 
 use avalanche_types::key::ECDSA_RECOVERABLE_SIG_LEN;
 use ethereum_types::Address;
-use secp256k1::{self, ecdsa, ecdsa::RecoverableSignature, PublicKey, Secp256k1};
+use secp256k1::{self, ecdsa::{self, RecoverableSignature, RecoveryId}, PublicKey, Message, SecretKey, Secp256k1, Verification, Signing};
 use sha3::{Digest, Keccak256};
 
-const V_OFFSET: usize = 64;
 const LEGACY_SIG_ADJ: usize = 27;
 pub const MESSAGE_SIZE: usize = 32;
 
-// pub fn derive_sender(dh: &[u8], private: &PrivateKey) -> Result<Vec<u8>> {
+pub fn sign(dh: &[u8], secret: &SecretKey) -> Result<Vec<u8>> {
+    let secp= Secp256k1::signing_only();
+    let sig = secp.sign_ecdsa_recoverable(&Message::from_slice(dh).unwrap(), secret);
+    let (recovery_id, sig_bytes) = sig.serialize_compact();
+    let mut sig_vec= sig_bytes.to_vec();
+    sig_vec.push(recovery_id.to_i32() as u8 + LEGACY_SIG_ADJ as u8);
+    Ok(sig_vec)
+}
+
 pub fn derive_sender(dh: &[u8], sig: &[u8]) -> Result<PublicKey> {
     if sig.len() != ECDSA_RECOVERABLE_SIG_LEN {
         return Err(Error::new(ErrorKind::Other, format!("invalid signature")));
     }
 
     // Avoid modifying the signature in place in case it is used elsewhere
-    let mut sig_copy: [u8; ECDSA_RECOVERABLE_SIG_LEN] = [0; ECDSA_RECOVERABLE_SIG_LEN];
-    sig_copy.clone_from_slice(sig);
-
-    if usize::from(sig_copy[V_OFFSET]) >= LEGACY_SIG_ADJ {
-        let offset = sig_copy[V_OFFSET];
-        sig_copy[V_OFFSET] = offset - LEGACY_SIG_ADJ as u8;
-    }
-
-    // TODO what is the proper recovery id in this context?
-    let recovery_id = ecdsa::RecoveryId::from_i32(1 as i32)
+    let mut sig_copy = Vec::new();
+    sig_copy.extend_from_slice(sig);
+    let recovery_id = RecoveryId::from_i32(sig_copy.pop().unwrap() as i32 - LEGACY_SIG_ADJ as i32)
         .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
     let recovery_sig = RecoverableSignature::from_compact(&sig_copy, recovery_id)
