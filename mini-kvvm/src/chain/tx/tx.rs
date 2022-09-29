@@ -1,6 +1,6 @@
 use std::{
-    fmt::Debug,
-    io::{Error, ErrorKind, Result}, vec,
+    fmt::{self, Debug},
+    io::{Error, ErrorKind, Result},
 };
 
 use avalanche_types::{ids, rpcchainvm};
@@ -28,6 +28,17 @@ pub enum TransactionType {
 impl Default for TransactionType {
     fn default() -> Self {
         TransactionType::Unknown
+    }
+}
+
+impl fmt::Display for TransactionType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            TransactionType::Bucket => write!(f, "bucket"),
+            TransactionType::Set => write!(f, "set"),
+            TransactionType::Delete => write!(f, "delete"),
+            TransactionType::Unknown => write!(f, "unknown"),
+        }
     }
 }
 

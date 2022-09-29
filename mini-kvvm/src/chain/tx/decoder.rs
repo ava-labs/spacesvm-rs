@@ -5,6 +5,11 @@ use std::{
 
 use avalanche_types::ids;
 use serde::{Deserialize, Serialize};
+use radix_fmt::radix;
+use keccak_hash::keccak;
+use serde_json::to_value;
+use eip_712::parser::Type as ParserType;
+use ethereum_types::H256;
 
 use super::{base, bucket, delete, set, tx::TransactionType, unsigned};
 
@@ -16,15 +21,27 @@ pub const TD_BUCKET: &str = "bucket";
 pub const TD_KEY: &str = "key";
 pub const TD_VALUE: &str = "value";
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Type {
-    pub name: String,
-    pub typ: String,
-}
+pub type Type = eip_712::eip712::FieldType;
 
 pub type Types = HashMap<String, Vec<Type>>;
 
 pub type TypedDataMessage = HashMap<String, MessageValue>;
+
+// TypedDataDomain represents the domain part of an EIP-712 message.
+#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+pub struct TypedDataDomain {
+    pub name: String,
+    pub magic: String,
+}
+
+pub fn mini_kvvm_domain(m: u64) -> TypedDataDomain {
+    return TypedDataDomain {
+        name: "MiniKvvm".to_string(),
+        magic: radix(m, 10).to_string(),
+    };
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MessageValue {
@@ -45,6 +62,7 @@ impl MessageValue {
 pub struct TypedData {
     pub types: Types,
     pub primary_type: TransactionType,
+    pub domain: TypedDataDomain,
     pub message: TypedDataMessage,
 }
 
@@ -58,6 +76,7 @@ pub fn create_typed_data(
     return TypedData {
         types,
         message,
+        domain: mini_kvvm_domain(0), // TODO: pass magic
         primary_type: tx_type,
     };
 }
@@ -140,4 +159,28 @@ impl TypedData {
             )),
         }
     }
+}
+
+
+pub fn hash_structured_data(typed_data: &TypedData) -> eip_712::error::Result<H256> {
+    // EIP-191 compliant
+    let prefix = (b"\x19\x01").to_vec();
+    let domain = to_value(&typed_data.domain).unwrap();
+    let message= to_value(&typed_data.message).unwrap();
+    let (domain_hash, data_hash) = (
+        eip_712::encode_data(
+            &ParserType::Custom("EIP712Domain".into()),
+            &typed_data.types,
+            &domain,
+            None,
+        )?,
+        eip_712::encode_data(
+            &ParserType::Custom(typed_data.primary_type.to_string()),
+            &typed_data.types,
+            &message,
+            None,
+        )?,
+    );
+    let concat = [&prefix[..], &domain_hash[..], &data_hash[..]].concat();
+    Ok(keccak(concat))
 }
