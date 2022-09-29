@@ -75,15 +75,15 @@ impl unsigned::Transaction for Tx {
         let mut tx_fields: Vec<Type> = Vec::new();
         tx_fields.push(Type {
             name: TD_BUCKET.to_owned(),
-            typ: TD_STRING.to_owned(),
+            type_: TD_STRING.to_owned(),
         });
         tx_fields.push(Type {
             name: TD_BLOCK_ID.to_owned(),
-            typ: TD_STRING.to_owned(),
+            type_: TD_STRING.to_owned(),
         });
         tx_fields.push(Type {
             name: TD_KEY.to_owned(),
-            typ: TD_STRING.to_owned(),
+            type_: TD_STRING.to_owned(),
         });
 
         let mut message: HashMap<String, MessageValue> = HashMap::with_capacity(1);

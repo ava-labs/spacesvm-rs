@@ -30,6 +30,7 @@ hex = "0.4.3"
 jsonrpc-core = "18.0.0"
 jsonrpc-core-client = { version = "18.0.0" }
 jsonrpc-derive = "18.0"
+keccak-hash = "0.10.0"
 log = "0.4.17"
 lru = "0.8.0"
 prost = "0.11.0"
@@ -45,6 +46,7 @@ tokio-stream = { version = "0.1.9", features = ["net"] }
 tonic = { version = "0.8.1", features = ["gzip"] }
 tonic-health = "0.7"
 typetag = "0.2"
+validator = "0.16.0"
 
 [[test]]
 name = "integration"
