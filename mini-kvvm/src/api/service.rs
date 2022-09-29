@@ -45,7 +45,7 @@ impl crate::api::Service for Service {
                 .parse_typed_data()
                 .map_err(create_jsonrpc_error)?;
 
-            let mut tx = chain::tx::tx::Transaction::new(unsigned_tx);
+            let mut tx = chain::tx::tx::Transaction::new(unsigned_tx, vec![]);
             tx.init().await.map_err(create_jsonrpc_error)?;
             let tx_id = tx.id().await;
 

@@ -4,3 +4,6 @@ members = [
     "tests/e2e",
     "cli",
 ]
+
+[patch.crates-io]
+eip-712 = {path="../openethereum/crates/util/EIP-712"}

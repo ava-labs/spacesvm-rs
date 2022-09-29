@@ -29,8 +29,7 @@ async fn vm_test() {
     assert!(resp.is_ok());
     let handlers = resp.unwrap();
 
-    let (_) = common::initialize_vm(vm);
-        // let handlers = resp.unwrap();
+    let _ = common::initialize_vm(vm);
 
     // setup stop channel for grpc services.
     let (stop_ch_tx, _): (Sender<()>, Receiver<()>) = tokio::sync::broadcast::channel(1);
