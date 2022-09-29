@@ -37,7 +37,7 @@ pub struct Transaction {
     pub signature: Vec<u8>,
 
     #[serde(skip)]
-    pub digestHash: Vec<u8>,
+    pub digest_hash: Vec<u8>,
 
     #[serde(skip)]
     pub bytes: Vec<u8>,
@@ -57,7 +57,7 @@ impl Transaction {
         Self {
             unsigned_transaction,
             signature,
-            digestHash: vec![],
+            digest_hash: vec![],
             bytes: vec![],
             id: ids::Id::empty(),
             size: 0,
@@ -121,7 +121,7 @@ pub fn new_tx(utx: Box<dyn super::unsigned::Transaction + Send + Sync>, signatur
         signature,
 
         // defaults
-        digestHash: vec![],
+        digest_hash: vec![],
         bytes: vec![],
         id: ids::Id::empty(),
         size: 0,
