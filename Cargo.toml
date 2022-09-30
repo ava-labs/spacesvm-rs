@@ -1,7 +1,8 @@
 [workspace]
 members = [
     "mini-kvvm",
-    "tests/e2e"
+    "tests/e2e",
+    "cli",
 ]
 
 [patch.crates-io]
