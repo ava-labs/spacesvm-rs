@@ -59,7 +59,7 @@ pub struct IssueRawTxResponse {
 #[derive(Deserialize, Serialize, Debug)]
 pub struct IssueTxArgs {
     pub typed_data: TypedData,
-    pub signature: Vec<u8>,
+    pub signature: String,
 }
 
 #[derive(Deserialize, Serialize, Debug)]

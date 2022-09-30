@@ -50,6 +50,9 @@ async fn main() -> std::result::Result<(), Box<dyn error::Error>> {
     let secret_key = get_or_create_pk(&cli.private_key_file)?;
     let connection = transports::http::connect::<Client>(&cli.endpoint);
     let client = futures::executor::block_on(connection)?;
+    println!("ping...");
+    ping(&client).await?;
+    println!("ping succeeded");
 
     let tx = command_to_tx(cli.command);
     futures::executor::block_on(sign_and_submit(&client, &secret_key, tx))
@@ -106,22 +109,35 @@ fn delete_tx(bucket: String, key: String) -> TransactionData {
     }
 }
 
-async fn sign_and_submit(client: &Client, pk: &SecretKey, tx_data: TransactionData) -> Result<()> {
+async fn ping(client: &Client) -> Result<()>{
     let error_handling =
         |e: RpcError| std::io::Error::new(std::io::ErrorKind::Other, e.to_string());
+    let resp = client.ping().await.map_err(error_handling);
+    dbg!(resp.is_ok());
+    dbg!(&resp);
+    Ok(())
+}
+
+async fn sign_and_submit(client: &Client, pk: &SecretKey, tx_data: TransactionData) -> Result<()> {
+    let error_handling =
+        |e: RpcError| std::io::Error::new(std::io::ErrorKind::Other, dbg!(e).to_string());
+    println!("decoding");
     let resp = client
         .decode_tx(DecodeTxArgs { tx_data })
         .await
         .map_err(error_handling)?;
+    println!("decoded");
     let dh = decoder::hash_structured_data(&resp.typed_data)?;
     let signature = crypto::sign(&dh.as_bytes(), &pk)?;
+    let signature_hex = hex::encode(signature);
 
     client
         .issue_tx(IssueTxArgs {
             typed_data: resp.typed_data,
-            signature,
+            signature: signature_hex,
         })
         .await
         .map_err(error_handling)?;
+    println!("sent tx");
     Ok(())
 }
