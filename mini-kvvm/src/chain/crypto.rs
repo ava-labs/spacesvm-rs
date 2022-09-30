@@ -30,8 +30,13 @@ pub fn derive_sender(dh: &[u8], sig: &[u8]) -> Result<PublicKey> {
     let error_handling = |e: secp256k1::Error| Error::new(ErrorKind::Other, e.to_string());
     let mut sig_copy = Vec::new();
     sig_copy.extend_from_slice(sig);
-    let recovery_id = RecoveryId::from_i32(sig_copy.pop().unwrap() as i32 - LEGACY_SIG_ADJ as i32)
-        .map_err(error_handling)?;
+    let mut recovery_id = sig_copy.pop().unwrap();
+
+    // Support signers that don't apply offset (ex: ledger)
+    if recovery_id >= LEGACY_SIG_ADJ as u8 {
+        recovery_id -= LEGACY_SIG_ADJ as u8
+    }
+    let recovery_id = RecoveryId::from_i32(recovery_id as i32).map_err(error_handling)?;
 
     let recovery_sig =
         RecoverableSignature::from_compact(&sig_copy, recovery_id).map_err(error_handling)?;
