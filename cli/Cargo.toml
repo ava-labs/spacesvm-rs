@@ -17,3 +17,4 @@ jsonrpc-core-client = { version = "18.0.0" }
 jsonrpc-client-transports = "18.0.0"
 jsonrpc-derive = "18.0"
 mini-kvvm = {path = "../mini-kvvm"}
+tokio = { version = "1.21.1", features = ["full"] }

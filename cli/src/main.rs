@@ -43,7 +43,8 @@ enum Command {
     },
 }
 
-fn main() -> std::result::Result<(), Box<dyn error::Error>> {
+#[tokio::main]
+async fn main() -> std::result::Result<(), Box<dyn error::Error>> {
     let cli = Cli::parse();
 
     let secret_key = get_or_create_pk(&cli.private_key_file)?;
