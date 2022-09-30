@@ -1,6 +1,6 @@
-use std::thread;
+use std::{sync::Arc, thread, time::Duration};
 
-use avalanche_types::rpcchainvm::database::memdb::Database as MemDb;
+use avalanche_types::rpcchainvm::{database::memdb::Database as MemDb, common::message::Message};
 use jsonrpc_core::futures::{self, FutureExt};
 use jsonrpc_core_client::transports::local;
 use mini_kvvm::{
@@ -11,6 +11,7 @@ use mini_kvvm::{
     vm,
 };
 use secp256k1::{rand, SecretKey};
+use tokio::sync::{RwLock, mpsc};
 
 use crate::common::create_genesis_block;
 
@@ -21,9 +22,7 @@ async fn service_test() {
     vm.db = Some(db);
 
     // get a broadcast tx pending receiver for new blocks;
-    let mempool = vm.mempool.read().await;
-    let pending_rx = mempool.subscribe_pending();
-    drop(mempool);
+    let pending_rx = vm.mempool_pending_rx.clone();
     // unblock channel
     thread::spawn(move || loop {
         crossbeam_channel::select! {
@@ -31,12 +30,33 @@ async fn service_test() {
         }
     });
 
+
+    let (tx_engine, mut rx_engine): (mpsc::Sender<Message>, mpsc::Receiver<Message>) = mpsc::channel(100);
+
+            tokio::spawn(async move {
+                loop {
+                    let _ = rx_engine.recv().await;
+                }
+            });
+
     // initialize genesis block
     let mut inner = vm.inner.write().await;
     inner.state = block::state::State::new(vm.db.as_ref().unwrap().clone());
     let resp = create_genesis_block(&inner.state.clone(), vec![]).await;
     assert!(resp.is_ok());
     inner.preferred = resp.unwrap();
+    inner.to_engine = Some(tx_engine);
+    vm.builder = Some(block::builder::Timed {
+        mempool_pending_ch: vm.mempool_pending_rx.clone(),
+        vm_mempool: vm.mempool.clone(),
+        vm_network: None,
+        vm_engine_tx: inner.to_engine.as_ref().unwrap().clone(),
+        vm_builder_stop_rx: vm.builder_stop_rx.clone(),
+        vm_stop_rx: vm.stop_rx.clone(),
+        build_block_timer: block::builder::Timer::new(),
+        build_interval: Duration::from_millis(1),
+        status: Arc::new(RwLock::new(block::builder::Status::DontBuild)),
+    });
     drop(inner);
 
     let service = api::service::Service::new(vm.to_owned());

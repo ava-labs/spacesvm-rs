@@ -19,14 +19,14 @@ impl Service {
 impl crate::api::Service for Service {
     /// Returns true if the API is serving requests.
     fn ping(&self) -> BoxFuture<Result<PingResponse>> {
-        log::debug!("ping called");
+        log::info!("ping called");
 
         Box::pin(async move { Ok(PingResponse { success: true }) })
     }
 
     /// Takes a raw tx as a byte slice and returns the tx id.
     fn issue_raw_tx(&self, _params: IssueRawTxArgs) -> BoxFuture<Result<IssueRawTxResponse>> {
-        log::debug!("issue raw tx method called");
+        log::info!("issue raw tx method called");
         let _vm = self.vm.clone();
 
         Box::pin(async move {
@@ -38,7 +38,7 @@ impl crate::api::Service for Service {
 
     /// Takes tx args and returns the tx id.
     fn issue_tx(&self, params: IssueTxArgs) -> BoxFuture<Result<IssueTxResponse>> {
-        log::debug!("issue tx called");
+        log::info!("issue tx called");
         let vm = self.vm.clone();
 
         Box::pin(async move {
@@ -59,7 +59,7 @@ impl crate::api::Service for Service {
     }
 
     fn decode_tx(&self, params: DecodeTxArgs) -> BoxFuture<Result<DecodeTxResponse>> {
-        log::debug!("decode input called");
+        log::info!("decode input called");
         let vm = self.vm.clone();
 
         Box::pin(async move {
@@ -73,7 +73,7 @@ impl crate::api::Service for Service {
     }
 
     fn resolve(&self, params: ResolveArgs) -> BoxFuture<Result<ResolveResponse>> {
-        log::debug!("resolve called");
+        log::info!("resolve called");
         let db = self.vm.db.as_ref().unwrap().clone();
 
         Box::pin(async move {
@@ -101,7 +101,7 @@ impl crate::api::Service for Service {
 
     /// Calls build_block on the vm level.
     fn build_block(&self, _params: BuildBlockArgs) -> BoxFuture<Result<BuildBlockResponse>> {
-        log::debug!("build block method called");
+        log::info!("build block method called");
         let vm = self.vm.clone();
 
         Box::pin(async move {
@@ -115,7 +115,7 @@ impl crate::api::Service for Service {
 
     /// Takes raw bytes of block and put it into the local cache and persists to database.
     fn put_block(&self, _params: PutBlockArgs) -> BoxFuture<Result<PutBlockResponse>> {
-        log::debug!("put block method called");
+        log::info!("put block method called");
         let _vm = self.vm.clone();
 
         Box::pin(async move {
@@ -127,7 +127,7 @@ impl crate::api::Service for Service {
 
     /// Returns a serialized blocks given its Id.
     fn get_block(&self, _params: GetBlockArgs) -> BoxFuture<Result<GetBlockResponse>> {
-        log::debug!("get block method called");
+        log::info!("get block method called");
         let _vm = self.vm.clone();
 
         Box::pin(async move { Ok(GetBlockResponse { block: vec![] }) })
@@ -135,7 +135,7 @@ impl crate::api::Service for Service {
 
     /// Returns the Id of the last accepted block.
     fn last_accepted(&self) -> BoxFuture<Result<LastAcceptedResponse>> {
-        log::debug!("last accepted method called");
+        log::info!("last accepted method called");
         let _vm = self.vm.clone();
 
         Box::pin(async move {
@@ -147,7 +147,7 @@ impl crate::api::Service for Service {
 
     /// Given the block bytes return serialized block.
     fn parse_block(&self, _params: ParseBlockArgs) -> BoxFuture<Result<ParseBlockResponse>> {
-        log::debug!("parse block method called");
+        log::info!("parse block method called");
         let _vm = self.vm.clone();
 
         Box::pin(async move { Ok(ParseBlockResponse { block: vec![] }) })
