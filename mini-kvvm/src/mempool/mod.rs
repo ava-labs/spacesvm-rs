@@ -176,8 +176,8 @@ impl Mempool {
 
 #[tokio::test]
 async fn test_mempool() {
-    use crate::chain::tx::{tx::TransactionType, unsigned, decoder};
     use crate::chain::crypto;
+    use crate::chain::tx::{decoder, tx::TransactionType, unsigned};
     use secp256k1::{rand, SecretKey};
 
     // init mempool

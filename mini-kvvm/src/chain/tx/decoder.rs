@@ -58,13 +58,12 @@ impl MessageValue {
 
 impl Serialize for MessageValue {
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-        where
-            S: serde::Serializer {
-            match self {
-                MessageValue::Vec(v) => {
-                    serializer.serialize_str(&hex::encode(v))
-                }
-            }
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            MessageValue::Vec(v) => serializer.serialize_str(&hex::encode(v)),
+        }
     }
 }
 
