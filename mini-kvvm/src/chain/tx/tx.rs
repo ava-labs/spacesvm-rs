@@ -119,6 +119,7 @@ impl crate::chain::tx::Transaction for Transaction {
             db: db.clone(),
             tx_id: self.id,
             block_time: block.timestamp,
+            sender: self.sender,
         };
 
         self.unsigned_transaction

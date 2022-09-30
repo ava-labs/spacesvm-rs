@@ -31,6 +31,7 @@ pub struct TransactionContext {
     pub db: Box<dyn rpcchainvm::database::Database + Send + Sync>,
     pub block_time: u64,
     pub tx_id: Id,
+    pub sender: ethereum_types::Address,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
