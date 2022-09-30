@@ -22,6 +22,8 @@ pub struct Info {
 
     #[serde(deserialize_with = "ids::short::must_deserialize_id")]
     pub raw_bucket: ids::short::Id,
+
+    pub owner: ethereum_types::Address,
 }
 
 /// Creates a bucket, which acts as a logical keyspace root.
@@ -70,6 +72,7 @@ impl unsigned::Transaction for Tx {
         let new_info = Info {
             created: txn_ctx.block_time,
             updated: txn_ctx.block_time,
+            owner: txn_ctx.sender,
             raw_bucket: ids::short::Id::empty(), // is that right?
         };
 

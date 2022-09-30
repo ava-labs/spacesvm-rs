@@ -126,10 +126,7 @@ async fn test_rpc_client(client: gen_client::Client) {
     let resp = client.resolve(args).await;
     assert!(resp.is_ok());
     let value = resp.unwrap().value;
-    assert_eq!(
-        hex::decode(String::from_utf8_lossy(&value).to_string()).unwrap(),
-        "bar".to_owned().into_bytes()
-    );
+    assert_eq!(value, "bar".as_bytes());
 
     // delete tx:
     let tx_data = unsigned::TransactionData {
