@@ -57,6 +57,23 @@ impl unsigned::Transaction for Tx {
     async fn execute(&self, mut txn_ctx: unsigned::TransactionContext) -> Result<()> {
         let db = txn_ctx.db.clone();
 
+        let info = storage::get_bucket_info(&db, self.bucket.as_bytes())
+            .await
+            .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+        if info.is_none() {
+            return Err(Error::new(
+                ErrorKind::NotFound,
+                format!("bucket not found: {}", self.bucket),
+            ));
+        }
+        let info = info.unwrap();
+        if info.owner != txn_ctx.sender {
+            return Err(Error::new(
+                ErrorKind::PermissionDenied,
+                format!("sets only allowed for bucket owner: {}", self.bucket),
+            ));
+        }
+
         // while we do not use value meta currently we verify it exists.
         let v = storage::get_value_meta(&db, self.bucket.as_bytes(), self.key.as_bytes()).await?;
         if v.is_none() {
