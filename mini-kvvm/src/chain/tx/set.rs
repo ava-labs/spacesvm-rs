@@ -4,7 +4,6 @@ use std::{
     io::{Error, ErrorKind},
 };
 
-use hex::ToHex;
 use serde::{Deserialize, Serialize};
 use sha3::Digest;
 
