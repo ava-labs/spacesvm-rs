@@ -17,7 +17,7 @@ use crate::{mempool, network};
 // TODO: make configurable
 const GOSSIP_INTERVAL: Duration = Duration::from_secs(1);
 const REGOSSIP_INTERVAL: Duration = Duration::from_secs(30);
-const BUILD_INTERVAL: Duration = Duration::from_millis(500);
+
 
 #[derive(Clone)]
 pub struct Timed {
@@ -25,20 +25,20 @@ pub struct Timed {
     /// [DontBuild] indicates there's no need to build a block.
     /// [MayBuild] indicates the Vm should proceed to build a block.
     /// [Building] indicates the Vm has sent a request to the engine to build a block.
-    status: Arc<RwLock<Status>>,
+    pub status: Arc<RwLock<Status>>,
 
     /// Build timer.
-    build_block_timer: Timer,
+    pub build_block_timer: Timer,
 
     /// Interval duration used to build a block.
-    build_interval: Duration,
+    pub build_interval: Duration,
 
     // cloned from vm
-    vm_mempool: Arc<RwLock<mempool::Mempool>>,
-    vm_network: Option<Arc<RwLock<network::Push>>>,
-    vm_engine_tx: mpsc::Sender<rpcchainvm::common::message::Message>,
-    vm_stop_rx: crossbeam_channel::Receiver<()>,
-    vm_builder_stop_rx: crossbeam_channel::Receiver<()>,
+    pub vm_mempool: Arc<RwLock<mempool::Mempool>>,
+    pub vm_network: Option<Arc<RwLock<network::Push>>>,
+    pub vm_engine_tx: mpsc::Sender<rpcchainvm::common::message::Message>,
+    pub vm_stop_rx: crossbeam_channel::Receiver<()>,
+    pub vm_builder_stop_rx: crossbeam_channel::Receiver<()>,
 }
 
 #[derive(PartialEq)]
@@ -88,27 +88,6 @@ impl Timer {
 }
 
 /// Directs the engine when to build blocks and gossip transactions.
-impl Timed {
-    pub fn new(
-        vm_mempool: Arc<RwLock<mempool::Mempool>>,
-        vm_network: Option<Arc<RwLock<network::Push>>>,
-        vm_engine_tx: mpsc::Sender<rpcchainvm::common::message::Message>,
-        vm_builder_stop_rx: crossbeam_channel::Receiver<()>,
-        vm_stop_rx: crossbeam_channel::Receiver<()>,
-    ) -> Self {
-        Self {
-            status: Arc::new(RwLock::new(Status::DontBuild)),
-            build_block_timer: Timer::new(),
-            build_interval: BUILD_INTERVAL,
-            vm_mempool,
-            vm_network,
-            vm_engine_tx,
-            vm_stop_rx,
-            vm_builder_stop_rx,
-        }
-    }
-}
-
 impl Timed {
     /// Sets the initial timeout on the two stage timer if the process
     /// has not already begun from an earlier notification. If [buildStatus] is anything
@@ -273,7 +252,7 @@ impl Timed {
 
     /// Ensures that new transactions passed to mempool are
     /// considered for the next block.
-    async fn build(&mut self) {
+    pub async fn build(&mut self) {
         log::debug!("starting build loops");
 
         self.signal_txs_ready().await;
@@ -322,7 +301,7 @@ impl Timed {
         while stop_ch.try_recv() == Err(TryRecvError::Empty) {
             chan_select! {
                 gossip.recv() => {
-                    let mempool = &mut self.vm_mempool.write().await;
+                    let mempool = self.vm_mempool.read().await;
                     let new_txs = mempool.new_txs().unwrap();
 
                     let mut network = self.vm_network.as_ref().unwrap().write().await;

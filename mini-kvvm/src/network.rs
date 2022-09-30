@@ -11,10 +11,7 @@ use avalanche_types::{
 use lru::LruCache;
 use tokio::sync::RwLock;
 
-use crate::{
-    chain,
-    mempool,
-};
+use crate::{chain, mempool};
 
 const GOSSIPED_TXS_LRU_SIZE: usize = 512;
 
@@ -24,7 +21,7 @@ pub struct Push {
     // cloned from vm
     vm_db: Box<dyn rpcchainvm::database::Database + Sync + Send>,
     vm_mempool: Arc<RwLock<mempool::Mempool>>,
-    vm_app_sender: Box<dyn rpcchainvm::common::appsender::AppSender + Send + Sync>
+    vm_app_sender: Box<dyn rpcchainvm::common::appsender::AppSender + Send + Sync>,
 }
 
 impl Push {
@@ -57,8 +54,7 @@ impl Push {
 
         log::debug!("sending app gossip txs: {} size: {}", txs.len(), b.len());
 
-        let appsender = self.vm_app_sender
-            .clone();
+        let appsender = self.vm_app_sender.clone();
         appsender.send_app_gossip(b).await.map_err(|e| {
             Error::new(
                 ErrorKind::Other,
@@ -135,16 +131,12 @@ impl Push {
                 )
             })?;
 
-
         for tx in txs.iter_mut() {
             let mut mempool = self.vm_mempool.write().await;
             let _ = mempool
                 .add(tx.to_owned())
                 .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
         }
-
-
-        
 
         Ok(())
     }

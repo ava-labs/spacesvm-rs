@@ -3,7 +3,7 @@ use std::{
     io::{Error, ErrorKind, Result},
     num::NonZeroUsize,
     sync::Arc,
-    time,
+    time::{self, Duration},
 };
 
 use avalanche_types::{
@@ -32,6 +32,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 // TODO: make configurable
 const MEMPOOL_SIZE: usize = 1024;
 const BLOCKS_LRU_SIZE: usize = 8192;
+const BUILD_INTERVAL: Duration = Duration::from_millis(500);
 
 pub struct ChainVmInterior {
     pub ctx: Option<rpcchainvm::context::Context>,
@@ -286,8 +287,6 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
         vm.ctx = ctx;
         vm.to_engine = Some(to_engine);
 
-
-
         let version =
             Version::parse(VERSION).map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
         vm.version = version;
@@ -298,22 +297,24 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
 
         self.app_sender = Some(app_sender);
 
-
         self.network = Some(Arc::new(RwLock::new(network::Push::new(
             self.app_sender.as_ref().unwrap().clone(),
             self.db.as_ref().unwrap().clone(),
-            Arc::clone(&self.mempool),
+            self.mempool.clone(),
         ))));
 
         // builder must be initialized network
         if self.builder.is_none() {
-            self.builder = Some(block::builder::Timed::new(
-                Arc::clone(&self.mempool),
-                Some(Arc::clone(self.network.as_ref().unwrap())),
-                vm.to_engine.as_ref().unwrap().clone(),
-                self.builder_stop_rx.clone(),
-                self.stop_rx.clone(),
-            ))
+            self.builder = Some(block::builder::Timed{
+                vm_mempool: self.mempool.clone(),
+                vm_network: Some(self.network.as_ref().unwrap().clone()),
+                vm_engine_tx: vm.to_engine.as_ref().unwrap().clone(),
+                vm_builder_stop_rx: self.builder_stop_rx.clone(),
+                vm_stop_rx: self.stop_rx.clone(),
+                build_block_timer: block::builder::Timer::new(),
+                build_interval: BUILD_INTERVAL,
+                status: Arc::new(RwLock::new(block::builder::Status::DontBuild)),
+            });
         }
 
         // Try to load last accepted
@@ -371,6 +372,13 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
             vm.preferred = genesis_block_id;
             log::info!("initialized from genesis block: {}", genesis_block_id);
         }
+
+        let mut builder = self.builder.as_ref().unwrap().to_owned();
+        tokio::spawn(async move {
+            // builder.build().await;
+            builder.gossip().await;
+        });
+
         Ok(())
     }
 
