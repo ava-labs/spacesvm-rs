@@ -8,9 +8,9 @@ use ethereum_types::Address;
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Sha3_256};
 
-use crate::{block::Block, chain::storage::set_transaction};
+use crate::{block::Block, chain::storage::set_transaction, chain::crypto};
 
-use super::unsigned::TransactionContext;
+use super::{unsigned::TransactionContext, decoder};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(tag = "type")]
@@ -86,9 +86,14 @@ impl crate::chain::tx::Transaction for Transaction {
     async fn init(&mut self) -> Result<()> {
         let stx =
             serde_json::to_vec(&self).map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+        let digest_hash =
+            decoder::hash_structured_data(&self.unsigned_transaction.typed_data().await)?;
+        let sender = crypto::derive_sender(digest_hash.as_bytes(), &self.signature)?;
         self.bytes = stx;
         self.id = ids::Id::from_slice_with_sha256(&Sha3_256::digest(&self.bytes));
         self.size = self.bytes.len() as u64;
+        self.digest_hash = digest_hash.as_bytes().to_vec();
+        self.sender = crypto::public_to_address(&sender);
 
         Ok(())
     }

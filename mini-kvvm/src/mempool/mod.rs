@@ -177,7 +177,9 @@ impl Mempool {
 
 #[tokio::test]
 async fn test_mempool() {
-    use crate::chain::tx::{tx::TransactionType, unsigned};
+    use crate::chain::tx::{tx::TransactionType, unsigned, decoder};
+    use crate::chain::crypto;
+    use secp256k1::{rand, SecretKey};
 
     // init mempool
     let mut mempool = Mempool::new(10);
@@ -193,7 +195,10 @@ async fn test_mempool() {
     let resp = tx_data_1.decode();
     assert!(resp.is_ok());
     let utx_1 = resp.unwrap();
-    let tx_1 = Transaction::new(utx_1, vec![]);
+    let secret_key = SecretKey::new(&mut rand::thread_rng());
+    let dh_1 = decoder::hash_structured_data(&utx_1.typed_data().await).unwrap();
+    let sig_1 = crypto::sign(&dh_1.as_bytes(), &secret_key).unwrap();
+    let tx_1 = Transaction::new(utx_1, sig_1);
 
     // add tx_1 to mempool
     let tx_1_id = tx_1.id;
@@ -217,7 +222,9 @@ async fn test_mempool() {
     let resp = tx_data_2.decode();
     assert!(resp.is_ok());
     let utx_2 = resp.unwrap();
-    let mut tx_2 = Transaction::new(utx_2, vec![]);
+    let dh_2 = decoder::hash_structured_data(&utx_2.typed_data().await).unwrap();
+    let sig_2 = crypto::sign(&dh_2.as_bytes(), &secret_key).unwrap();
+    let mut tx_2 = Transaction::new(utx_2, sig_2);
     tx_2.id = ids::Id::from_slice("sup".as_bytes());
 
     // add tx_2 to mempool
