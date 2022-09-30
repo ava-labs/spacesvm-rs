@@ -39,11 +39,11 @@ pub struct TypedDataDomain {
 pub fn mini_kvvm_domain(m: u64) -> TypedDataDomain {
     return TypedDataDomain {
         name: "MiniKvvm".to_string(),
-        magic: radix(m, 10).to_string(),
+        magic: "0x00".to_string(), // radix(m, 10).to_string(),
     };
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub enum MessageValue {
     Vec(Vec<u8>),
 }
@@ -53,6 +53,18 @@ impl MessageValue {
         match self {
             MessageValue::Vec(v) => String::from_utf8_lossy(&v).to_string(),
         }
+    }
+}
+
+impl Serialize for MessageValue {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer {
+            match self {
+                MessageValue::Vec(v) => {
+                    serializer.serialize_str(&hex::encode(v))
+                }
+            }
     }
 }
 
@@ -70,7 +82,7 @@ pub fn create_typed_data(
     message: TypedDataMessage,
 ) -> TypedData {
     let mut types = Types::new();
-    types.insert("txType".to_owned(), tx_fields);
+    types.insert(tx_type.to_string(), tx_fields);
     types.insert(
         "EIP712Domain".to_owned(),
         vec![
