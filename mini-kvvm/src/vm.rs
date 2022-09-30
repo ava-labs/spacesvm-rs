@@ -20,7 +20,8 @@ use semver::Version;
 use tokio::sync::{mpsc, Mutex, RwLock};
 
 use crate::{
-    api, block,
+    api,
+    block::{self, builder},
     chain::{self, storage, tx::Transaction, vm::Vm},
     genesis::Genesis,
     mempool, network,
@@ -91,6 +92,7 @@ pub struct ChainVm {
     pub done_build_tx: crossbeam_channel::Sender<()>,
     pub done_gossip_rx: crossbeam_channel::Receiver<()>,
     pub done_gossip_tx: crossbeam_channel::Sender<()>,
+    pub mempool_pending_rx: crossbeam_channel::Receiver<()>,
     pub stop_rx: crossbeam_channel::Receiver<()>,
     pub stop_tx: crossbeam_channel::Sender<()>,
 }
@@ -118,13 +120,16 @@ impl ChainVm {
             crossbeam_channel::Receiver<()>,
         ) = crossbeam_channel::bounded(1);
 
+        let mempool = mempool::Mempool::new(MEMPOOL_SIZE);
+        let mempool_pending_rx = mempool.subscribe_pending();
+
         Self {
             inner: Arc::new(RwLock::new(ChainVmInterior::default())),
 
             accepted_blocks: Arc::new(Mutex::new(LruCache::new(
                 NonZeroUsize::new(BLOCKS_LRU_SIZE).unwrap(),
             ))),
-            mempool: Arc::new(RwLock::new(mempool::Mempool::new(MEMPOOL_SIZE))),
+            mempool: Arc::new(RwLock::new(mempool)),
             verified_blocks: Arc::new(RwLock::new(HashMap::new())),
 
             app_sender: None,
@@ -136,6 +141,7 @@ impl ChainVm {
             builder_stop_tx,
             done_build_rx,
             done_build_tx,
+            mempool_pending_rx,
             done_gossip_rx,
             done_gossip_tx,
             stop_rx,
@@ -305,7 +311,8 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
 
         // builder must be initialized network
         if self.builder.is_none() {
-            self.builder = Some(block::builder::Timed{
+            self.builder = Some(block::builder::Timed {
+                mempool_pending_ch: self.mempool_pending_rx.clone(),
                 vm_mempool: self.mempool.clone(),
                 vm_network: Some(self.network.as_ref().unwrap().clone()),
                 vm_engine_tx: vm.to_engine.as_ref().unwrap().clone(),
@@ -373,10 +380,15 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
             log::info!("initialized from genesis block: {}", genesis_block_id);
         }
 
-        let mut builder = self.builder.as_ref().unwrap().to_owned();
+        // TODO: Must be a better way :)
+        let b1 = self.builder.as_ref().unwrap().to_owned();
+        let mut b2 = b1.clone();
         tokio::spawn(async move {
-            // builder.build().await;
-            builder.gossip().await;
+            b1.gossip().await;
+        });
+
+        tokio::spawn(async move {
+            b2.build().await;
         });
 
         Ok(())
@@ -592,18 +604,21 @@ impl rpcchainvm::snowman::block::ChainVm for ChainVm {
 
         block.txs = txs;
 
-        // initialize block
+        // Compute block hash and marshaled representation
         let bytes = block.to_bytes().await;
         block
             .init(&bytes.unwrap(), status::Status::Processing)
             .await
             .unwrap();
 
-        // verify
+        // Verify block to ensure it is formed correctly (don't save) <- TODO
         block
             .verify()
             .await
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+
+        let mut builder = self.builder.as_ref().unwrap().to_owned();
+        builder.handle_generate_block().await;
 
         self.notify_block_ready().await;
 

@@ -1,4 +1,5 @@
 use std::{
+    borrow::BorrowMut,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -10,14 +11,16 @@ use std::{
 use avalanche_types::rpcchainvm;
 use chan::chan_select;
 use crossbeam_channel::TryRecvError;
-use tokio::sync::{mpsc, RwLock};
+use tokio::{
+    sync::{mpsc, RwLock},
+    time::sleep,
+};
 
 use crate::{mempool, network};
 
 // TODO: make configurable
 const GOSSIP_INTERVAL: Duration = Duration::from_secs(1);
 const REGOSSIP_INTERVAL: Duration = Duration::from_secs(30);
-
 
 #[derive(Clone)]
 pub struct Timed {
@@ -39,6 +42,7 @@ pub struct Timed {
     pub vm_engine_tx: mpsc::Sender<rpcchainvm::common::message::Message>,
     pub vm_stop_rx: crossbeam_channel::Receiver<()>,
     pub vm_builder_stop_rx: crossbeam_channel::Receiver<()>,
+    pub mempool_pending_ch: crossbeam_channel::Receiver<()>,
 }
 
 #[derive(PartialEq)]
@@ -119,7 +123,7 @@ impl Timed {
     /// Should be called immediately after [build_block].
     // [HandleGenerateBlock] invocation could lead to quiescence, building a block with
     // some delay, or attempting to build another block immediately
-    async fn handle_generate_block(&mut self) {
+    pub async fn handle_generate_block(&mut self) {
         let mut status = self.status.write().await;
 
         if self.need_to_build().await {
@@ -255,63 +259,58 @@ impl Timed {
     pub async fn build(&mut self) {
         log::debug!("starting build loops");
 
-        self.signal_txs_ready().await;
-        let mempool = self.vm_mempool.read().await;
-        let mempool_pending_ch = mempool.subscribe_pending();
-        drop(mempool);
-
+        println!("tick build start");
+        let mempool_pending_ch = self.mempool_pending_ch.clone();
         let stop_ch = self.vm_stop_rx.clone();
-        let builder_stop_ch = self.vm_builder_stop_rx.clone();
 
-        loop {
-            // select will block until a signal is received
-            crossbeam_channel::select! {
-                recv(mempool_pending_ch) -> _ => {
-                    log::debug!("mempool pending called\n");
-                    self.signal_txs_ready().await;
-                    log::debug!("pending tx received from mempool\n");
-                }
-
-                recv(builder_stop_ch) -> _ => {
-                    log::debug!("builder stop called\n");
-                    break
-                }
-
-                recv(stop_ch) -> _ => {
-                    log::debug!("stop called\n");
-                    break
-                }
-            }
+        while stop_ch.try_recv() == Err(TryRecvError::Empty) {
+            println!("tick build");
+            let _ = mempool_pending_ch.recv().unwrap();
+            self.signal_txs_ready().await;
         }
     }
 
-    pub async fn gossip(&self) {
-        log::debug!("starting gossip loops");
-
-        let gossip = chan::tick(GOSSIP_INTERVAL);
-        let regossip = chan::tick(REGOSSIP_INTERVAL);
-        let stop_ch = self.vm_stop_rx.clone();
-        let maybe_network = &self.vm_network;
-
+    pub async fn regossip(&self) {
         // testing only
+        let maybe_network = &self.vm_network;
         if maybe_network.is_none() {
             return;
         }
 
-        while stop_ch.try_recv() == Err(TryRecvError::Empty) {
-            chan_select! {
-                gossip.recv() => {
-                    let mempool = self.vm_mempool.read().await;
-                    let new_txs = mempool.new_txs().unwrap();
+        log::debug!("starting regossip loop");
+        let stop_ch = self.vm_stop_rx.clone();
 
-                    let mut network = self.vm_network.as_ref().unwrap().write().await;
-                    let _ = network.gossip_new_txs(new_txs).await;
-                },
-                regossip.recv() => {
-                    let mut network = self.vm_network.as_ref().unwrap().write().await;
-                    let _ = network.regossip_txs().await;
-                },
-            }
+        while stop_ch.try_recv() == Err(TryRecvError::Empty) {
+            sleep(REGOSSIP_INTERVAL).await;
+            println!("tick");
+
+            let mut network = self.vm_network.as_ref().unwrap().write().await;
+            let _ = network.regossip_txs().await;
+        }
+
+        log::debug!("shutdown regossip loop");
+    }
+
+    pub async fn gossip(&self) {
+        // testing only
+        let maybe_network = &self.vm_network;
+        if maybe_network.is_none() {
+            return;
+        }
+
+        log::debug!("starting gossip loops");
+
+        let stop_ch = self.vm_stop_rx.clone();
+        let maybe_network = &self.vm_network;
+
+        while stop_ch.try_recv() == Err(TryRecvError::Empty) {
+            sleep(GOSSIP_INTERVAL).await;
+            println!("tick gossip");
+            let mempool = &mut self.vm_mempool.write().await;
+            let new_txs = mempool.new_txs().unwrap();
+
+            let mut network = self.vm_network.as_ref().unwrap().write().await;
+            let _ = network.gossip_new_txs(new_txs).await;
         }
     }
 }
