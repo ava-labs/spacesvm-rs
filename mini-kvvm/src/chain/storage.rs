@@ -5,12 +5,13 @@ use std::{
 
 use avalanche_types::{ids, rpcchainvm};
 use byteorder::{BigEndian, ByteOrder};
+use chrono::Utc;
 use ethereum_types::H160;
 use serde::{Deserialize, Serialize};
 
-use crate::block::state::HASH_LEN;
+use crate::block::{state::HASH_LEN, Block};
 
-use super::tx::{bucket, tx::Transaction};
+use super::tx::{self, bucket, Transaction};
 
 const SHORT_ID_LEN: usize = 20;
 const BLOCK_PREFIX: u8 = 0x0;
@@ -24,7 +25,7 @@ pub const BYTE_DELIMITER: u8 = b'/';
 
 pub async fn set_transaction(
     mut db: Box<dyn avalanche_types::rpcchainvm::database::Database + Send + Sync>,
-    tx: Transaction,
+    tx: tx::tx::Transaction,
 ) -> Result<()> {
     let k = prefix_tx_key(&tx.id);
     return db.put(&k, &vec![]).await;
@@ -59,12 +60,33 @@ pub struct ValueMeta {
     pub updated: u64,
 }
 
+pub async fn submit(
+    db: &Box<dyn avalanche_types::rpcchainvm::database::Database + Send + Sync>,
+    txs: &mut Vec<tx::tx::Transaction>,
+) -> Result<()> {
+    let now = Utc::now().timestamp() as u64;
+    for tx in txs.iter_mut() {
+        tx.init()
+            .await
+            .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+        if tx.id().await == ids::Id::empty() {
+            return Err(Error::new(ErrorKind::Other, "invalid block id"));
+        }
+        let dummy_block = Block::new_dummy(now, tx.to_owned());
+
+        tx.execute(db.to_owned(), dummy_block)
+            .await
+            .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+    }
+    Ok(())
+}
+
 pub async fn get_value(
     db: &Box<dyn avalanche_types::rpcchainvm::database::Database + Send + Sync>,
     bucket: &[u8],
     key: &[u8],
 ) -> Result<Option<Vec<u8>>> {
-    let info: Option<bucket::Info> = match get_bucket_info(&db, bucket).await {
+    let info: Option<tx::bucket::Info> = match get_bucket_info(&db, bucket).await {
         Ok(info) => info,
         Err(e) => {
             if is_not_found(&e) {

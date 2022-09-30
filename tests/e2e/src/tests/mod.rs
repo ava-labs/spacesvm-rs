@@ -1,14 +1,10 @@
 use std::{
-    process::Command,
     thread,
     time::{Duration, Instant},
 };
 
+use avalanche_network_runner_sdk::{BlockchainSpec, Client, GlobalConfig, StartRequest};
 use log::{info, warn};
-
-use avalanche_network_runner_sdk::{Client, GlobalConfig, StartRequest};
-
-const RELEASE: &str = "v1.7.16";
 
 #[tokio::test]
 async fn e2e() {
@@ -17,36 +13,44 @@ async fn e2e() {
         .is_test(true)
         .try_init();
 
-    let (ep, is_set) = get_network_runner_grpc_endpoint();
+    let (ep, is_set) = crate::get_network_runner_grpc_endpoint();
     assert!(is_set);
 
     let cli = Client::new(&ep).await;
+
+    // Allow server time to become ready.
+    thread::sleep(Duration::from_millis(2000));
 
     info!("ping...");
     let resp = cli.ping().await.expect("failed ping");
     info!("network-runner is running (ping response {:?})", resp);
 
-    // Download avalanchego
-    let (exec_path, _) =
-        avalanche_installer::avalanchego::download(None, None, Some(String::from(RELEASE)))
-            .await
-            .expect("failed to download avalanchego");
+    let (exec_path, is_set) = crate::get_network_runner_avalanchego_path();
+    assert!(is_set);
+    info!("exec_path {:?})", exec_path);
 
-    info!(
-        "running avalanchego version {}",
-        get_avalanchego_version(&exec_path)
-    );
+    let (whitelisted_subnets, is_set) = crate::get_network_runner_whitelisted_subnets();
+    assert!(is_set);
+    info!("whitelisted_subnets {:?})", whitelisted_subnets);
 
     let global_config = GlobalConfig {
         log_level: String::from("info"),
     };
 
-    // TODO: add custom vms for "mini-kvvm"
+    let mut blockchain_specs = Vec::new();
+    blockchain_specs.push(BlockchainSpec {
+        vm_name: "minikvvm".to_string(),
+        genesis: "/tmp/minikvvm.genesis.json".to_string(),
+        subnet_id: None,
+    });
+
     info!("starting...");
     let resp = cli
         .start(StartRequest {
-            exec_path,
+            exec_path: exec_path,
+            whitelisted_subnets: Some(whitelisted_subnets),
             global_node_config: Some(serde_json::to_string(&global_config).unwrap()),
+            blockchain_specs,
             ..Default::default()
         })
         .await
@@ -59,7 +63,7 @@ async fn e2e() {
     // enough time for network-runner to get ready
     thread::sleep(Duration::from_secs(20));
 
-    info!("checking cluster healthiness...");
+    info!("checking custom vm healthiness...");
     let mut ready = false;
     let timeout = Duration::from_secs(300);
     let interval = Duration::from_secs(15);
@@ -81,24 +85,30 @@ async fn e2e() {
         };
         thread::sleep(itv);
 
+        cnt += 1;
         ready = {
-            match cli.health().await {
-                Ok(_) => {
-                    info!("healthy now!");
+            match cli.status().await {
+                Ok(status) => {
+                    if status.cluster_info.is_some() {
+                        warn!("client resp: {:?}", resp);
+                        continue;
+                    }
+                    warn!("custom vms healthy");
                     true
                 }
+
                 Err(e) => {
                     warn!("not healthy yet {}", e);
                     false
                 }
             }
         };
+
         if ready {
             break;
         }
-
-        cnt += 1;
     }
+
     assert!(ready);
 
     info!("checking status...");
@@ -117,19 +127,4 @@ async fn e2e() {
     info!("stopping...");
     let _resp = cli.stop().await.expect("failed stop");
     info!("successfully stopped network");
-}
-
-fn get_avalanchego_version(exec_path: &String) -> String {
-    let output = Command::new(exec_path)
-        .arg("--version")
-        .output()
-        .expect("failed to get avalanchego version");
-    format!("{}", String::from_utf8(output.stdout).unwrap())
-}
-
-fn get_network_runner_grpc_endpoint() -> (String, bool) {
-    match std::env::var("NETWORK_RUNNER_GRPC_ENDPOINT") {
-        Ok(s) => (s, true),
-        _ => (String::new(), false),
-    }
 }

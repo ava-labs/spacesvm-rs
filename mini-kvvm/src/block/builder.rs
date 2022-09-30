@@ -1,4 +1,5 @@
 use std::{
+    borrow::BorrowMut,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -10,38 +11,38 @@ use std::{
 use avalanche_types::rpcchainvm;
 use chan::chan_select;
 use crossbeam_channel::TryRecvError;
-use tokio::sync::RwLock;
+use tokio::{
+    sync::{mpsc, RwLock},
+    time::sleep,
+};
 
-use crate::vm;
+use crate::{mempool, network};
 
 // TODO: make configurable
 const GOSSIP_INTERVAL: Duration = Duration::from_secs(1);
 const REGOSSIP_INTERVAL: Duration = Duration::from_secs(30);
 
-pub trait Builder {
-    fn build(&self);
-    fn gossip(&self);
-    fn handle_generate_block(&self);
-}
-
+#[derive(Clone)]
 pub struct Timed {
-    pub vm: vm::ChainVm,
-
     /// status signals the phase of block building the Vm is currently in.
     /// [DontBuild] indicates there's no need to build a block.
     /// [MayBuild] indicates the Vm should proceed to build a block.
     /// [Building] indicates the Vm has sent a request to the engine to build a block.
     pub status: Arc<RwLock<Status>>,
 
+    /// Build timer.
     pub build_block_timer: Timer,
 
-    // default to 500ms
+    /// Interval duration used to build a block.
     pub build_interval: Duration,
 
-    pub stop: crossbeam_channel::Receiver<()>,
-    pub builder_stop: crossbeam_channel::Receiver<()>,
-    pub done_gossip: crossbeam_channel::Receiver<()>,
-    pub done_build: crossbeam_channel::Receiver<()>,
+    // cloned from vm
+    pub vm_mempool: Arc<RwLock<mempool::Mempool>>,
+    pub vm_network: Option<Arc<RwLock<network::Push>>>,
+    pub vm_engine_tx: mpsc::Sender<rpcchainvm::common::message::Message>,
+    pub vm_stop_rx: crossbeam_channel::Receiver<()>,
+    pub vm_builder_stop_rx: crossbeam_channel::Receiver<()>,
+    pub mempool_pending_ch: crossbeam_channel::Receiver<()>,
 }
 
 #[derive(PartialEq)]
@@ -56,6 +57,7 @@ pub enum Status {
     Building,
 }
 
+#[derive(Clone)]
 pub struct Timer {
     /// Timeout Tx channel is used to reset ticker threads.
     timeout_tx: crossbeam_channel::Sender<()>,
@@ -71,6 +73,22 @@ pub struct Timer {
 
     /// Duration for timer tick event.
     duration: Arc<RwLock<Duration>>,
+}
+
+impl Timer {
+    pub fn new() -> Self {
+        let (timeout_tx, timeout_rx): (
+            crossbeam_channel::Sender<()>,
+            crossbeam_channel::Receiver<()>,
+        ) = crossbeam_channel::bounded(1);
+        Self {
+            finished: Arc::new(AtomicBool::new(false)),
+            should_execute: Arc::new(AtomicBool::new(false)),
+            timeout_tx,
+            timeout_rx,
+            duration: Arc::new(RwLock::new(Duration::from_secs(1))),
+        }
+    }
 }
 
 /// Directs the engine when to build blocks and gossip transactions.
@@ -89,22 +107,17 @@ impl Timed {
 
     /// Signal the avalanchego engine to build a block from pending transactions
     async fn mark_building(&mut self) {
-        let vm = self.vm.inner.read().await;
-        if let Some(engine) = &vm.to_engine {
-            if let Err(_) = engine
-                .send(rpcchainvm::common::message::Message::PendingTxs)
-                .await
-            {
-                log::warn!("dropping message to consensus engine");
-            };
-            return;
+        match self
+            .vm_engine_tx
+            .send(rpcchainvm::common::message::Message::PendingTxs)
+            .await
+        {
+            Ok(_) => {
+                let mut status = self.status.write().await;
+                *status = Status::Building;
+            }
+            Err(e) => log::error!("dropping message to consensus engine: {}", e.to_string()),
         }
-        // release lock
-        drop(vm);
-
-        let mut status = self.status.write().await;
-        *status = Status::Building;
-        return;
     }
 
     /// Should be called immediately after [build_block].
@@ -124,7 +137,7 @@ impl Timed {
     // Returns true if there are outstanding transactions to be issued
     // into a block.
     async fn need_to_build(&self) -> bool {
-        let mempool = self.vm.mempool.read().await;
+        let mempool = self.vm_mempool.read().await;
         return mempool.len() > 0;
     }
 
@@ -149,7 +162,7 @@ impl Timed {
     }
 
     /// Defines the duration until we check block status.
-    pub async fn dispatch_timer_duration(&self, duration: Duration) {
+    async fn dispatch_timer_duration(&self, duration: Duration) {
         let mut timer = self.build_block_timer.duration.write().await;
         *timer = duration;
         self.build_block_timer
@@ -159,7 +172,7 @@ impl Timed {
     }
 
     /// Cancel the currently dispatch timer scheduled event.
-    pub fn dispatch_cancel(&self) {
+    fn dispatch_cancel(&self) {
         self.build_block_timer
             .should_execute
             .store(false, Ordering::Relaxed);
@@ -167,7 +180,7 @@ impl Timed {
     }
 
     /// Stops execution of the dispatch timer.
-    pub fn dispatch_stop(&self) {
+    fn dispatch_stop(&self) {
         self.build_block_timer
             .finished
             .store(true, Ordering::Relaxed);
@@ -175,12 +188,12 @@ impl Timed {
     }
 
     /// Calls the timeout channel which will result in a new timer event.
-    pub fn dispatch_reset(&self) {
+    fn dispatch_reset(&self) {
         let _ = self.build_block_timer.timeout_tx.send(());
     }
 
     /// Manages a dispatch timer lifecycle.
-    pub async fn dispatch_timer(&mut self) {
+    async fn dispatch_timer(&mut self) {
         let (tx, ticker_rx): (
             crossbeam_channel::Sender<()>,
             crossbeam_channel::Receiver<()>,
@@ -244,60 +257,60 @@ impl Timed {
     /// Ensures that new transactions passed to mempool are
     /// considered for the next block.
     pub async fn build(&mut self) {
-        log::debug!("starting build loops");
+        log::info!("starting build loops");
 
-        self.signal_txs_ready().await;
-        let mempool = self.vm.mempool.read().await;
-        let mempool_pending_ch = mempool.subscribe_pending();
-        drop(mempool);
+        log::info!("tick build start");
+        let mempool_pending_ch = self.mempool_pending_ch.clone();
+        let stop_ch = self.vm_stop_rx.clone();
 
-        let stop_ch = self.stop.clone();
-        let builder_stop_ch = self.builder_stop.clone();
-
-        loop {
-            // select will block until a signal is received
-            crossbeam_channel::select! {
-                recv(mempool_pending_ch) -> _ => {
-                    log::debug!("mempool pending called\n");
-                    self.signal_txs_ready().await;
-                    log::debug!("pending tx received from mempool\n");
-                }
-
-                recv(builder_stop_ch) -> _ => {
-                    log::debug!("builder stop called\n");
-                    break
-                }
-
-                recv(stop_ch) -> _ => {
-                    log::debug!("stop called\n");
-                    break
-                }
-            }
+        while stop_ch.try_recv() == Err(TryRecvError::Empty) {
+            log::info!("tick build");
+            let _ = mempool_pending_ch.recv().unwrap();
+            self.signal_txs_ready().await;
         }
     }
 
-    pub async fn gossip(&self) {
-        log::debug!("starting gossip loops");
+    pub async fn regossip(&self) {
+        // testing only
+        let maybe_network = &self.vm_network;
+        if maybe_network.is_none() {
+            return;
+        }
 
-        let gossip = chan::tick(GOSSIP_INTERVAL);
-        let regossip = chan::tick(REGOSSIP_INTERVAL);
-        let stop_ch = self.stop.clone();
+        log::debug!("starting regossip loop");
+        let stop_ch = self.vm_stop_rx.clone();
 
         while stop_ch.try_recv() == Err(TryRecvError::Empty) {
-            chan_select! {
-                gossip.recv() => {
-                    let mempool = &mut self.vm.mempool.write().await;
-                    let new_txs = mempool.new_txs().unwrap();
-                    drop(mempool);
+            sleep(REGOSSIP_INTERVAL).await;
+            log::info!("tick");
 
-                    let mut network = self.vm.network.as_ref().unwrap().write().await;
-                    let _ = network.gossip_new_txs(new_txs).await;
-                },
-                regossip.recv() => {
-                    let mut network = self.vm.network.as_ref().unwrap().write().await;
-                    let _ = network.regossip_txs().await;
-                },
-            }
+            let mut network = self.vm_network.as_ref().unwrap().write().await;
+            let _ = network.regossip_txs().await;
+        }
+
+        log::debug!("shutdown regossip loop");
+    }
+
+    pub async fn gossip(&self) {
+        // testing only
+        let maybe_network = &self.vm_network;
+        if maybe_network.is_none() {
+            return;
+        }
+
+        log::info!("starting gossip loops");
+
+        let stop_ch = self.vm_stop_rx.clone();
+        let maybe_network = &self.vm_network;
+
+        while stop_ch.try_recv() == Err(TryRecvError::Empty) {
+            sleep(GOSSIP_INTERVAL).await;
+            println!("tick gossip");
+            let mempool = &mut self.vm_mempool.write().await;
+            let new_txs = mempool.new_txs().unwrap();
+
+            let mut network = self.vm_network.as_ref().unwrap().write().await;
+            let _ = network.gossip_new_txs(new_txs).await;
         }
     }
 }

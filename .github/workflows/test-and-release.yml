@@ -111,7 +111,7 @@ jobs:
         with:
           version: '3.x'
       - name: Run e2e tests
-        run: scripts/tests.e2e.sh 1.7.14
+        run: scripts/tests.e2e.sh 1.8.6
 
   release:
     name: Release ${{ matrix.job.target }} (${{ matrix.job.os }})

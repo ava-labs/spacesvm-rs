@@ -6,6 +6,7 @@ use jsonrpc_core_client::transports::local;
 use mini_kvvm::{
     api,
     api::*,
+    block,
     chain::{crypto, tx::decoder, tx::tx::TransactionType, tx::unsigned},
     vm,
 };
@@ -16,7 +17,8 @@ use crate::common::create_genesis_block;
 #[tokio::test]
 async fn service_test() {
     let db = MemDb::new();
-    let vm = vm::ChainVm::new_with_state(&db);
+    let vm = &mut vm::ChainVm::new();
+    vm.db = Some(db);
 
     // get a broadcast tx pending receiver for new blocks;
     let mempool = vm.mempool.read().await;
@@ -31,12 +33,13 @@ async fn service_test() {
 
     // initialize genesis block
     let mut inner = vm.inner.write().await;
+    inner.state = block::state::State::new(vm.db.as_ref().unwrap().clone());
     let resp = create_genesis_block(&inner.state.clone(), vec![]).await;
     assert!(resp.is_ok());
     inner.preferred = resp.unwrap();
     drop(inner);
 
-    let service = api::service::Service::new(vm);
+    let service = api::service::Service::new(vm.to_owned());
     let mut io = jsonrpc_core::IoHandler::new();
     io.extend_with(service.to_delegate());
     let (client, server) = local::connect(io);

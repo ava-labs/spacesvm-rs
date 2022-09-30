@@ -47,8 +47,10 @@ async fn main() -> Result<()> {
     let (stop_ch_tx, stop_ch_rx): (Sender<()>, Receiver<()>) = tokio::sync::broadcast::channel(1);
 
     info!("starting mini-kvvm-rs");
-    let vm_server =
-        avalanche_types::rpcchainvm::vm::server::Server::new(vm::ChainVm::new(), stop_ch_tx);
+    let vm_server = avalanche_types::rpcchainvm::vm::server::Server::new(
+        Box::new(vm::ChainVm::new()),
+        stop_ch_tx,
+    );
 
     rpcchainvm::plugin::serve(vm_server, stop_ch_rx)
         .await
