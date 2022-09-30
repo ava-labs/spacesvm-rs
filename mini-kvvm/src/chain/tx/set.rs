@@ -157,7 +157,7 @@ impl unsigned::Transaction for Tx {
         );
         message.insert(
             TD_VALUE.to_owned(),
-            MessageValue::Vec(self.value.encode_hex::<String>().as_bytes().to_vec()),
+            MessageValue::Bytes(self.value.encode_hex::<String>().as_bytes().to_vec()),
         );
         message.insert(
             TD_BLOCK_ID.to_owned(),

@@ -43,15 +43,17 @@ pub fn mini_kvvm_domain(m: u64) -> TypedDataDomain {
     };
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub enum MessageValue {
     Vec(Vec<u8>),
+    Bytes(Vec<u8>),
 }
 
 impl MessageValue {
     pub fn to_string(self) -> String {
         match self {
             MessageValue::Vec(v) => String::from_utf8_lossy(&v).to_string(),
+            MessageValue::Bytes(v) => String::from_utf8_lossy(&v).to_string(), //format!("0x{}", String::from_utf8_lossy(&v).to_string()),
         }
     }
 }
@@ -63,7 +65,47 @@ impl Serialize for MessageValue {
     {
         match self {
             MessageValue::Vec(v) => serializer.serialize_str(&hex::encode(v)),
+            MessageValue::Bytes(v) => {
+                serializer.serialize_str(format!("0x{}", &hex::encode(v)).as_str())
+            }
         }
+    }
+}
+
+use serde::de::Visitor;
+use std::fmt;
+struct MessageValueVisitor;
+impl<'de> Visitor<'de> for MessageValueVisitor {
+    type Value = MessageValue;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("an hex string")
+    }
+
+    fn visit_string<E>(self, v: String) -> std::result::Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        if v.starts_with("0x") {
+            match hex::decode(&v[2..]) {
+                Ok(s) => Ok(MessageValue::Bytes(s)),
+                Err(e) => Err(E::custom(e.to_string())),
+            }
+        } else {
+            match hex::decode(v) {
+                Ok(s) => Ok(MessageValue::Vec(s)),
+                Err(e) => Err(E::custom(e.to_string())),
+            }
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for MessageValue {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_string(MessageValueVisitor)
     }
 }
 
