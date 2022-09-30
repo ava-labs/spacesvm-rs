@@ -6,11 +6,10 @@ use jsonrpc_core_client::transports::local;
 use mini_kvvm::{
     api,
     api::*,
-    block,
-    chain::{tx::tx::TransactionType, tx::unsigned},
+    chain::{crypto, tx::decoder, tx::tx::TransactionType, tx::unsigned},
     vm,
 };
-use vm::runner::Bootstrap;
+use secp256k1::{rand, SecretKey};
 
 use crate::common::create_genesis_block;
 
@@ -79,9 +78,15 @@ async fn test_rpc_client(client: gen_client::Client) {
     let resp = client.decode_tx(DecodeTxArgs { tx_data }).await;
     assert!(resp.is_ok());
 
+    let secret_key = SecretKey::new(&mut rand::thread_rng());
+    let typed_data = resp.unwrap().typed_data;
+    let dh = decoder::hash_structured_data(&typed_data).unwrap();
+    let signature = crypto::sign(&dh.as_bytes(), &secret_key).unwrap();
+
     let resp = client
         .issue_tx(IssueTxArgs {
-            typed_data: resp.unwrap().typed_data,
+            typed_data,
+            signature,
         })
         .await;
     assert!(resp.is_ok());
@@ -97,9 +102,14 @@ async fn test_rpc_client(client: gen_client::Client) {
     let resp = client.decode_tx(DecodeTxArgs { tx_data }).await;
     assert!(resp.is_ok());
 
+    let typed_data = resp.unwrap().typed_data;
+    let dh = decoder::hash_structured_data(&typed_data).unwrap();
+    let signature = crypto::sign(&dh.as_bytes(), &secret_key).unwrap();
+
     let resp = client
         .issue_tx(IssueTxArgs {
-            typed_data: resp.unwrap().typed_data,
+            typed_data,
+            signature,
         })
         .await;
     assert!(resp.is_ok());
@@ -132,9 +142,14 @@ async fn test_rpc_client(client: gen_client::Client) {
     let resp = client.decode_tx(DecodeTxArgs { tx_data }).await;
     assert!(resp.is_ok());
 
+    let typed_data = resp.unwrap().typed_data;
+    let dh = decoder::hash_structured_data(&typed_data).unwrap();
+    let signature = crypto::sign(&dh.as_bytes(), &secret_key).unwrap();
+
     let resp = client
         .issue_tx(IssueTxArgs {
-            typed_data: resp.unwrap().typed_data,
+            typed_data,
+            signature,
         })
         .await;
     assert!(resp.is_ok());
