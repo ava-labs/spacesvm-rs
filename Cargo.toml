@@ -5,4 +5,4 @@ members = [
 ]
 
 [patch.crates-io]
-eip-712 = {path="../openethereum/crates/util/EIP-712"}
+eip-712 = {git="https://github.com/darioush/EIP-712.git"}
