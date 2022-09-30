@@ -257,14 +257,14 @@ impl Timed {
     /// Ensures that new transactions passed to mempool are
     /// considered for the next block.
     pub async fn build(&mut self) {
-        log::debug!("starting build loops");
+        log::info!("starting build loops");
 
-        println!("tick build start");
+        log::info!("tick build start");
         let mempool_pending_ch = self.mempool_pending_ch.clone();
         let stop_ch = self.vm_stop_rx.clone();
 
         while stop_ch.try_recv() == Err(TryRecvError::Empty) {
-            println!("tick build");
+            log::info!("tick build");
             let _ = mempool_pending_ch.recv().unwrap();
             self.signal_txs_ready().await;
         }
@@ -282,7 +282,7 @@ impl Timed {
 
         while stop_ch.try_recv() == Err(TryRecvError::Empty) {
             sleep(REGOSSIP_INTERVAL).await;
-            println!("tick");
+            log::info!("tick");
 
             let mut network = self.vm_network.as_ref().unwrap().write().await;
             let _ = network.regossip_txs().await;
@@ -298,7 +298,7 @@ impl Timed {
             return;
         }
 
-        log::debug!("starting gossip loops");
+        log::info!("starting gossip loops");
 
         let stop_ch = self.vm_stop_rx.clone();
         let maybe_network = &self.vm_network;
