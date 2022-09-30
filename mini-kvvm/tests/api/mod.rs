@@ -98,7 +98,8 @@ async fn test_rpc_client(client: gen_client::Client) {
     let secret_key = SecretKey::new(&mut rand::thread_rng());
     let typed_data = resp.unwrap().typed_data;
     let dh = decoder::hash_structured_data(&typed_data).unwrap();
-    let signature = crypto::sign(&dh.as_bytes(), &secret_key).unwrap();
+    let sig_bytes = crypto::sign(&dh.as_bytes(), &secret_key).unwrap();
+    let signature = hex::encode(sig_bytes);
 
     let resp = client
         .issue_tx(IssueTxArgs {
@@ -121,7 +122,8 @@ async fn test_rpc_client(client: gen_client::Client) {
 
     let typed_data = resp.unwrap().typed_data;
     let dh = decoder::hash_structured_data(&typed_data).unwrap();
-    let signature = crypto::sign(&dh.as_bytes(), &secret_key).unwrap();
+    let sig_bytes = crypto::sign(&dh.as_bytes(), &secret_key).unwrap();
+    let signature = hex::encode(sig_bytes);
 
     let resp = client
         .issue_tx(IssueTxArgs {
@@ -158,7 +160,8 @@ async fn test_rpc_client(client: gen_client::Client) {
 
     let typed_data = resp.unwrap().typed_data;
     let dh = decoder::hash_structured_data(&typed_data).unwrap();
-    let signature = crypto::sign(&dh.as_bytes(), &secret_key).unwrap();
+    let sig_bytes = crypto::sign(&dh.as_bytes(), &secret_key).unwrap();
+    let signature = hex::encode(sig_bytes);
 
     let resp = client
         .issue_tx(IssueTxArgs {
