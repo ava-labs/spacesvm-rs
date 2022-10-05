@@ -3,6 +3,8 @@ use std::io::Result;
 use clap::{crate_version, Arg, Command};
 use log::info;
 use mini_kvvm::{genesis, vm};
+use log4rs::{append::file::FileAppender, encode::pattern::PatternEncoder, Config, config::{Appender, Root}};
+
 
 pub const APP_NAME: &str = "mini-kvvm-rs";
 
@@ -28,9 +30,11 @@ async fn main() -> Result<()> {
         .unwrap_or("info");
 
     // ref. https://github.com/env-logger-rs/env_logger/issues/47
-    env_logger::init_from_env(
-        env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, log_level),
-    );
+    // env_logger::init_from_env(
+    //     env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, log_level),
+    // );
+
+        init_logger();
 
     if let Some(("genesis", sub_matches)) = matches.subcommand() {
         let author = sub_matches
