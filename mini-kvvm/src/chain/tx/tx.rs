@@ -82,7 +82,7 @@ impl crate::chain::tx::Transaction for Transaction {
 
     async fn execute(
         &self,
-        db: Box<dyn rpcchainvm::database::Database + Send + Sync>,
+        db: &Box<dyn rpcchainvm::database::Database + Send + Sync>,
         block: Block,
     ) -> Result<()> {
         let txn_ctx = TransactionContext {

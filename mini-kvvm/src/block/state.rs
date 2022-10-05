@@ -20,7 +20,6 @@ use crate::chain::{
 
 use super::Block;
 
-const BLOCKS_LRU_SIZE: usize = 8192;
 const LAST_ACCEPTED_BLOCK_KEY: &[u8] = b"last_accepted";
 pub const BYTE_DELIMITER: &[u8] = b"/";
 pub const HASH_LEN: usize = ids::ID_LEN + 2;
@@ -37,15 +36,31 @@ pub struct BlockWrapper {
     status: Status,
 }
 
-#[derive(Default, Clone)]
+#[derive(Default)]
 pub struct State {
-    // note: since option is_some after vm initializes
-    // we can safely unwrap().
-    inner: Option<Arc<RwLock<StateInterior>>>,
+    inner: Arc<RwLock<StateInner>>,
 }
 
-#[derive(Clone)]
-pub struct StateInterior {
+impl Clone for State {
+    fn clone(&self) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+        }
+    }
+}
+
+impl Default for StateInner {
+    // Memdb by default
+    fn default() -> StateInner {
+        StateInner {
+            db: rpcchainvm::database::memdb::Database::new(),
+            last_accepted: ids::Id::empty(),
+            verified_blocks: HashMap::new(),
+        }
+    }
+}
+
+pub struct StateInner {
     db: Box<dyn rpcchainvm::database::Database + Send + Sync>,
     last_accepted: ids::Id,
     verified_blocks: HashMap<ids::Id, Block>,
@@ -54,26 +69,39 @@ pub struct StateInterior {
 impl State {
     pub fn new(db: Box<dyn rpcchainvm::database::Database + Send + Sync>) -> Self {
         return Self {
-            inner: Some(Arc::new(RwLock::new(StateInterior {
+            inner: Arc::new(RwLock::new(StateInner {
                 db,
                 verified_blocks: HashMap::new(),
                 last_accepted: ids::Id::empty(),
-            }))),
+            })),
         };
     }
 
     /// Adds a verified block to the verified_blocks hash. Returns the old value of the block
     /// if a key is updated. If the key is new it returns None.
-    pub async fn set_verified_block(&self, block: Block) -> Option<Block> {
-        let mut inner = self.inner.as_ref().unwrap().write().await;
-        inner.verified_blocks.insert(block.id, block)
+    pub async fn get_verified_block(&self, id: ids::Id) -> Option<Block> {
+        let inner = self.inner.read().await;
+
+        match inner.verified_blocks.get(&id) {
+            Some(b) => Some(b.to_owned()),
+            None => None,
+        }
+    }
+
+    /// Adds a verified block to the verified_blocks hash. Returns the old value of the block
+    /// if a key is updated. If the key is new it returns None.
+    pub async fn set_verified_block(&self, block: Block) -> Result<Option<Block>> {
+        let mut inner = self.inner.write().await;
+
+        Ok(inner.verified_blocks.insert(block.id, block))
     }
 
     /// Remove verified block from the verified_blocks hash. Returns the block if it existed and
     /// otherwise None.
-    pub async fn remove_verified_block(&self, id: ids::Id) -> Option<Block> {
-        let mut inner = self.inner.as_ref().unwrap().write().await;
-        inner.verified_blocks.remove(&id)
+    pub async fn remove_verified_block(&self, id: ids::Id) -> Result<Option<Block>> {
+        let mut inner = self.inner.write().await;
+
+        Ok(inner.verified_blocks.remove(&id))
     }
 
     /// Persists last accepted block Id into database.
@@ -81,7 +109,7 @@ impl State {
         let block_id = block.id;
 
         // persist last_accepted Id to database with fixed key
-        let mut inner = self.inner.as_ref().unwrap().write().await;
+        let mut inner = self.inner.write().await;
 
         log::info!("set_last_accepted key value: {}", block_id);
         inner
@@ -137,8 +165,9 @@ impl State {
     /// Attempts to retrieve the last accepted block and return the corresponding
     /// block Id. If not the key is found returns Id::empty().
     pub async fn get_last_accepted(&self) -> Result<ids::Id> {
-        let inner = self.inner.as_ref().unwrap().read().await;
-        if inner.last_accepted.is_empty() {
+        let inner = self.inner.read().await;
+
+        if !inner.last_accepted.is_empty() {
             return Ok(inner.last_accepted);
         }
 
@@ -158,9 +187,8 @@ impl State {
 
     /// Attempts to return block on disk state.
     pub async fn get_block(&mut self, block_id: ids::Id) -> Result<Block> {
-        log::debug!("get block called\n");
-
-        let inner = self.inner.as_ref().unwrap().read().await;
+        log::debug!("get block called");
+        let inner = self.inner.read().await;
 
         let block_bytes = inner.db.get(&prefix_block_key(&block_id)).await?;
         let mut block: Block = serde_json::from_slice(&block_bytes)?;
@@ -236,12 +264,17 @@ impl State {
 
     /// Checks if the last accepted block key exists and returns true if has a value.
     pub async fn has_last_accepted(&self) -> Result<bool> {
-        let inner = self.inner.as_ref().unwrap().read().await;
+        let inner = self.inner.read().await;
 
         match inner.db.has(LAST_ACCEPTED_BLOCK_KEY).await {
             Ok(found) => Ok(found),
             Err(e) => Err(Error::new(ErrorKind::Other, e.to_string())),
         }
+    }
+
+    pub async fn get_db(&self) -> Box<dyn rpcchainvm::database::Database + Send + Sync> {
+        let inner = self.inner.read().await;
+        inner.db.clone()
     }
 }
 

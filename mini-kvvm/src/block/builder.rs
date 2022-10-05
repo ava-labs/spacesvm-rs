@@ -8,16 +8,17 @@ use std::{
 };
 
 use avalanche_types::rpcchainvm;
-use chan::chan_select;
 use crossbeam_channel::TryRecvError;
-use tokio::sync::{mpsc, RwLock};
+use tokio::{
+    sync::{mpsc, RwLock},
+    time::sleep,
+};
 
-use crate::{mempool, network};
+use crate::{network, vm};
 
 // TODO: make configurable
 const GOSSIP_INTERVAL: Duration = Duration::from_secs(1);
 const REGOSSIP_INTERVAL: Duration = Duration::from_secs(30);
-
 
 #[derive(Clone)]
 pub struct Timed {
@@ -34,11 +35,13 @@ pub struct Timed {
     pub build_interval: Duration,
 
     // cloned from vm
-    pub vm_mempool: Arc<RwLock<mempool::Mempool>>,
-    pub vm_network: Option<Arc<RwLock<network::Push>>>,
     pub vm_engine_tx: mpsc::Sender<rpcchainvm::common::message::Message>,
     pub vm_stop_rx: crossbeam_channel::Receiver<()>,
     pub vm_builder_stop_rx: crossbeam_channel::Receiver<()>,
+    pub mempool_pending_ch: crossbeam_channel::Receiver<()>,
+
+    // disables network and builder loops
+    pub testing: bool,
 }
 
 #[derive(PartialEq)]
@@ -89,6 +92,28 @@ impl Timer {
 
 /// Directs the engine when to build blocks and gossip transactions.
 impl Timed {
+    pub async fn new(
+        vm_inner: Arc<RwLock<vm::ChainVmInner>>,
+        build_interval: Duration,
+        testing: bool,
+    ) -> Self {
+        let vm = vm_inner.read().await;
+        let vm_stop_rx = vm.stop_rx.clone();
+        let vm_engine_tx = vm.to_engine.as_ref().expect("vm.to_engine is some").clone();
+        let vm_builder_stop_rx = vm.builder_stop_rx.clone();
+        let mempool_pending_ch = vm.mempool.subscribe_pending();
+
+        Self {
+            status: Arc::new(RwLock::new(Status::DontBuild)),
+            build_block_timer: Timer::new(),
+            build_interval,
+            vm_stop_rx,
+            vm_builder_stop_rx,
+            vm_engine_tx,
+            mempool_pending_ch,
+            testing,
+        }
+    }
     /// Sets the initial timeout on the two stage timer if the process
     /// has not already begun from an earlier notification. If [buildStatus] is anything
     /// other than [DontBuild], then the attempt has already begun and this notification
@@ -119,22 +144,16 @@ impl Timed {
     /// Should be called immediately after [build_block].
     // [HandleGenerateBlock] invocation could lead to quiescence, building a block with
     // some delay, or attempting to build another block immediately
-    async fn handle_generate_block(&mut self) {
+    pub async fn handle_generate_block(&mut self, vm_inner: Arc<RwLock<vm::ChainVmInner>>) {
+        let inner = vm_inner.read().await;
         let mut status = self.status.write().await;
 
-        if self.need_to_build().await {
+        if inner.mempool.len() > 0 {
             *status = Status::MayBuild;
             self.dispatch_timer_duration(self.build_interval).await;
         } else {
             *status = Status::DontBuild;
         }
-    }
-
-    // Returns true if there are outstanding transactions to be issued
-    // into a block.
-    async fn need_to_build(&self) -> bool {
-        let mempool = self.vm_mempool.read().await;
-        return mempool.len() > 0;
     }
 
     /// Parses the block current status and
@@ -253,65 +272,61 @@ impl Timed {
     /// Ensures that new transactions passed to mempool are
     /// considered for the next block.
     pub async fn build(&mut self) {
-        log::debug!("starting build loops");
-
-        self.signal_txs_ready().await;
-        let mempool = self.vm_mempool.read().await;
-        let mempool_pending_ch = mempool.subscribe_pending();
-        drop(mempool);
-
-        let stop_ch = self.vm_stop_rx.clone();
-        let builder_stop_ch = self.vm_builder_stop_rx.clone();
-
-        loop {
-            // select will block until a signal is received
-            crossbeam_channel::select! {
-                recv(mempool_pending_ch) -> _ => {
-                    log::debug!("mempool pending called\n");
-                    self.signal_txs_ready().await;
-                    log::debug!("pending tx received from mempool\n");
-                }
-
-                recv(builder_stop_ch) -> _ => {
-                    log::debug!("builder stop called\n");
-                    break
-                }
-
-                recv(stop_ch) -> _ => {
-                    log::debug!("stop called\n");
-                    break
-                }
-            }
-        }
-    }
-
-    pub async fn gossip(&self) {
-        log::debug!("starting gossip loops");
-
-        let gossip = chan::tick(GOSSIP_INTERVAL);
-        let regossip = chan::tick(REGOSSIP_INTERVAL);
-        let stop_ch = self.vm_stop_rx.clone();
-        let maybe_network = &self.vm_network;
-
-        // testing only
-        if maybe_network.is_none() {
+        log::info!("starting build loops");
+        if self.testing {
             return;
         }
 
-        while stop_ch.try_recv() == Err(TryRecvError::Empty) {
-            chan_select! {
-                gossip.recv() => {
-                    let mempool = self.vm_mempool.read().await;
-                    let new_txs = mempool.new_txs().unwrap();
+        log::info!("tick build start");
+        let mempool_pending_ch = self.mempool_pending_ch.clone();
+        let stop_ch = self.vm_stop_rx.clone();
 
-                    let mut network = self.vm_network.as_ref().unwrap().write().await;
-                    let _ = network.gossip_new_txs(new_txs).await;
-                },
-                regossip.recv() => {
-                    let mut network = self.vm_network.as_ref().unwrap().write().await;
-                    let _ = network.regossip_txs().await;
-                },
-            }
+        while stop_ch.try_recv() == Err(TryRecvError::Empty) {
+            log::info!("tick build");
+            let _ = mempool_pending_ch.recv().unwrap();
+            self.signal_txs_ready().await;
+        }
+    }
+
+    pub async fn regossip(&self, push: Arc<RwLock<network::Push>>) {
+        log::debug!("starting regossip loop");
+        if self.testing {
+            return;
+        }
+        let stop_ch = self.vm_stop_rx.clone();
+
+        while stop_ch.try_recv() == Err(TryRecvError::Empty) {
+            sleep(REGOSSIP_INTERVAL).await;
+            log::info!("tick");
+
+            let mut network = push.write().await;
+            let _ = network.regossip_txs().await;
+        }
+
+        log::debug!("shutdown regossip loop");
+    }
+
+    pub async fn gossip(
+        &self,
+        vm_inner: Arc<RwLock<vm::ChainVmInner>>,
+        push: Arc<RwLock<network::Push>>,
+    ) {
+        log::info!("starting gossip loops");
+        if self.testing {
+            return;
+        }
+
+        let stop_ch = self.vm_stop_rx.clone();
+
+        while stop_ch.try_recv() == Err(TryRecvError::Empty) {
+            sleep(GOSSIP_INTERVAL).await;
+            println!("tick gossip");
+
+            let mut inner = vm_inner.write().await;
+            let new_txs = inner.mempool.new_txs().unwrap();
+
+            let mut network = push.write().await;
+            let _ = network.gossip_new_txs(new_txs).await;
         }
     }
 }

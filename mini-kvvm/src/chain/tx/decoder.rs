@@ -29,12 +29,14 @@ pub type TypedDataMessage = HashMap<String, MessageValue>;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MessageValue {
     Vec(Vec<u8>),
+    Bytes(Vec<u8>),
 }
 
 impl MessageValue {
     pub fn to_string(self) -> String {
         match self {
             MessageValue::Vec(v) => String::from_utf8_lossy(&v).to_string(),
+            MessageValue::Bytes(v) => String::from_utf8_lossy(&v).to_string(),
         }
     }
 }

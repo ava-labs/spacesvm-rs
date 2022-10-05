@@ -9,7 +9,10 @@ use chrono::Utc;
 use ethereum_types::H160;
 use serde::{Deserialize, Serialize};
 
-use crate::block::{state::HASH_LEN, Block};
+use crate::block::{
+    state::{self, HASH_LEN},
+    Block,
+};
 
 use super::tx::{self, bucket, Transaction};
 
@@ -60,11 +63,10 @@ pub struct ValueMeta {
     pub updated: u64,
 }
 
-pub async fn submit(
-    db: &Box<dyn avalanche_types::rpcchainvm::database::Database + Send + Sync>,
-    txs: &mut Vec<tx::tx::Transaction>,
-) -> Result<()> {
+pub async fn submit(state: &state::State, txs: &mut Vec<tx::tx::Transaction>) -> Result<()> {
     let now = Utc::now().timestamp() as u64;
+    let db = &state.get_db().await;
+
     for tx in txs.iter_mut() {
         tx.init()
             .await
@@ -72,9 +74,9 @@ pub async fn submit(
         if tx.id().await == ids::Id::empty() {
             return Err(Error::new(ErrorKind::Other, "invalid block id"));
         }
-        let dummy_block = Block::new_dummy(now, tx.to_owned());
+        let dummy_block = Block::new_dummy(now, tx.to_owned(), state.clone());
 
-        tx.execute(db.to_owned(), dummy_block)
+        tx.execute(db, dummy_block)
             .await
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
     }

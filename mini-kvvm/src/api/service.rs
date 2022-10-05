@@ -27,7 +27,6 @@ impl crate::api::Service for Service {
     /// Takes a raw tx as a byte slice and returns the tx id.
     fn issue_raw_tx(&self, _params: IssueRawTxArgs) -> BoxFuture<Result<IssueRawTxResponse>> {
         log::debug!("issue raw tx method called");
-        let _vm = self.vm.clone();
 
         Box::pin(async move {
             Ok(IssueRawTxResponse {
@@ -64,7 +63,7 @@ impl crate::api::Service for Service {
 
         Box::pin(async move {
             let mut utx = params.tx_data.decode().map_err(create_jsonrpc_error)?;
-            let inner = vm.inner.read().await;
+            let inner = vm.inner.as_ref().expect("vm.inner").read().await;
             let last_accepted = &inner.last_accepted;
             utx.set_block_id(last_accepted.id).await;
             let typed_data = utx.typed_data().await;
@@ -74,9 +73,11 @@ impl crate::api::Service for Service {
 
     fn resolve(&self, params: ResolveArgs) -> BoxFuture<Result<ResolveResponse>> {
         log::debug!("resolve called");
-        let db = self.vm.db.as_ref().unwrap().clone();
+        let vm = self.vm.clone();
 
         Box::pin(async move {
+            let inner = vm.inner.as_ref().expect("vm.inner").read().await;
+            let db = inner.state.get_db().await;
             let value = chain::storage::get_value(&db, &params.bucket, &params.key)
                 .await
                 .map_err(create_jsonrpc_error)?;

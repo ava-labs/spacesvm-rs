@@ -10,28 +10,33 @@ use mini_kvvm::{
     chain::{tx::tx::TransactionType, tx::unsigned},
     vm,
 };
+use vm::runner::Bootstrap;
 
 use crate::common::create_genesis_block;
 
 #[tokio::test]
 async fn service_test() {
     let db = MemDb::new();
-    let vm = &mut vm::ChainVm::new();
-    vm.db = Some(db);
+    let vm = &mut vm::ChainVm::new(Bootstrap {
+        name: "test-vm".to_owned(),
+        log_level: "debug".to_owned(),
+        version: semver::Version::parse("0.0.0").unwrap(),
+    });
 
+    let vm = vm.inner.as_ref().expect("vm.inner").write().await;
     // get a broadcast tx pending receiver for new blocks;
-    let mempool = vm.mempool.read().await;
-    let pending_rx = mempool.subscribe_pending();
-    drop(mempool);
+    let pending_rx = vm.mempool.subscribe_pending();
     // unblock channel
-    thread::spawn(move || loop {
-        crossbeam_channel::select! {
-            recv(pending_rx) -> _ => {}
+    let (tx_engine, mut rx_engine): (mpsc::Sender<Message>, mpsc::Receiver<Message>) =
+        mpsc::channel(100);
+
+    tokio::spawn(async move {
+        loop {
+            let _ = rx_engine.recv().await;
         }
     });
 
     // initialize genesis block
-    let mut inner = vm.inner.write().await;
     inner.state = block::state::State::new(vm.db.as_ref().unwrap().clone());
     let resp = create_genesis_block(&inner.state.clone(), vec![]).await;
     assert!(resp.is_ok());

@@ -73,7 +73,7 @@ impl Block {
     }
 
     /// Used for validating new txs and some tests
-    pub fn new_dummy(timestamp: u64, tx: Transaction) -> Self {
+    pub fn new_dummy(timestamp: u64, tx: Transaction, state: state::State) -> Self {
         let mut txs: Vec<Transaction> = Vec::with_capacity(0);
         txs.push(tx);
         Self {
@@ -81,7 +81,7 @@ impl Block {
             height: 0,
             data: vec![],
             timestamp,
-            state: state::State::default(),
+            state,
             id: ids::Id::empty(),
             st: choices::status::Status::Unknown("dummy".to_string()),
             bytes: vec![],
@@ -170,8 +170,15 @@ impl avalanche_types::rpcchainvm::concensus::snowman::Block for Block {
             })?;
 
         parent_block.children.push(self.to_owned());
-        state.set_verified_block(self.to_owned()).await;
-
+        state
+            .set_verified_block(self.to_owned())
+            .await
+            .map_err(|e| {
+                Error::new(
+                    ErrorKind::Other,
+                    format!("set verified block failed: {}", e.to_string()),
+                )
+            })?;
         return Ok(());
     }
 }

@@ -21,7 +21,7 @@ pub trait Transaction: Send + Sync {
     async fn id(&self) -> ids::Id;
     async fn execute(
         &self,
-        db: Box<dyn rpcchainvm::database::Database + Send + Sync>,
+        db: &Box<dyn rpcchainvm::database::Database + Send + Sync>,
         block: Block,
     ) -> Result<()>;
 }

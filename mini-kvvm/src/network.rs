@@ -4,39 +4,27 @@ use std::{
     sync::Arc,
 };
 
-use avalanche_types::{
-    ids::{self, Id},
-    rpcchainvm,
-};
+use avalanche_types::ids::{self, Id};
 use lru::LruCache;
 use tokio::sync::RwLock;
 
-use crate::{chain, mempool};
+use crate::{chain, vm};
 
 const GOSSIPED_TXS_LRU_SIZE: usize = 512;
 
 pub struct Push {
     gossiped_tx: LruCache<Id, ()>,
 
-    // cloned from vm
-    vm_db: Box<dyn rpcchainvm::database::Database + Sync + Send>,
-    vm_mempool: Arc<RwLock<mempool::Mempool>>,
-    vm_app_sender: Box<dyn rpcchainvm::common::appsender::AppSender + Send + Sync>,
+    vm_inner: Arc<RwLock<vm::ChainVmInner>>,
 }
 
 impl Push {
-    pub fn new(
-        app_sender: Box<dyn rpcchainvm::common::appsender::AppSender + Send + Sync>,
-        db: Box<dyn rpcchainvm::database::Database + Sync + Send>,
-        mempool: Arc<RwLock<mempool::Mempool>>,
-    ) -> Self {
+    pub fn new(vm_inner: Arc<RwLock<vm::ChainVmInner>>) -> Self {
         let cache: LruCache<Id, ()> =
             LruCache::new(NonZeroUsize::new(GOSSIPED_TXS_LRU_SIZE).unwrap());
         Self {
+            vm_inner,
             gossiped_tx: cache,
-            vm_db: db,
-            vm_mempool: mempool,
-            vm_app_sender: app_sender,
         }
     }
 
@@ -53,8 +41,12 @@ impl Push {
         })?;
 
         log::debug!("sending app gossip txs: {} size: {}", txs.len(), b.len());
+        let vm = self.vm_inner.read().await;
+        let appsender = vm
+            .app_sender
+            .as_ref()
+            .ok_or_else(|| Error::new(ErrorKind::NotFound, "app_sender not found"))?;
 
-        let appsender = self.vm_app_sender.clone();
         appsender.send_app_gossip(b).await.map_err(|e| {
             Error::new(
                 ErrorKind::Other,
@@ -85,7 +77,9 @@ impl Push {
     /// "force" is true to re-gossip whether recently gossiped or not.
     pub async fn regossip_txs(&mut self) -> Result<()> {
         let mut txs: Vec<chain::tx::tx::Transaction> = Vec::new();
-        let mempool = self.vm_mempool.read().await;
+        let vm = self.vm_inner.read().await;
+
+        let mempool = &vm.mempool;
 
         // Gossip at most the target units of a block at once
         while mempool.len() > 0 {
@@ -118,7 +112,9 @@ impl Push {
             txs.len()
         );
 
-        chain::storage::submit(&self.vm_db.clone(), &mut txs)
+        let mut vm = self.vm_inner.write().await;
+
+        chain::storage::submit(&vm.state, &mut txs)
             .await
             .map_err(|e| {
                 Error::new(
@@ -132,8 +128,8 @@ impl Push {
             })?;
 
         for tx in txs.iter_mut() {
-            let mut mempool = self.vm_mempool.write().await;
-            let _ = mempool
+            let _ = vm
+                .mempool
                 .add(tx.to_owned())
                 .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
         }
