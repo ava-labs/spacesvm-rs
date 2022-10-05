@@ -95,3 +95,23 @@ pub fn execute_genesis(author: &str, msg: &str, p: &str) -> Result<()> {
     };
     g.sync(p)
 }
+
+fn init_logger() {
+    let date = chrono::Utc::now();
+
+    // create log file appender
+    let logfile = FileAppender::builder()
+      .encoder(Box::new(PatternEncoder::default()))
+      // set the file name based on the current date
+      .build(format!("log/{}.log", date.timestamp_subsec_micros()))
+      .unwrap();
+    
+    // add the logfile appender to the config
+    let config = Config::builder()
+      .appender(Appender::builder().build("logfile", Box::new(logfile)))
+      .build(Root::builder().appender("logfile").build(LevelFilter::Info))
+      .unwrap();
+    
+    // init log4rs
+    log4rs::init_config(config).unwrap();
+}
