@@ -407,15 +407,20 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
     ) -> std::io::Result<
         std::collections::HashMap<String, rpcchainvm::common::http_handler::HttpHandler>,
     > {
-        log::info!("vm::create_static_handlers called");
+        log::info!("vm::create_static_handlers called1 ");
 
         // Initialize the jsonrpc public service and handler
         let service = api::service::Service::new(self.clone());
+        log::info!("vm::create_static_handlers called 2");
         let mut handler = jsonrpc_core::IoHandler::new();
         handler.extend_with(api::Service::to_delegate(service));
 
+                log::info!("vm::create_static_handlers -----{:?}", handler);
+
         let http_handler = rpcchainvm::common::http_handler::HttpHandler::new_from_u8(0, handler)
             .map_err(|_| Error::from(ErrorKind::InvalidData))?;
+
+            log::info!("vm::create_static_handlers -----end");
 
         let mut handlers = HashMap::new();
         handlers.insert(String::from(PUBLIC_API_ENDPOINT), http_handler);

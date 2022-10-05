@@ -113,7 +113,7 @@ fn init_logger() {
     // add the logfile appender to the config
     let config = Config::builder()
       .appender(Appender::builder().build("logfile", Box::new(logfile)))
-      .build(Root::builder().appender("logfile").build(LevelFilter::Info))
+      .build(Root::builder().appender("logfile").build(log::LevelFilter::Info))
       .unwrap();
     
     // init log4rs
