@@ -92,17 +92,14 @@ impl Timer {
 
 /// Directs the engine when to build blocks and gossip transactions.
 impl Timed {
-    pub async fn new(
-        vm_inner: Arc<RwLock<vm::ChainVmInner>>,
+    pub fn new(
         build_interval: Duration,
         testing: bool,
+        vm_stop_rx: crossbeam_channel::Receiver<()>,
+        vm_engine_tx: mpsc::Sender<rpcchainvm::common::message::Message>,
+        vm_builder_stop_rx: crossbeam_channel::Receiver<()>,
+        mempool_pending_ch: crossbeam_channel::Receiver<()>,
     ) -> Self {
-        let vm = vm_inner.read().await;
-        let vm_stop_rx = vm.stop_rx.clone();
-        let vm_engine_tx = vm.to_engine.as_ref().expect("vm.to_engine is some").clone();
-        let vm_builder_stop_rx = vm.builder_stop_rx.clone();
-        let mempool_pending_ch = vm.mempool.subscribe_pending();
-
         Self {
             status: Arc::new(RwLock::new(Status::DontBuild)),
             build_block_timer: Timer::new(),
@@ -144,7 +141,7 @@ impl Timed {
     /// Should be called immediately after [build_block].
     // [HandleGenerateBlock] invocation could lead to quiescence, building a block with
     // some delay, or attempting to build another block immediately
-    pub async fn handle_generate_block(&mut self, vm_inner: Arc<RwLock<vm::ChainVmInner>>) {
+    pub async fn handle_generate_block(&mut self, vm_inner: Arc<RwLock<vm::inner::Inner>>) {
         let inner = vm_inner.read().await;
         let mut status = self.status.write().await;
 
@@ -308,7 +305,7 @@ impl Timed {
 
     pub async fn gossip(
         &self,
-        vm_inner: Arc<RwLock<vm::ChainVmInner>>,
+        vm_inner: Arc<RwLock<vm::inner::Inner>>,
         push: Arc<RwLock<network::Push>>,
     ) {
         log::info!("starting gossip loops");

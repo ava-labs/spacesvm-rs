@@ -1,10 +1,15 @@
 use std::io::Result;
 
+use avalanche_types::rpcchainvm;
 use clap::{crate_version, Arg, Command};
 use log::info;
+use log4rs::{
+    append::file::FileAppender,
+    config::{Appender, Root},
+    encode::pattern::PatternEncoder,
+    Config,
+};
 use mini_kvvm::{genesis, vm};
-use log4rs::{append::file::FileAppender, encode::pattern::PatternEncoder, Config, config::{Appender, Root}};
-
 
 pub const APP_NAME: &str = "mini-kvvm-rs";
 
@@ -34,7 +39,7 @@ async fn main() -> Result<()> {
     //     env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, log_level),
     // );
 
-        init_logger();
+    init_logger();
 
     if let Some(("genesis", sub_matches)) = matches.subcommand() {
         let author = sub_matches
@@ -53,13 +58,29 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
+    // Initialize broadcast stop channel used to terminate gRPC servers during shutdown.
+    let (stop_ch_tx, stop_ch_rx): (
+        tokio::sync::broadcast::Sender<()>,
+        tokio::sync::broadcast::Receiver<()>,
+    ) = tokio::sync::broadcast::channel(1);
+
     info!("starting mini-kvvm-rs");
-    vm::runner::Runner::new()
-        .name(APP_NAME)
-        .version(crate_version!())
-        .log_level(log_level)
-        .run()
-        .await?;
+    let vm_server = avalanche_types::rpcchainvm::vm::server::Server::new(
+        Box::new(vm::ChainVm::new()),
+        stop_ch_tx,
+    );
+
+    rpcchainvm::plugin::serve(vm_server, stop_ch_rx)
+        .await
+        .expect("failed to start gRPC server");
+
+    // info!("starting mini-kvvm-rs");
+    // vm::runner::Runner::new()
+    //     .name(APP_NAME)
+    //     .version(crate_version!())
+    //     .log_level(log_level)
+    //     .run()
+    //     .await?;
 
     Ok(())
 }
@@ -105,17 +126,21 @@ fn init_logger() {
 
     // create log file appender
     let logfile = FileAppender::builder()
-      .encoder(Box::new(PatternEncoder::default()))
-      // set the file name based on the current date
-      .build(format!("log/{}.log", date.timestamp_subsec_micros()))
-      .unwrap();
-    
+        .encoder(Box::new(PatternEncoder::default()))
+        // set the file name based on the current date
+        .build(format!("log/{}.log", date.timestamp_subsec_micros()))
+        .unwrap();
+
     // add the logfile appender to the config
     let config = Config::builder()
-      .appender(Appender::builder().build("logfile", Box::new(logfile)))
-      .build(Root::builder().appender("logfile").build(log::LevelFilter::Info))
-      .unwrap();
-    
+        .appender(Appender::builder().build("logfile", Box::new(logfile)))
+        .build(
+            Root::builder()
+                .appender("logfile")
+                .build(log::LevelFilter::Info),
+        )
+        .unwrap();
+
     // init log4rs
     log4rs::init_config(config).unwrap();
 }

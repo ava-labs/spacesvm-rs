@@ -1,8 +1,4 @@
-use std::{
-    io::{Error, ErrorKind, Result},
-    sync::Arc,
-    time::Duration,
-};
+use std::io::{Error, ErrorKind, Result};
 
 use avalanche_types::{
     self,
@@ -15,11 +11,7 @@ use avalanche_types::{
         database::manager::{versioned_database, DatabaseManager},
     },
 };
-use mini_kvvm::{
-    block::{self, state::State},
-    vm::runner::Bootstrap,
-};
-use serde::Deserialize;
+use mini_kvvm::block::{self, state::State};
 use tokio::{
     net::TcpListener,
     sync::{mpsc, RwLock},
@@ -61,18 +53,8 @@ pub async fn create_conn() -> Channel {
         .unwrap()
 }
 
-pub async fn initialize_vm() -> Result<(
-    vm::ChainVm,
-    mpsc::Receiver<rpcchainvm::common::message::Message>,
-)> {
+pub async fn initialize_vm(mut vm: vm::ChainVm) -> Result<mpsc::Receiver<rpcchainvm::common::message::Message>> {
     let db = rpcchainvm::database::memdb::Database::new();
-
-    let vm = &mut vm::ChainVm::new(Bootstrap {
-        name: "test-vm".to_owned(),
-        log_level: "debug".to_owned(),
-        version: semver::Version::parse("0.0.0").unwrap(),
-        testing: true,
-    });
 
     let mut versioned_dbs: Vec<versioned_database::VersionedDatabase> = Vec::with_capacity(1);
     versioned_dbs.push(versioned_database::VersionedDatabase::new(
@@ -104,8 +86,9 @@ pub async fn initialize_vm() -> Result<(
         )
         .await;
 
+        assert!(resp.is_ok());
 
-    Ok((vm.to_owned(), rx_engine))
+    Ok(rx_engine)
 }
 
 pub(crate) fn test_data2() -> &'static str {

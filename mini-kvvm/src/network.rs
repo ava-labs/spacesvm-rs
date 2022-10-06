@@ -15,11 +15,11 @@ const GOSSIPED_TXS_LRU_SIZE: usize = 512;
 pub struct Push {
     gossiped_tx: LruCache<Id, ()>,
 
-    vm_inner: Arc<RwLock<vm::ChainVmInner>>,
+    vm_inner: Arc<RwLock<vm::inner::Inner>>,
 }
 
 impl Push {
-    pub fn new(vm_inner: Arc<RwLock<vm::ChainVmInner>>) -> Self {
+    pub fn new(vm_inner: Arc<RwLock<vm::inner::Inner>>) -> Self {
         let cache: LruCache<Id, ()> =
             LruCache::new(NonZeroUsize::new(GOSSIPED_TXS_LRU_SIZE).unwrap());
         Self {

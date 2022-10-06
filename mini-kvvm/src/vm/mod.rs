@@ -1,5 +1,4 @@
 pub mod inner;
-pub mod runner;
 
 use std::{
     collections::HashMap,
@@ -17,15 +16,13 @@ use avalanche_types::{
     },
 };
 use chrono::Utc;
-use lru::LruCache;
-use semver::Version;
-use tokio::sync::{broadcast, mpsc, RwLock};
+use tokio::sync::{mpsc, RwLock};
 
 use crate::{
     api, block,
     chain::{self, storage, tx::Transaction, vm::Vm},
     genesis::Genesis,
-    mempool, network,
+    network,
 };
 
 const PUBLIC_API_ENDPOINT: &str = "/public";
@@ -36,38 +33,9 @@ const MEMPOOL_SIZE: usize = 1024;
 const BLOCKS_LRU_SIZE: usize = 8192;
 const BUILD_INTERVAL: Duration = Duration::from_millis(500);
 
-pub struct ChainVmInner {
-    pub ctx: Option<rpcchainvm::context::Context>,
-    pub to_engine: Option<mpsc::Sender<rpcchainvm::common::message::Message>>,
-    pub state: block::state::State,
-    pub app_sender: Option<Box<dyn rpcchainvm::common::appsender::AppSender + Send + Sync>>,
-    pub stop_ch: Option<broadcast::Sender<()>>,
-
-    pub bootstrapped: bool,
-    pub version: Version,
-    pub genesis: Genesis,
-    pub preferred: ids::Id,
-    pub last_accepted: block::Block,
-    pub preferred_block_id: ids::Id,
-    pub mempool: mempool::Mempool,
-    pub accepted_blocks: LruCache<ids::Id, block::Block>,
-
-    pub builder_stop_rx: crossbeam_channel::Receiver<()>,
-    pub builder_stop_tx: crossbeam_channel::Sender<()>,
-    pub done_build_rx: crossbeam_channel::Receiver<()>,
-    pub done_build_tx: crossbeam_channel::Sender<()>,
-    pub done_gossip_rx: crossbeam_channel::Receiver<()>,
-    pub done_gossip_tx: crossbeam_channel::Sender<()>,
-    pub stop_rx: crossbeam_channel::Receiver<()>,
-    pub stop_tx: crossbeam_channel::Sender<()>,
-}
-
 pub struct ChainVm {
     /// Always defined as Some during runtime.
-    pub inner: Option<Arc<RwLock<ChainVmInner>>>,
-
-    /// Set to None once Vm initialize is complete or when clone().
-    pub bootstrap: Option<runner::Bootstrap>,
+    pub inner: Arc<RwLock<inner::Inner>>,
 
     /// Manages block creation and gossiping loops.
     pub builder: Option<Arc<RwLock<block::builder::Timed>>>,
@@ -78,12 +46,10 @@ pub struct ChainVm {
 
 impl Clone for ChainVm {
     fn clone(&self) -> Self {
-        let inner = self.inner.as_ref().expect("vm.inner should exist");
         Self {
             // Only inner is cloned.
-            inner: Some(Arc::clone(inner)),
+            inner: Arc::clone(&self.inner),
 
-            bootstrap: None,
             builder: None,
             network: None,
         }
@@ -91,10 +57,9 @@ impl Clone for ChainVm {
 }
 
 impl ChainVm {
-    pub fn new(bootstrap: runner::Bootstrap) -> Self {
+    pub fn new() -> Self {
         Self {
-            inner: None,
-            bootstrap: Some(bootstrap),
+            inner: Arc::new(RwLock::new(inner::Inner::new())),
             builder: None,
             network: None,
         }
@@ -108,14 +73,14 @@ impl crate::chain::vm::Vm for ChainVm {
     async fn is_bootstrapped(&self) -> bool {
         log::info!("vm::is_bootstrapped called");
 
-        let vm = self.inner.as_ref().expect("vm.inner").read().await;
+        let vm = self.inner.read().await;
         return vm.bootstrapped;
     }
 
     async fn submit(&self, mut txs: Vec<chain::tx::tx::Transaction>) -> Result<()> {
         log::info!("vm::submit called");
 
-        let mut vm = self.inner.as_ref().expect("vm.inner").write().await;
+        let mut vm = self.inner.write().await;
 
         storage::submit(&vm.state, &mut txs)
             .await
@@ -136,7 +101,7 @@ impl crate::chain::vm::Vm for ChainVm {
     async fn notify_block_ready(&self) {
         log::info!("vm::notify_block_ready called");
 
-        let vm = self.inner.as_ref().expect("vm.inner").write().await;
+        let vm = self.inner.write().await;
 
         if let Some(engine) = &vm.to_engine {
             if let Err(_) = engine
@@ -243,32 +208,37 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
     ) -> Result<()> {
         log::info!("vm::initialize called");
 
+        let mut vm = self.inner.write().await;
         let current = db_manager.current().await?;
+        let db = current.db.clone();
 
-        let inner = inner::Builder::new()
-            .ctx(ctx)
-            .to_engine(to_engine)
-            .state(current.db.clone())
-            .app_sender(app_sender)
-            .build()
-            .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+        vm.ctx = ctx;
+        vm.to_engine = Some(to_engine);
+        vm.app_sender = Some(app_sender);
+        vm.state = block::state::State::new(db);
+        let genesis = Genesis::from_json(genesis_bytes)?;
+        vm.genesis = genesis;
 
-        self.inner = Some(Arc::new(RwLock::new(inner)));
+        log::info!("vm::initialize set 1");
 
-        let network = network::Push::new(Arc::clone(&self.inner.as_ref().unwrap()));
+        // network
+        let network = network::Push::new(Arc::clone(&self.inner));
         self.network = Some(Arc::new(RwLock::new(network)));
 
-        let bootstrap = self.bootstrap.as_ref().expect("vm.bootstrap");
+         log::info!("vm::initialize set 2");
 
-        let builder = block::builder::Timed::new(
-            Arc::clone(&self.inner.as_ref().unwrap()),
-            BUILD_INTERVAL,
-            bootstrap.testing,
-        )
-        .await;
+        let builder =
+            block::builder::Timed::new(
+                BUILD_INTERVAL,
+                false,
+                vm.stop_rx.clone(),
+                vm.to_engine.as_ref().expect("vm.to_engine").clone(),
+                vm.builder_stop_rx.clone(),
+                vm.mempool.subscribe_pending(),
+            );
         self.builder = Some(Arc::new(RwLock::new(builder)));
 
-        let mut vm = self.inner.as_ref().unwrap().write().await;
+         log::info!("vm::initialize set 3");
 
         // Try to load last accepted
         let has = vm
@@ -277,9 +247,8 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
             .await
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
-        // Parse genesis data
-        let genesis = Genesis::from_json(genesis_bytes)?;
-        vm.genesis = genesis;
+        log::info!("vm::initialize set 4");
+
 
         // Check if last accepted block exists
         if has {
@@ -289,11 +258,15 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
                 .await
                 .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
+                  log::info!("vm::initialize set 5");
+
             let block = vm
                 .state
                 .get_block(block_id)
                 .await
                 .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+
+                  log::info!("vm::initialize set 6");
 
             vm.preferred = block_id;
             vm.last_accepted = block;
@@ -307,10 +280,14 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
                 .await
                 .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
+                  log::info!("vm::initialize set 7");
+
             genesis_block
                 .init(&bytes, status::Status::Accepted)
                 .await
                 .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+
+                  log::info!("vm::initialize set 8");
 
             let genesis_block_id = genesis_block.id;
             vm.state
@@ -320,20 +297,23 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
                     Error::new(ErrorKind::Other, format!("failed to accept block: {:?}", e))
                 })?;
 
+                  log::info!("vm::initialize set 9");
+
             vm.last_accepted = genesis_block;
             vm.preferred = genesis_block_id;
             log::info!("initialized from genesis block: {}", genesis_block_id);
         }
+        drop(vm);
 
         let builder = Arc::clone(&self.builder.as_ref().expect("vm.builder"));
-        let vm_inner = Arc::clone(&self.inner.as_ref().expect("vm.inner"));
-        let network = Arc::clone(&self.network.as_ref().expect("vm.network is some"));
+        let vm_inner = Arc::clone(&self.inner);
+        let network = Arc::clone(&self.network.as_ref().expect("vm.network"));
         tokio::spawn(async move {
             let builder = builder.read().await;
             builder.gossip(vm_inner, network).await;
         });
 
-        let builder = Arc::clone(&self.builder.as_ref().expect("vm.builder is some"));
+        let builder = Arc::clone(&self.builder.as_ref().expect("vm.builder"));
         tokio::spawn(async move {
             let mut builder = builder.write().await;
             builder.build().await;
@@ -347,7 +327,7 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
     /// Called when the node is shutting down.
     async fn shutdown(&self) -> Result<()> {
         log::info!("vm::shutdown called");
-        let vm = self.inner.as_ref().expect("vm.inner").read().await;
+        let vm = self.inner.read().await;
 
         let db = vm.state.get_db().await;
         // wait for gossiper and builder to be shutdown
@@ -364,7 +344,7 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
     async fn set_state(&self, snow_state: rpcchainvm::snow::State) -> Result<()> {
         log::info!("vm::set_state called");
 
-        let mut vm = self.inner.as_ref().expect("vm.inner").write().await;
+        let mut vm = self.inner.write().await;
 
         match snow_state.try_into() {
             // Initializing is called by chains manager when it is creating the chain.
@@ -400,33 +380,33 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
         Ok(String::from(VERSION))
     }
 
-       /// Creates the HTTP handlers for custom Vm network calls
+    /// Creates the HTTP handlers for custom Vm network calls
     /// for "ext/vm/[vmId]"
     async fn create_static_handlers(
         &self,
     ) -> std::io::Result<
         std::collections::HashMap<String, rpcchainvm::common::http_handler::HttpHandler>,
     > {
-        log::info!("vm::create_static_handlers called1 ");
+        log::info!("vm::create_static_handlers called");
 
         // Initialize the jsonrpc public service and handler
-        let service = api::service::Service::new(self.clone());
-        log::info!("vm::create_static_handlers called 2");
+        let vm = self.clone();
+        let service = api::service::Service::new(vm);
+        // log::info!("vm::create_static_handlers called 2");
         let mut handler = jsonrpc_core::IoHandler::new();
         handler.extend_with(api::Service::to_delegate(service));
 
-                log::info!("vm::create_static_handlers -----{:?}", handler);
+        log::info!("vm::create_static_handlers -----{:?}", handler);
 
         let http_handler = rpcchainvm::common::http_handler::HttpHandler::new_from_u8(0, handler)
             .map_err(|_| Error::from(ErrorKind::InvalidData))?;
 
-            log::info!("vm::create_static_handlers -----end");
+        log::info!("vm::create_static_handlers -----end");
 
         let mut handlers = HashMap::new();
         handlers.insert(String::from(PUBLIC_API_ENDPOINT), http_handler);
         Ok(handlers)
     }
-
 
     /// Creates the HTTP handlers for custom chain network calls
     /// for "ext/vm/[chainId]"
@@ -453,7 +433,7 @@ impl rpcchainvm::snowman::block::Getter for ChainVm {
     ) -> Result<Box<dyn rpcchainvm::concensus::snowman::Block + Send + Sync>> {
         log::info!("vm::get_block called");
 
-        let mut vm = self.inner.as_ref().expect("vm.inner").write().await;
+        let mut vm = self.inner.write().await;
 
         let accepted_blocks = &mut vm.accepted_blocks;
         // has block been accepted by the vm and cached.
@@ -492,7 +472,7 @@ impl rpcchainvm::snowman::block::Parser for ChainVm {
     ) -> Result<Box<dyn rpcchainvm::concensus::snowman::Block + Send + Sync>> {
         log::info!("vm::get_block called");
 
-        let mut vm = self.inner.as_ref().expect("vm.inner").write().await;
+        let mut vm = self.inner.write().await;
         let new_block = vm
             .state
             .parse_block(None, bytes.to_vec(), Status::Processing)
@@ -519,7 +499,7 @@ impl rpcchainvm::snowman::block::ChainVm for ChainVm {
     ) -> Result<Box<dyn rpcchainvm::concensus::snowman::Block + Send + Sync>> {
         log::info!("vm::build_block called");
 
-        let mut vm = self.inner.as_ref().expect("vm.inner").write().await;
+        let mut vm = self.inner.write().await;
         if vm.mempool.len() == 0 {
             return Err(Error::new(ErrorKind::Other, "no pending blocks"));
         }
@@ -573,9 +553,7 @@ impl rpcchainvm::snowman::block::ChainVm for ChainVm {
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
         let mut builder = self.builder.as_ref().expect("vm.builder").write().await;
-        builder
-            .handle_generate_block(Arc::clone(&self.inner.as_ref().unwrap()))
-            .await;
+        builder.handle_generate_block(Arc::clone(&self.inner)).await;
 
         self.notify_block_ready().await;
 
@@ -586,7 +564,7 @@ impl rpcchainvm::snowman::block::ChainVm for ChainVm {
     async fn set_preference(&self, id: ids::Id) -> Result<()> {
         log::info!("vm::set_preference called");
 
-        let mut vm = self.inner.as_ref().expect("vm.inner").write().await;
+        let mut vm = self.inner.write().await;
         vm.preferred_block_id = id;
 
         Ok(())
@@ -596,7 +574,7 @@ impl rpcchainvm::snowman::block::ChainVm for ChainVm {
     async fn last_accepted(&self) -> Result<ids::Id> {
         log::info!("vm::last_accepted called");
 
-        let vm = self.inner.as_ref().expect("vm.inner").read().await;
+        let vm = self.inner.read().await;
 
         Ok(vm.last_accepted.id)
     }

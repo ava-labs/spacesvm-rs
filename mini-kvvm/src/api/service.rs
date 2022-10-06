@@ -5,7 +5,6 @@ use crate::{
 };
 
 use avalanche_types::{ids, rpcchainvm::snowman::block::ChainVm};
-
 pub struct Service {
     pub vm: vm::ChainVm,
 }
@@ -63,7 +62,7 @@ impl crate::api::Service for Service {
 
         Box::pin(async move {
             let mut utx = params.tx_data.decode().map_err(create_jsonrpc_error)?;
-            let inner = vm.inner.as_ref().expect("vm.inner").read().await;
+            let inner = vm.inner.write().await;
             let last_accepted = &inner.last_accepted;
             utx.set_block_id(last_accepted.id).await;
             let typed_data = utx.typed_data().await;
@@ -76,7 +75,7 @@ impl crate::api::Service for Service {
         let vm = self.vm.clone();
 
         Box::pin(async move {
-            let inner = vm.inner.as_ref().expect("vm.inner").read().await;
+            let inner = vm.inner.read().await;
             let db = inner.state.get_db().await;
             let value = chain::storage::get_value(&db, &params.bucket, &params.key)
                 .await

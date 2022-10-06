@@ -20,29 +20,20 @@ use crate::common;
 #[tokio::test]
 async fn vm_test() {
     use crate::common::test_data;
-    println!("start test");
-    let (vm, _) = common::initialize_vm()
-        .await
-        .map_err(|e| {
-            Error::new(
-                ErrorKind::Other,
-                format!("failed to initialize vm: {:?}", e),
-            )
-        })
-        .expect("vm should not fail to initialize");
+
+    let vm = vm::ChainVm::new();
+
+    // NOTE: order is important! static handlers will be called before the vm
+    // is initialized.
+    let resp = vm.create_static_handlers().await;
+    assert!(resp.is_ok());
+    let handlers = resp.unwrap();
+
+    let (_) = common::initialize_vm(vm);
+        // let handlers = resp.unwrap();
 
     // setup stop channel for grpc services.
     let (stop_ch_tx, _): (Sender<()>, Receiver<()>) = tokio::sync::broadcast::channel(1);
-
-    // setup handlers for api service
-    let resp = vm.create_static_handlers().await.map_err(|e| {
-        Error::new(
-            ErrorKind::Other,
-            format!("failed to initialize vm: {:?}", e),
-        )
-    });
-    assert!(resp.is_ok());
-    let handlers = resp.unwrap();
 
     let addr = utils::new_socket_addr();
     for (_, handler) in handlers {
@@ -57,7 +48,7 @@ async fn vm_test() {
     // wait for server to start
     sleep(Duration::from_millis(10)).await;
 
-    let data = test_data().to_owned();
+    let data = test_data().as_bytes().to_vec();
     let client_conn = Channel::builder(format!("http://{}", addr).parse().unwrap())
         .connect()
         .await
@@ -66,8 +57,6 @@ async fn vm_test() {
     let mut client = avalanche_types::rpcchainvm::http::client::Client::new(client_conn);
 
     let req = http::request::Builder::new().body(data).unwrap();
-
-    
 
     let resp = client
         .serve_http_simple(req)
@@ -82,7 +71,7 @@ async fn vm_test() {
 
     let t = resp.body().to_owned();
 
-    // let out = std::str::from_utf8(&t).unwrap();
+    let out = std::str::from_utf8(&t).unwrap();
 
-    println!("{}", t)
+    println!("{}", out)
 }
