@@ -317,7 +317,7 @@ impl Timed {
 
         while stop_ch.try_recv() == Err(TryRecvError::Empty) {
             sleep(GOSSIP_INTERVAL).await;
-            println!("tick gossip");
+            log::info!("tick gossip");
 
             let mut inner = vm_inner.write().await;
             let new_txs = inner.mempool.new_txs().unwrap();

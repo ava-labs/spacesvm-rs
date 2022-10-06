@@ -9,6 +9,8 @@ use ethereum_types::H256;
 use keccak_hash::keccak;
 use serde::{Deserialize, Serialize};
 use serde_json::to_value;
+use serde::de::Visitor;
+use std::fmt;
 
 use super::{base, bucket, delete, set, tx::TransactionType, unsigned};
 
@@ -27,18 +29,16 @@ pub type Types = HashMap<String, Vec<Type>>;
 pub type TypedDataMessage = HashMap<String, MessageValue>;
 
 // TypedDataDomain represents the domain part of an EIP-712 message.
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
 #[derive(Deserialize, Serialize, Debug, Clone, Default)]
 pub struct TypedDataDomain {
     pub name: String,
     pub magic: String,
 }
 
-pub fn mini_kvvm_domain(m: u64) -> TypedDataDomain {
+pub fn mini_kvvm_domain(_m: u64) -> TypedDataDomain {
     return TypedDataDomain {
         name: "MiniKvvm".to_string(),
-        magic: "0x00".to_string(), // radix(m, 10).to_string(),
+        magic: "0x00".to_string(),
     };
 }
 
@@ -71,8 +71,6 @@ impl Serialize for MessageValue {
     }
 }
 
-use serde::de::Visitor;
-use std::fmt;
 struct MessageValueVisitor;
 impl<'de> Visitor<'de> for MessageValueVisitor {
     type Value = MessageValue;

@@ -219,13 +219,9 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
         let genesis = Genesis::from_json(genesis_bytes)?;
         vm.genesis = genesis;
 
-        log::info!("vm::initialize set 1");
-
         // network
         let network = network::Push::new(Arc::clone(&self.inner));
         self.network = Some(Arc::new(RwLock::new(network)));
-
-        log::info!("vm::initialize set 2");
 
         let builder = block::builder::Timed::new(
             BUILD_INTERVAL,
@@ -237,16 +233,12 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
         );
         self.builder = Some(Arc::new(RwLock::new(builder)));
 
-        log::info!("vm::initialize set 3");
-
         // Try to load last accepted
         let has = vm
             .state
             .has_last_accepted()
             .await
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
-
-        log::info!("vm::initialize set 4");
 
         // Check if last accepted block exists
         if has {
@@ -256,15 +248,11 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
                 .await
                 .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
-            log::info!("vm::initialize set 5");
-
             let block = vm
                 .state
                 .get_block(block_id)
                 .await
                 .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
-
-            log::info!("vm::initialize set 6");
 
             vm.preferred = block_id;
             vm.last_accepted = block;
@@ -278,14 +266,10 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
                 .await
                 .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
-            log::info!("vm::initialize set 7");
-
             genesis_block
                 .init(&bytes, status::Status::Accepted)
                 .await
                 .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
-
-            log::info!("vm::initialize set 8");
 
             let genesis_block_id = genesis_block.id;
             vm.state
@@ -294,8 +278,6 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
                 .map_err(|e| {
                     Error::new(ErrorKind::Other, format!("failed to accept block: {:?}", e))
                 })?;
-
-            log::info!("vm::initialize set 9");
 
             vm.last_accepted = genesis_block;
             vm.preferred = genesis_block_id;
@@ -316,8 +298,6 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
             let mut builder = builder.write().await;
             builder.build().await;
         });
-
-        log::info!("vm::initialize returned");
 
         Ok(())
     }
