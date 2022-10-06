@@ -16,9 +16,7 @@ use tokio::{
 
 use crate::{network, vm};
 
-// TODO: make configurable
-const GOSSIP_INTERVAL: Duration = Duration::from_secs(1);
-const REGOSSIP_INTERVAL: Duration = Duration::from_secs(30);
+
 
 #[derive(Clone)]
 pub struct Timed {
@@ -282,48 +280,6 @@ impl Timed {
             log::info!("tick build");
             let _ = mempool_pending_ch.recv().unwrap();
             self.signal_txs_ready().await;
-        }
-    }
-
-    pub async fn regossip(&self, push: Arc<RwLock<network::Push>>) {
-        log::debug!("starting regossip loop");
-        if self.testing {
-            return;
-        }
-        let stop_ch = self.vm_stop_rx.clone();
-
-        while stop_ch.try_recv() == Err(TryRecvError::Empty) {
-            sleep(REGOSSIP_INTERVAL).await;
-            log::info!("tick");
-
-            let mut network = push.write().await;
-            let _ = network.regossip_txs().await;
-        }
-
-        log::debug!("shutdown regossip loop");
-    }
-
-    pub async fn gossip(
-        &self,
-        vm_inner: Arc<RwLock<vm::inner::Inner>>,
-        push: Arc<RwLock<network::Push>>,
-    ) {
-        log::info!("starting gossip loops");
-        if self.testing {
-            return;
-        }
-
-        let stop_ch = self.vm_stop_rx.clone();
-
-        while stop_ch.try_recv() == Err(TryRecvError::Empty) {
-            sleep(GOSSIP_INTERVAL).await;
-            log::info!("tick gossip");
-
-            let mut inner = vm_inner.write().await;
-            let new_txs = inner.mempool.new_txs().unwrap();
-
-            let mut network = push.write().await;
-            let _ = network.gossip_new_txs(new_txs).await;
         }
     }
 }

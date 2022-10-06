@@ -287,16 +287,15 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
 
         let builder = Arc::clone(&self.builder.as_ref().expect("vm.builder"));
         let vm_inner = Arc::clone(&self.inner);
-        let network = Arc::clone(&self.network.as_ref().expect("vm.network"));
-        tokio::spawn(async move {
-            let builder = builder.read().await;
-            builder.gossip(vm_inner, network).await;
-        });
-
-        let builder = Arc::clone(&self.builder.as_ref().expect("vm.builder"));
         tokio::spawn(async move {
             let mut builder = builder.write().await;
             builder.build().await;
+        });
+
+        let network = Arc::clone(&self.network.as_ref().expect("vm.network"));
+        tokio::spawn(async move {
+            let mut network = network.write().await;
+            network.gossip().await;
         });
 
         Ok(())

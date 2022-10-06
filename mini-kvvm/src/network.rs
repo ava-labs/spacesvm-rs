@@ -1,16 +1,21 @@
 use std::{
     io::{Error, ErrorKind, Result},
     num::NonZeroUsize,
-    sync::Arc,
+    sync::Arc, time::Duration,
 };
 
 use avalanche_types::ids::{self, Id};
 use lru::LruCache;
-use tokio::sync::RwLock;
+use tokio::{sync::RwLock, time::sleep};
+use crossbeam_channel::TryRecvError;
 
 use crate::{chain, vm};
 
 const GOSSIPED_TXS_LRU_SIZE: usize = 512;
+
+// TODO: make configurable
+const GOSSIP_INTERVAL: Duration = Duration::from_secs(1);
+const REGOSSIP_INTERVAL: Duration = Duration::from_secs(30);
 
 pub struct Push {
     gossiped_tx: LruCache<Id, ()>,
@@ -56,7 +61,9 @@ impl Push {
         Ok(())
     }
 
-    pub async fn gossip_new_txs(&mut self, new_txs: Vec<chain::tx::tx::Transaction>) -> Result<()> {
+    pub async fn gossip_new_txs(&mut self) -> Result<()> {
+        let mut inner = self.vm_inner.write().await;
+        let new_txs = inner.mempool.new_txs().unwrap();
         let mut txs: Vec<chain::tx::tx::Transaction> = Vec::with_capacity(new_txs.len());
 
         for tx in new_txs.iter() {
@@ -136,4 +143,38 @@ impl Push {
 
         Ok(())
     }
+
+      pub async fn regossip(&mut self) {
+        log::debug!("starting regossip loop");
+
+        let inner = self.vm_inner.read().await;
+        let stop_ch = inner.stop_rx.clone();
+        drop(inner);
+
+        while stop_ch.try_recv() == Err(TryRecvError::Empty) {
+            sleep(REGOSSIP_INTERVAL).await;
+            log::info!("tick regossip");
+
+            let _ = self.regossip_txs().await;
+        }
+
+        log::debug!("shutdown regossip loop");
+    }
+
+    pub async fn gossip(
+        &mut self,
+    ) {
+        log::info!("starting gossip loops");
+        let inner = self.vm_inner.read().await;
+        let stop_ch = inner.stop_rx.clone();
+        drop(inner);
+
+        while stop_ch.try_recv() == Err(TryRecvError::Empty) {
+            sleep(GOSSIP_INTERVAL).await;
+            log::info!("tick gossip");
+
+            let _ = self.gossip_new_txs().await;
+        }
+    }
 }
+
