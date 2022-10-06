@@ -91,80 +91,64 @@ pub async fn initialize_vm(mut vm: vm::ChainVm) -> Result<mpsc::Receiver<rpcchai
     Ok(rx_engine)
 }
 
-pub(crate) fn test_data2() -> &'static str {
+pub(crate) fn test_data() -> &'static str {
+    let data = r#"
+    {
+      "jsonrpc": "2.0",
+      "method": "issue_tx",
+      "params": [
+        {
+          "signature": "fc493984569024997814a03662d1a76d3fc0e896d528e19d31ec503a1ef2c3191dfd75af4feac1dc11d8d1195cb88567cde1b1c09a6efb85524abfd6aecfd56a1b",
+          "typed_data": {
+            "domain": {
+              "magic": "0x00",
+              "name": "MiniKvvm"
+            },
+            "message": {
+              "blockId": "0000000000000000000000000000000000000000000000000000000000000000",
+              "bucket": "666f6f"
+            },
+            "primary_type": {
+              "type": "Bucket"
+            },
+            "types": {
+              "EIP712Domain": [
+                {
+                  "name": "name",
+                  "type": "string"
+                },
+                {
+                  "name": "magic",
+                  "type": "uint64"
+                }
+              ],
+              "bucket": [
+                {
+                  "name": "bucket",
+                  "type": "string"
+                },
+                {
+                  "name": "blockId",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "id": 2
+    }
+   "#;
+    data
+}
+
+pub(crate) fn test_data3() -> &'static str {
     let data = r#"
     {
   "jsonrpc": "2.0",
   "method": "issue_tx",
   "params": [
     {
-      "signature": [
-        202,
-        194,
-        218,
-        188,
-        97,
-        16,
-        222,
-        37,
-        32,
-        242,
-        249,
-        6,
-        121,
-        103,
-        3,
-        217,
-        129,
-        32,
-        211,
-        90,
-        126,
-        11,
-        19,
-        94,
-        125,
-        139,
-        137,
-        121,
-        242,
-        171,
-        65,
-        23,
-        50,
-        121,
-        2,
-        180,
-        194,
-        238,
-        5,
-        77,
-        225,
-        188,
-        145,
-        253,
-        235,
-        241,
-        41,
-        105,
-        142,
-        83,
-        160,
-        126,
-        81,
-        74,
-        174,
-        251,
-        217,
-        212,
-        236,
-        2,
-        222,
-        250,
-        24,
-        246,
-        28
-      ],
       "typed_data": {
         "domain": {
           "magic": "0x00",
@@ -207,51 +191,3 @@ pub(crate) fn test_data2() -> &'static str {
     data
 }
 
-pub(crate) fn test_data() -> &'static str {
-    let data = r#"
-    {
-  "jsonrpc": "2.0",
-  "method": "issue_tx",
-  "params": [
-    {
-      "typed_data": {
-        "domain": {
-          "magic": "0x00",
-          "name": "MiniKvvm"
-        },
-        "message": {
-          "blockId": "0000000000000000000000000000000000000000000000000000000000000000",
-          "bucket": "666f6f"
-        },
-        "primary_type": {
-          "type": "Bucket"
-        },
-        "types": {
-          "EIP712Domain": [
-            {
-              "name": "name",
-              "type": "string"
-            },
-            {
-              "name": "magic",
-              "type": "uint64"
-            }
-          ],
-          "bucket": [
-            {
-              "name": "bucket",
-              "type": "string"
-            },
-            {
-              "name": "blockId",
-              "type": "string"
-            }
-          ]
-        }
-      }
-    }
-  ],
-  "id": 1
-}"#;
-    data
-}
