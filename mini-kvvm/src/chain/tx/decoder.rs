@@ -7,9 +7,9 @@ use avalanche_types::ids;
 use eip_712::Type as ParserType;
 use ethereum_types::H256;
 use keccak_hash::keccak;
+use serde::de::Visitor;
 use serde::{Deserialize, Serialize};
 use serde_json::to_value;
-use serde::de::Visitor;
 use std::fmt;
 
 use super::{base, bucket, delete, set, tx::TransactionType, unsigned};
