@@ -7,7 +7,6 @@ use avalanche_types::ids;
 use eip_712::Type as ParserType;
 use ethereum_types::H256;
 use keccak_hash::keccak;
-use radix_fmt::radix;
 use serde::{Deserialize, Serialize};
 use serde_json::to_value;
 

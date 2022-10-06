@@ -109,7 +109,7 @@ fn delete_tx(bucket: String, key: String) -> TransactionData {
     }
 }
 
-async fn ping(client: &Client) -> Result<()>{
+async fn ping(client: &Client) -> Result<()> {
     let error_handling =
         |e: RpcError| std::io::Error::new(std::io::ErrorKind::Other, e.to_string());
     let resp = client.ping().await.map_err(error_handling);

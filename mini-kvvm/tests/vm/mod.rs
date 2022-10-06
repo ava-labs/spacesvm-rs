@@ -1,14 +1,10 @@
-use std::{
-    io::{Error, ErrorKind},
-};
+use std::io::{Error, ErrorKind};
 
 use avalanche_types::rpcchainvm::{common::vm::Vm, utils};
-use mini_kvvm::{
-    vm,
-};
+use mini_kvvm::vm;
 use tokio::sync::broadcast::{Receiver, Sender};
-use tokio::time::Duration;
 use tokio::time::sleep;
+use tokio::time::Duration;
 use tonic::transport::Channel;
 
 #[tokio::test]
@@ -30,7 +26,7 @@ async fn create_bucket_raw_json() {
 
     let addr = utils::new_socket_addr();
 
-    // simulate rpcchainvm http service creation for handler 
+    // simulate rpcchainvm http service creation for handler
     for (_, handler) in handlers {
         let http_service = avalanche_types::rpcchainvm::http::server::Server::new(handler.handler);
         let server = utils::grpc::Server::new(addr, stop_ch_tx.subscribe());

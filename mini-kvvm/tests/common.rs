@@ -53,7 +53,9 @@ pub async fn create_conn() -> Channel {
         .unwrap()
 }
 
-pub async fn initialize_vm(mut vm: vm::ChainVm) -> Result<mpsc::Receiver<rpcchainvm::common::message::Message>> {
+pub async fn initialize_vm(
+    mut vm: vm::ChainVm,
+) -> Result<mpsc::Receiver<rpcchainvm::common::message::Message>> {
     let db = rpcchainvm::database::memdb::Database::new();
 
     let mut versioned_dbs: Vec<versioned_database::VersionedDatabase> = Vec::with_capacity(1);
@@ -86,12 +88,12 @@ pub async fn initialize_vm(mut vm: vm::ChainVm) -> Result<mpsc::Receiver<rpcchai
         )
         .await;
 
-        assert!(resp.is_ok());
+    assert!(resp.is_ok());
 
     Ok(rx_engine)
 }
 
-pub(crate) fn test_data() -> &'static str {
+pub fn test_data() -> &'static str {
     let data = r#"
     {
       "jsonrpc": "2.0",
@@ -190,4 +192,3 @@ pub(crate) fn test_data3() -> &'static str {
 }"#;
     data
 }
-
