@@ -9,14 +9,9 @@ use std::{
 
 use avalanche_types::rpcchainvm;
 use crossbeam_channel::TryRecvError;
-use tokio::{
-    sync::{mpsc, RwLock},
-    time::sleep,
-};
+use tokio::{sync::RwLock, time::sleep};
 
-use crate::{network, vm};
-
-
+use crate::vm;
 
 #[derive(Clone)]
 pub struct Timed {
@@ -24,22 +19,15 @@ pub struct Timed {
     /// [DontBuild] indicates there's no need to build a block.
     /// [MayBuild] indicates the Vm should proceed to build a block.
     /// [Building] indicates the Vm has sent a request to the engine to build a block.
-    pub status: Arc<RwLock<Status>>,
+    status: Arc<RwLock<Status>>,
 
     /// Build timer.
-    pub build_block_timer: Timer,
+    build_block_timer: Timer,
 
     /// Interval duration used to build a block.
-    pub build_interval: Duration,
+    build_interval: Duration,
 
-    // cloned from vm
-    pub vm_engine_tx: mpsc::Sender<rpcchainvm::common::message::Message>,
-    pub vm_stop_rx: crossbeam_channel::Receiver<()>,
-    pub vm_builder_stop_rx: crossbeam_channel::Receiver<()>,
-    pub mempool_pending_ch: crossbeam_channel::Receiver<()>,
-
-    // disables network and builder loops
-    pub testing: bool,
+    vm_inner: Arc<RwLock<vm::inner::Inner>>,
 }
 
 #[derive(PartialEq)]
@@ -90,23 +78,12 @@ impl Timer {
 
 /// Directs the engine when to build blocks and gossip transactions.
 impl Timed {
-    pub fn new(
-        build_interval: Duration,
-        testing: bool,
-        vm_stop_rx: crossbeam_channel::Receiver<()>,
-        vm_engine_tx: mpsc::Sender<rpcchainvm::common::message::Message>,
-        vm_builder_stop_rx: crossbeam_channel::Receiver<()>,
-        mempool_pending_ch: crossbeam_channel::Receiver<()>,
-    ) -> Self {
+    pub fn new(build_interval: Duration, vm_inner: Arc<RwLock<vm::inner::Inner>>) -> Self {
         Self {
             status: Arc::new(RwLock::new(Status::DontBuild)),
             build_block_timer: Timer::new(),
             build_interval,
-            vm_stop_rx,
-            vm_builder_stop_rx,
-            vm_engine_tx,
-            mempool_pending_ch,
-            testing,
+            vm_inner,
         }
     }
     /// Sets the initial timeout on the two stage timer if the process
@@ -115,6 +92,7 @@ impl Timed {
     /// can be safely skipped.
     async fn signal_txs_ready(&mut self) {
         if *self.status.read().await == Status::DontBuild {
+            log::info!("### dont build");
             return;
         }
 
@@ -123,8 +101,12 @@ impl Timed {
 
     /// Signal the avalanchego engine to build a block from pending transactions
     async fn mark_building(&mut self) {
-        match self
-            .vm_engine_tx
+        log::info!("mark building start");
+        let vm = self.vm_inner.read().await;
+        match vm
+            .to_engine
+            .as_ref()
+            .expect("builder.vm_inner")
             .send(rpcchainvm::common::message::Message::PendingTxs)
             .await
         {
@@ -134,16 +116,20 @@ impl Timed {
             }
             Err(e) => log::error!("dropping message to consensus engine: {}", e.to_string()),
         }
+        log::info!("mark building end");
     }
 
     /// Should be called immediately after [build_block].
     // [HandleGenerateBlock] invocation could lead to quiescence, building a block with
     // some delay, or attempting to build another block immediately
-    pub async fn handle_generate_block(&mut self, vm_inner: Arc<RwLock<vm::inner::Inner>>) {
-        let inner = vm_inner.read().await;
+    pub async fn handle_generate_block(&mut self) {
+        log::info!("handle generate bock called");
+        let vm = self.vm_inner.read().await;
         let mut status = self.status.write().await;
 
-        if inner.mempool.len() > 0 {
+        if vm.mempool.len() > 0 {
+            log::info!("mempool empty");
+
             *status = Status::MayBuild;
             self.dispatch_timer_duration(self.build_interval).await;
         } else {
@@ -268,18 +254,19 @@ impl Timed {
     /// considered for the next block.
     pub async fn build(&mut self) {
         log::info!("starting build loops");
-        if self.testing {
-            return;
-        }
 
-        log::info!("tick build start");
-        let mempool_pending_ch = self.mempool_pending_ch.clone();
-        let stop_ch = self.vm_stop_rx.clone();
+        let vm = self.vm_inner.read().await;
+        let stop_ch = vm.stop_rx.clone();
+        let mempool_pending_ch = vm.mempool.subscribe_pending();
+        drop(vm);
 
         while stop_ch.try_recv() == Err(TryRecvError::Empty) {
-            log::info!("tick build");
-            let _ = mempool_pending_ch.recv().unwrap();
+            log::info!("build: pending HOLD");
+            mempool_pending_ch.recv().unwrap();
+            log::info!("build: pending mempool signal received");
+            sleep(Duration::from_secs(20)).await;
             self.signal_txs_ready().await;
         }
+        log::info!("build: loop ends");
     }
 }

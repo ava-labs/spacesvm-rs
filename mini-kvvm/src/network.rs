@@ -1,20 +1,21 @@
 use std::{
     io::{Error, ErrorKind, Result},
     num::NonZeroUsize,
-    sync::Arc, time::Duration,
+    sync::Arc,
+    time::Duration,
 };
 
 use avalanche_types::ids::{self, Id};
+use crossbeam_channel::TryRecvError;
 use lru::LruCache;
 use tokio::{sync::RwLock, time::sleep};
-use crossbeam_channel::TryRecvError;
 
 use crate::{chain, vm};
 
 const GOSSIPED_TXS_LRU_SIZE: usize = 512;
 
 // TODO: make configurable
-const GOSSIP_INTERVAL: Duration = Duration::from_secs(1);
+const GOSSIP_INTERVAL: Duration = Duration::from_secs(20);
 const REGOSSIP_INTERVAL: Duration = Duration::from_secs(30);
 
 pub struct Push {
@@ -34,7 +35,9 @@ impl Push {
     }
 
     pub async fn send_txs(&self, txs: Vec<chain::tx::tx::Transaction>) -> Result<()> {
+        log::info!("send_txs: called");
         if txs.is_empty() {
+            log::info!("send_txs: empty");
             return Ok(());
         }
 
@@ -45,7 +48,7 @@ impl Push {
             )
         })?;
 
-        log::debug!("sending app gossip txs: {} size: {}", txs.len(), b.len());
+        log::info!("sending app gossip txs: {} size: {}", txs.len(), b.len());
         let vm = self.vm_inner.read().await;
         let appsender = vm
             .app_sender
@@ -62,22 +65,26 @@ impl Push {
     }
 
     pub async fn gossip_new_txs(&mut self) -> Result<()> {
+        log::info!("gossip_new_txs: called");
+
         let mut inner = self.vm_inner.write().await;
-        let new_txs = inner.mempool.new_txs().unwrap();
+        log::info!("gossip_new_txs: mempool len: {}", inner.mempool.len());
+        let new_txs = inner.mempool.new_txs()?;
         let mut txs: Vec<chain::tx::tx::Transaction> = Vec::with_capacity(new_txs.len());
 
-        for tx in new_txs.iter() {
+        log::info!("gossip_new_txs: len: {}", new_txs.len());
+        for tx in new_txs.iter().cloned() {
             if self.gossiped_tx.contains(&tx.id) {
-                log::debug!("already gossiped skipping id: {}", tx.id);
+                log::info!("already gossiped skipping id: {}", tx.id);
                 continue;
             }
 
             self.gossiped_tx.put(tx.id, ());
 
-            txs.push(tx.to_owned());
+            txs.push(tx);
         }
 
-        Ok(())
+        self.send_txs(txs).await
     }
 
     /// Triggers "AppGossip" on the pending transactions in the mempool.
@@ -144,7 +151,7 @@ impl Push {
         Ok(())
     }
 
-      pub async fn regossip(&mut self) {
+    pub async fn regossip(&mut self) {
         log::debug!("starting regossip loop");
 
         let inner = self.vm_inner.read().await;
@@ -161,9 +168,7 @@ impl Push {
         log::debug!("shutdown regossip loop");
     }
 
-    pub async fn gossip(
-        &mut self,
-    ) {
+    pub async fn gossip(&mut self) {
         log::info!("starting gossip loops");
         let inner = self.vm_inner.read().await;
         let stop_ch = inner.stop_rx.clone();
@@ -171,10 +176,12 @@ impl Push {
 
         while stop_ch.try_recv() == Err(TryRecvError::Empty) {
             sleep(GOSSIP_INTERVAL).await;
+            // let mut inner = self.vm_inner.write().await;
+            // let new_txs = inner.mempool.new_txs();
+            // drop(inner);
             log::info!("tick gossip");
 
             let _ = self.gossip_new_txs().await;
         }
     }
 }
-

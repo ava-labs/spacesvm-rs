@@ -13,7 +13,6 @@ pub struct Inner {
     pub ctx: Option<rpcchainvm::context::Context>,
     pub to_engine: Option<mpsc::Sender<rpcchainvm::common::message::Message>>,
     pub app_sender: Option<Box<dyn rpcchainvm::common::appsender::AppSender + Send + Sync>>,
-    pub stop_ch: Option<broadcast::Sender<()>>,
 
     pub state: block::state::State,
     pub bootstrapped: bool,
@@ -60,7 +59,6 @@ impl Inner {
             ctx: None,
             to_engine: None,
             app_sender: None,
-            stop_ch: None,
 
             // defaults
             state: block::state::State::default(),

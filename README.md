@@ -21,3 +21,5 @@ cp \
 ./target/x86_64-unknown-linux-musl/release/mini-kvvm-rs \
 ${HOME}/go/src/github.com/ava-labs/avalanchego/build/plugins/qBnAKUQ2mxjMHCneWjq5nFuhntoWrsKsCjaYSouFjpuCB2o5d
 ```
+
+avalanche-network-runner server --log-level info --port=":8080" --grpc-gateway-port=":8081"

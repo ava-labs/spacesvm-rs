@@ -12,6 +12,8 @@ use crate::chain::tx::tx::Transaction;
 pub struct Data {
     pub items: VecDeque<Entry>,
     pub lookup: HashMap<ids::Id, Entry>,
+    /// Vec of [Tx] that are ready to be gossiped.
+    pub new_txs: Vec<Transaction>,
 }
 
 /// Object representing a transaction stored in mempool.
@@ -27,7 +29,13 @@ impl Data {
         Self {
             items: VecDeque::with_capacity(max_size),
             lookup: HashMap::new(),
+            new_txs: Vec::new(),
         }
+    }
+
+    pub fn push_new_tx(&mut self, tx: Transaction) {
+        self.new_txs.push(tx);
+        log::info!("new tx added")
     }
 
     pub fn len(&self) -> usize {

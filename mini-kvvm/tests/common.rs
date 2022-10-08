@@ -1,5 +1,6 @@
 use std::io::{Error, ErrorKind, Result};
 
+use avalanche_proto::{rpcdb::database_server::{Database, DatabaseServer}, grpcutil::default_server};
 use avalanche_types::{
     self,
     choices::status,
@@ -16,6 +17,7 @@ use tokio::{
     net::TcpListener,
     sync::{mpsc, RwLock},
 };
+use tokio_stream::wrappers::TcpListenerStream;
 use tonic::transport::Channel;
 
 use mini_kvvm::vm;
@@ -54,7 +56,7 @@ pub async fn create_conn() -> Channel {
 }
 
 pub async fn initialize_vm(
-    mut vm: vm::ChainVm,
+    vm: &mut vm::ChainVm,
 ) -> Result<mpsc::Receiver<rpcchainvm::common::message::Message>> {
     let db = rpcchainvm::database::memdb::Database::new();
 
@@ -191,4 +193,23 @@ pub(crate) fn test_data3() -> &'static str {
   "id": 1
 }"#;
     data
+}
+
+pub async fn serve_test_database<D: Database + 'static>(
+    database: D,
+    listener: TcpListener,
+) -> std::io::Result<()>
+where
+    D: Database,
+{
+    default_server()
+        .add_service(DatabaseServer::new(database))
+        .serve_with_incoming(TcpListenerStream::new(listener))
+        .await
+        .map_err(|e| {
+            Error::new(
+                ErrorKind::Other,
+                format!("failed to serve test database service: {}", e),
+            )
+        })
 }

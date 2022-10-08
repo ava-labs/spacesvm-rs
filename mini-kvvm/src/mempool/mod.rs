@@ -3,11 +3,13 @@ pub mod data;
 use std::{
     io::Result,
     sync::{Arc, RwLock},
+    time::Duration,
 };
 
 use avalanche_types::ids;
+use tokio::time::sleep;
 
-use crate::chain::tx::tx::Transaction;
+use crate::{chain::tx::tx::Transaction, vm::ChainVm};
 
 use self::data::{Data, Entry};
 
@@ -19,9 +21,6 @@ pub struct Mempool {
     /// it as long as there is an unissued transaction remaining in [txs].
     pending_tx: crossbeam_channel::Sender<()>,
     pending_rx: crossbeam_channel::Receiver<()>,
-
-    /// Vec of [Tx] that are ready to be gossiped.
-    new_txs: Vec<Transaction>,
 }
 
 impl Mempool {
@@ -35,7 +34,6 @@ impl Mempool {
             data: Arc::new(RwLock::new(Data::new(max_size))),
             pending_tx,
             pending_rx,
-            new_txs: Vec::new(),
         }
     }
 
@@ -58,6 +56,7 @@ impl Mempool {
     /// Adds a Tx Entry to mempool and writes to the pending channel.
     pub fn add(&mut self, tx: Transaction) -> Result<bool> {
         let tx_id = &tx.id;
+        log::info!("add: called");
 
         let mut data = self.data.write().unwrap();
         if data.has(tx_id)? {
@@ -74,14 +73,16 @@ impl Mempool {
         // Optimistically add tx to mempool
         data.push(entry)?;
 
-        self.new_txs.push(tx);
+        data.push_new_tx(tx);
 
+        log::info!("mempool: add pending");
         self.add_pending();
+        log::info!("mempool: pending complete");
 
         Ok(true)
     }
 
-    /// Return
+    /// Pops the first entry from the list.
     pub fn pop_back(&self) -> Option<Transaction> {
         let mut data = self.data.write().unwrap();
         match data.items.pop_back() {
@@ -93,7 +94,7 @@ impl Mempool {
     /// Returns len of mempool data.
     pub fn len(&self) -> usize {
         let data = self.data.read().unwrap();
-        data.len()
+        data.items.len()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -103,19 +104,23 @@ impl Mempool {
 
     /// Returns the vec of transactions ready to gossip and replaces it with an empty vec.
     pub fn new_txs(&mut self) -> Result<Vec<Transaction>> {
-        let data = self.data.read().unwrap();
+        let mut data = self.data.write().unwrap();
+        log::info!("new_txs: found: {}", data.new_txs.len());
 
         let mut selected: Vec<Transaction> = Vec::new();
 
         // It is possible that a block may have been accepted that contains some
         // new transactions before [new_txs] is called.
-        for tx in self.new_txs.iter() {
+        for tx in data.new_txs.iter().cloned() {
+            log::info!("new_txs: found a tx");
             if data.has(&tx.id)? {
-                continue;
+                log::info!("new_txs: already have");
+                // continue;
             }
-            selected.push(tx.to_owned())
+            selected.push(tx);
+            log::info!("pushed selected");
         }
-        self.new_txs = Vec::new();
+        data.new_txs = Vec::new();
 
         Ok(selected)
     }
@@ -170,8 +175,10 @@ impl Mempool {
         }
     }
 
-    fn add_pending(&self) {
+    pub fn add_pending(&self) {
+        log::info!("add_pending: send");
         self.pending_tx.send(()).unwrap();
+        log::info!("add_pending: sent...");
     }
 }
 
@@ -246,4 +253,47 @@ async fn test_mempool() {
     assert!(resp.is_ok());
 
     assert_eq!(resp.unwrap().unwrap().id, tx_1_id);
+}
+
+#[tokio::test]
+async fn test_mempool_multi_thread() {
+    use crate::chain::crypto;
+    use crate::chain::tx::{decoder, tx::TransactionType, unsigned};
+    use secp256k1::{rand, SecretKey};
+
+    let vm = ChainVm::new();
+
+    let vm1 = vm.inner.clone();
+    tokio::spawn(async move {
+        let mut inner = vm1.write().await;
+        let tx_data_1 = unsigned::TransactionData {
+            typ: TransactionType::Bucket,
+            bucket: "foo".to_string(),
+            key: "".to_string(),
+            value: vec![],
+        };
+        let resp = tx_data_1.decode();
+        assert!(resp.is_ok());
+        let utx_1 = resp.unwrap();
+        let secret_key = SecretKey::new(&mut rand::thread_rng());
+        let dh_1 = decoder::hash_structured_data(&utx_1.typed_data().await).unwrap();
+        let sig_1 = crypto::sign(&dh_1.as_bytes(), &secret_key).unwrap();
+        let tx_1 = Transaction::new(utx_1, sig_1);
+
+        // add tx_1 to mempool
+        let resp = inner.mempool.add(tx_1);
+        assert!(resp.is_ok());
+        log::info!("wrote!")
+    });
+
+    let vm2 = vm.inner.clone();
+    tokio::spawn(async move {
+        sleep(Duration::from_secs(3)).await;
+        let mut inner = vm2.write().await;
+        let resp = inner.mempool.new_txs();
+        assert!(resp.is_ok());
+        log::info!("inner: {}", resp.unwrap().len())
+    });
+
+    sleep(Duration::from_secs(5)).await;
 }

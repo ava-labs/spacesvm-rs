@@ -13,7 +13,7 @@ use mini_kvvm::{genesis, vm};
 
 pub const APP_NAME: &str = "mini-kvvm-rs";
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread", worker_threads = 10)]
 async fn main() -> Result<()> {
     let matches = Command::new(APP_NAME)
         .version(crate_version!())
@@ -29,10 +29,10 @@ async fn main() -> Result<()> {
         .subcommands(vec![command_genesis()])
         .get_matches();
 
-    let log_level = matches
-        .get_one::<String>("LOG_LEVEL")
-        .map(String::as_str)
-        .unwrap_or("info");
+    // let log_level = matches
+    //     .get_one::<String>("LOG_LEVEL")
+    //     .map(String::as_str)
+    //     .unwrap_or("info");
 
     // ref. https://github.com/env-logger-rs/env_logger/issues/47
     // env_logger::init_from_env(

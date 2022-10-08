@@ -82,16 +82,19 @@ impl crate::chain::vm::Vm for ChainVm {
 
         let mut vm = self.inner.write().await;
 
+        log::info!("vm::submit store called");
         storage::submit(&vm.state, &mut txs)
             .await
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
+        log::info!("vm::submit add to mempool");
         for tx in txs.iter_mut() {
             let mempool = &mut vm.mempool;
             let _ = mempool
                 .add(tx.to_owned())
                 .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
         }
+        log::info!("vm::submit complete");
 
         Ok(())
     }
@@ -220,18 +223,11 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
         vm.genesis = genesis;
 
         // network
-        let network = network::Push::new(Arc::clone(&self.inner));
-        self.network = Some(Arc::new(RwLock::new(network)));
+        // let mut network = network::Push::new(self.inner.clone());
+        // self.network = Some(Arc::new(RwLock::new(network)));
 
-        let builder = block::builder::Timed::new(
-            BUILD_INTERVAL,
-            false,
-            vm.stop_rx.clone(),
-            vm.to_engine.as_ref().expect("vm.to_engine").clone(),
-            vm.builder_stop_rx.clone(),
-            vm.mempool.subscribe_pending(),
-        );
-        self.builder = Some(Arc::new(RwLock::new(builder)));
+        // let mut builder = block::builder::Timed::new(BUILD_INTERVAL, self.inner.clone());
+        // self.builder = Some(Arc::new(RwLock::new(builder)));
 
         // Try to load last accepted
         let has = vm
@@ -283,18 +279,16 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
             vm.preferred = genesis_block_id;
             log::info!("initialized from genesis block: {}", genesis_block_id);
         }
-        drop(vm);
 
-        let builder = Arc::clone(&self.builder.as_ref().expect("vm.builder"));
-        let vm_inner = Arc::clone(&self.inner);
+        let b_inner = self.inner.clone();
         tokio::spawn(async move {
-            let mut builder = builder.write().await;
+            let mut builder = block::builder::Timed::new(BUILD_INTERVAL, b_inner);
             builder.build().await;
         });
 
-        let network = Arc::clone(&self.network.as_ref().expect("vm.network"));
+        let n_inner = self.inner.clone();
         tokio::spawn(async move {
-            let mut network = network.write().await;
+            let mut network = network::Push::new(n_inner);
             network.gossip().await;
         });
 
@@ -360,15 +354,14 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
     /// Creates the HTTP handlers for custom Vm network calls
     /// for "ext/vm/[vmId]"
     async fn create_static_handlers(
-        &self,
+        &mut self,
     ) -> std::io::Result<
-        std::collections::HashMap<String, rpcchainvm::common::http_handler::HttpHandler>,
+        std::collections::HashMap<String, Arc<rpcchainvm::common::http_handler::HttpHandler>>,
     > {
         log::info!("vm::create_static_handlers called");
 
         // Initialize the jsonrpc public service and handler
-        let vm = self.clone();
-        let service = api::service::Service::new(vm);
+        let service = api::service::Service::new(self.inner.clone());
         // log::info!("vm::create_static_handlers called 2");
         let mut handler = jsonrpc_core::IoHandler::new();
         handler.extend_with(api::Service::to_delegate(service));
@@ -381,18 +374,18 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
         log::info!("vm::create_static_handlers -----end");
 
         let mut handlers = HashMap::new();
-        handlers.insert(String::from(PUBLIC_API_ENDPOINT), http_handler);
+        handlers.insert(String::from(PUBLIC_API_ENDPOINT), Arc::new(http_handler));
         Ok(handlers)
     }
 
     /// Creates the HTTP handlers for custom chain network calls
     /// for "ext/vm/[chainId]"
     async fn create_handlers(
-        &self,
+        &mut self,
     ) -> std::io::Result<
         std::collections::HashMap<
             String,
-            avalanche_types::rpcchainvm::common::http_handler::HttpHandler,
+            Arc<avalanche_types::rpcchainvm::common::http_handler::HttpHandler>,
         >,
     > {
         log::info!("vm::create_handlers called");
@@ -530,7 +523,7 @@ impl rpcchainvm::snowman::block::ChainVm for ChainVm {
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
         let mut builder = self.builder.as_ref().expect("vm.builder").write().await;
-        builder.handle_generate_block(Arc::clone(&self.inner)).await;
+        builder.handle_generate_block().await;
 
         self.notify_block_ready().await;
 
