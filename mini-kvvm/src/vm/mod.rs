@@ -211,17 +211,27 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
     ) -> Result<()> {
         log::info!("vm::initialize called");
 
+        log::info!("vm::initialize: 1");
         let mut vm = self.inner.write().await;
+        log::info!("vm::initialize: 2");
         let current = db_manager.current().await?;
+        log::info!("vm::initialize: 3");
         let db = current.db.clone();
+        log::info!("vm::initialize: 4");
 
         vm.ctx = ctx;
+        log::info!("vm::initialize: 5");
         vm.to_engine = Some(to_engine);
+        log::info!("vm::initialize: 6");
         vm.app_sender = Some(app_sender);
+        log::info!("vm::initialize: 7");
         vm.state = block::state::State::new(db);
+        log::info!("vm::initialize: 8");
         let genesis = Genesis::from_json(genesis_bytes)?;
+        log::info!("vm::initialize: 9");
         vm.genesis = genesis;
 
+        log::info!("vm::initialize: 1");
         // network
         // let mut network = network::Push::new(self.inner.clone());
         // self.network = Some(Arc::new(RwLock::new(network)));
@@ -236,6 +246,7 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
             .await
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
+        log::info!("vm::initialize: 2");
         // Check if last accepted block exists
         if has {
             let block_id = vm

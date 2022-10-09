@@ -1,6 +1,9 @@
 use std::io::{Error, ErrorKind, Result};
 
-use avalanche_proto::{rpcdb::database_server::{Database, DatabaseServer}, grpcutil::default_server};
+use avalanche_proto::{
+    grpcutil::default_server,
+    rpcdb::database_server::{Database, DatabaseServer},
+};
 use avalanche_types::{
     self,
     choices::status,
