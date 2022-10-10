@@ -178,7 +178,7 @@ impl Mempool {
     pub fn add_pending(&self) {
         log::info!("add_pending: send");
         self.pending_tx.send(()).unwrap();
-        log::info!("add_pending: sent...");
+        log::info!("add_pending: sent");
     }
 }
 

@@ -13,7 +13,7 @@ use avalanche_types::{
     ids,
     rpcchainvm::{
         self,
-        common::{appsender, vm::Fx},
+        common::{appsender, vm::Fx, http_handler::{HttpHandler, LockOptions}},
         snow::State,
     },
 };
@@ -110,7 +110,7 @@ impl rpcchainvm::common::vm::Vm for Client {
         Ok(())
     }
 
-    async fn set_state(&self, state: State) -> Result<()> {
+    async fn set_state(&self, _state: State) -> Result<()> {
         // TODO:
         Ok(())
     }
@@ -126,7 +126,7 @@ impl rpcchainvm::common::vm::Vm for Client {
 
     async fn create_static_handlers(
         &mut self,
-    ) -> Result<HashMap<String, Arc<rpcchainvm::common::http_handler::HttpHandler>>> {
+    ) -> Result<HashMap<String, rpcchainvm::common::http_handler::HttpHandler>> {
         let resp = self
             .inner
             .create_static_handlers(Empty {})
@@ -140,12 +140,24 @@ impl rpcchainvm::common::vm::Vm for Client {
 
         let resp = resp.into_inner();
 
-        Ok(HashMap::new())
+        let mut http_handler: HashMap<String, rpcchainvm::common::http_handler::HttpHandler> = HashMap::new();
+        
+        for h in resp.handlers.iter() {
+            let lock_option = LockOptions::try_from(h.lock_options).map_err(|_| {
+                Error::new(
+                    ErrorKind::Other,
+                    "invalid lock option",
+                )
+            })?;
+            http_handler.insert(h.prefix.clone(), HttpHandler{lock_option, handler: None, server_addr: Some(h.server_addr.clone()) });
+        }
+
+        Ok(http_handler)
     }
 
     async fn create_handlers(
         &mut self,
-    ) -> Result<HashMap<String, Arc<rpcchainvm::common::http_handler::HttpHandler>>> {
+    ) -> Result<HashMap<String, rpcchainvm::common::http_handler::HttpHandler>> {
         Ok(HashMap::new())
     }
 }

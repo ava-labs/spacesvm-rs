@@ -1,6 +1,5 @@
 use std::io::{Error, ErrorKind, Result};
 
-use avalanche_types::key::ECDSA_RECOVERABLE_SIG_LEN;
 use ethereum_types::Address;
 use secp256k1::{
     self,
@@ -11,6 +10,7 @@ use sha3::{Digest, Keccak256};
 
 const LEGACY_SIG_ADJ: usize = 27;
 pub const MESSAGE_SIZE: usize = 32;
+const ECDSA_RECOVERABLE_SIG_LEN: usize  = 32;
 
 pub fn sign(dh: &[u8], secret: &SecretKey) -> Result<Vec<u8>> {
     let secp = Secp256k1::signing_only();

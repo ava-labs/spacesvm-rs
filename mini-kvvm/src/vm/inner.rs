@@ -3,7 +3,7 @@ use std::num::NonZeroUsize;
 use avalanche_types::{ids, rpcchainvm};
 use lru::LruCache;
 use semver::Version;
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::mpsc;
 
 use crate::{block, genesis::Genesis, mempool};
 

@@ -25,7 +25,7 @@ use crate::{
     network,
 };
 
-const PUBLIC_API_ENDPOINT: &str = "/public";
+pub const PUBLIC_API_ENDPOINT: &str = "/public";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 // TODO: make configurable
@@ -367,7 +367,7 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
     async fn create_static_handlers(
         &mut self,
     ) -> std::io::Result<
-        std::collections::HashMap<String, Arc<rpcchainvm::common::http_handler::HttpHandler>>,
+        std::collections::HashMap<String, rpcchainvm::common::http_handler::HttpHandler>,
     > {
         log::info!("vm::create_static_handlers called");
 
@@ -385,7 +385,7 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
         log::info!("vm::create_static_handlers -----end");
 
         let mut handlers = HashMap::new();
-        handlers.insert(String::from(PUBLIC_API_ENDPOINT), Arc::new(http_handler));
+        handlers.insert(String::from(PUBLIC_API_ENDPOINT), http_handler);
         Ok(handlers)
     }
 
@@ -396,7 +396,7 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
     ) -> std::io::Result<
         std::collections::HashMap<
             String,
-            Arc<avalanche_types::rpcchainvm::common::http_handler::HttpHandler>,
+            avalanche_types::rpcchainvm::common::http_handler::HttpHandler,
         >,
     > {
         log::info!("vm::create_handlers called");
