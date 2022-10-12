@@ -149,52 +149,25 @@ pub fn test_data() -> &'static str {
     data
 }
 
-pub(crate) fn test_data3() -> &'static str {
+pub(crate) fn decode_tx() -> &'static str {
     let data = r#"
     {
-  "jsonrpc": "2.0",
-  "method": "issue_tx",
-  "params": [
-    {
-      "typed_data": {
-        "domain": {
-          "magic": "0x00",
-          "name": "MiniKvvm"
-        },
-        "message": {
-          "blockId": "0000000000000000000000000000000000000000000000000000000000000000",
-          "bucket": "666f6f"
-        },
-        "primary_type": {
-          "type": "Bucket"
-        },
-        "types": {
-          "EIP712Domain": [
-            {
-              "name": "name",
-              "type": "string"
+      "jsonrpc": "2.0",
+      "method": "decode_tx",
+      "params": [
+        {
+          "tx_data": {
+            "bucket": "kvs",
+            "key": "",
+            "typ": {
+              "type": "Bucket"
             },
-            {
-              "name": "magic",
-              "type": "uint64"
-            }
-          ],
-          "bucket": [
-            {
-              "name": "bucket",
-              "type": "string"
-            },
-            {
-              "name": "blockId",
-              "type": "string"
-            }
-          ]
+            "value": []
+          }
         }
-      }
-    }
-  ],
-  "id": 1
-}"#;
+      ],
+      "id": 1
+    }"#;
     data
 }
 

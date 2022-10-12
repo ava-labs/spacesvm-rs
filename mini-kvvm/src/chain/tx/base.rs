@@ -7,6 +7,7 @@ use super::unsigned;
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Default)]
 pub struct Tx {
+    #[serde(deserialize_with = "ids::must_deserialize_id")]
     pub block_id: ids::Id,
 }
 

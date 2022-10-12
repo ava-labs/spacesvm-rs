@@ -9,12 +9,21 @@ license = "BSD-3-Clause"
 homepage = "https://avax.network"
 
 [dependencies]
+avalanche-types = { version = "0.0.74" }
 clap = { version = "4.0", features = ["derive"] }
+env_logger = "0.9.0"
 secp256k1 = { version = "0.22.1", features = ["global-context", "rand-std", "recovery"] }
 hex = "0.4.3"
+http-manager = "0.0.3"
 jsonrpc-core = "18.0.0"
 jsonrpc-core-client = { version = "18.0.0" }
 jsonrpc-client-transports = "18.0.0"
 jsonrpc-derive = "18.0"
+log = "0.4.17"
 mini-kvvm = {path = "../mini-kvvm"}
+serde = { version = "1.0.145", features = ["derive"] }
+serde_json = "1.0.85" 
 tokio = { version = "1.21.1", features = ["full"] }
+
+[dev-dependencies]
+avalanche-types = { version = "0.0.74" }

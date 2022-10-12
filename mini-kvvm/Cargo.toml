@@ -15,7 +15,7 @@ path = "src/bin/mini-kvvm/main.rs"
 
 [dependencies]
 avalanche-proto = { version = "0.16.0" }
-avalanche-types = { version = "0.0.73" }
+avalanche-types = { version = "0.0.74" }
 byteorder = "1.4.3"
 chan = "0.1.23"
 chrono = "0.4.19"
@@ -40,6 +40,7 @@ radix_fmt = "1.0.0"
 secp256k1 = { version = "0.22.1", features = ["global-context", "rand-std", "recovery"] }
 semver = "1.0.13"
 serde = { version = "1.0.144", features = ["derive"] }
+serde-hex = "0.1.0"
 serde_json = "1.0.85"
 serde_yaml = "0.9.10"
 sha3 = "0.10.2"

@@ -64,9 +64,9 @@ async fn service_test() {
 // update to use block builder
 async fn test_rpc_client(client: gen_client::Client) {
     // // ping
-    // let resp = client.ping().await;
-    // assert!(resp.is_ok());
-    // assert!(resp.unwrap().success);
+    let resp = client.ping().await;
+    assert!(resp.is_ok());
+    assert!(resp.unwrap().success);
 
     // // bucket tx: create kvs bucket
     // let tx_data = unsigned::TransactionData {

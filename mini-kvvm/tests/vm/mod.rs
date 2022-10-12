@@ -7,6 +7,7 @@ use avalanche_types::rpcchainvm::common::http_handler::{HttpHandler, LockOptions
 use avalanche_types::{rpcchainvm, ids};
 use avalanche_types::rpcchainvm::common::message::Message;
 use avalanche_types::rpcchainvm::{common::vm::Vm, utils};
+use jsonrpc_core::Response;
 use mini_kvvm::genesis::Genesis;
 use mini_kvvm::vm::{self, PUBLIC_API_ENDPOINT};
 use tokio::sync::broadcast::{Receiver, Sender};
@@ -15,7 +16,7 @@ use tokio::time::Duration;
 use tonic::transport::Channel;
 use tokio::sync::mpsc;
 
-use crate::common;
+use crate::common::{self, decode_tx};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 10)]
 async fn create_bucket_raw_json() {
@@ -99,8 +100,8 @@ async fn create_bucket_raw_json() {
 
     sleep(Duration::from_secs(10)).await;
 
-    // create a generic http request with json fixture
-    let data = test_data().as_bytes().to_vec();
+    // create a generic http request with json fixture to decode tx
+    let data = decode_tx().as_bytes().to_vec();
     let req = http::request::Builder::new().body(data).unwrap();
 
     // pass the http request to the serve_http_simple RPC. this same process
@@ -120,7 +121,9 @@ async fn create_bucket_raw_json() {
 
     let resp_body_bytes = resp.body().to_owned();
 
-    let json_response = std::str::from_utf8(&resp_body_bytes).unwrap();
+    let json_response_str = std::str::from_utf8(&resp_body_bytes).unwrap();
+
+    print!("{}",json_response_str);
 
         let data = test_data().as_bytes().to_vec();
     let req = http::request::Builder::new().body(data).unwrap();
@@ -141,6 +144,10 @@ async fn create_bucket_raw_json() {
         .unwrap();
 
     let resp_body_bytes = resp.body().to_owned();
+
+     let json_response_str = std::str::from_utf8(&resp_body_bytes).unwrap();
+
+    print!("{}",json_response_str);
 
     sleep(Duration::from_secs(25)).await;
 

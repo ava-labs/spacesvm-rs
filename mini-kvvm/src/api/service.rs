@@ -49,13 +49,15 @@ impl crate::api::Service for Service {
                 .typed_data
                 .parse_typed_data()
                 .map_err(create_jsonrpc_error)?;
-
+            log::info!("unsigned");
             let sig_bytes = hex::decode(params.signature).map_err(|e| {
                 create_jsonrpc_error(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     e.to_string(),
                 ))
             })?;
+            log::info!("sig bytes");
+
             let mut tx = chain::tx::tx::Transaction::new(unsigned_tx, sig_bytes);
             tx.init().await.map_err(create_jsonrpc_error)?;
             let tx_id = tx.id().await;
@@ -99,6 +101,11 @@ impl crate::api::Service for Service {
             let last_accepted = &inner.last_accepted;
             utx.set_block_id(last_accepted.id).await;
             let typed_data = utx.typed_data().await;
+ 
+            let string = serde_json::to_string(&typed_data).unwrap();
+
+            log::info!("decode_tx: {}",string);
+
             Ok(DecodeTxResponse { typed_data })
         })
     }
