@@ -274,10 +274,9 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
             log::info!("initialized from genesis block: {}", genesis_block_id);
         }
 
-
         // start the gossip loops
         let inner = Arc::clone(&self.inner);
-        tokio::spawn(async move{
+        tokio::spawn(async move {
             network::Push::new(inner).gossip().await;
         });
 
@@ -357,6 +356,21 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
     > {
         log::info!("vm::create_static_handlers called");
 
+        Ok(HashMap::new())
+    }
+
+    /// Creates the HTTP handlers for custom chain network calls
+    /// for "ext/vm/[chainId]"
+    async fn create_handlers(
+        &mut self,
+    ) -> std::io::Result<
+        std::collections::HashMap<
+            String,
+            avalanche_types::rpcchainvm::common::http_handler::HttpHandler,
+        >,
+    > {
+        log::info!("vm::create_handlers called");
+
         // Initialize the jsonrpc public service and handler
         let service = api::service::Service::new(self.inner.clone());
         // log::info!("vm::create_static_handlers called 2");
@@ -372,22 +386,8 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
 
         let mut handlers = HashMap::new();
         handlers.insert(String::from(PUBLIC_API_ENDPOINT), http_handler);
+
         Ok(handlers)
-    }
-
-    /// Creates the HTTP handlers for custom chain network calls
-    /// for "ext/vm/[chainId]"
-    async fn create_handlers(
-        &mut self,
-    ) -> std::io::Result<
-        std::collections::HashMap<
-            String,
-            avalanche_types::rpcchainvm::common::http_handler::HttpHandler,
-        >,
-    > {
-        log::info!("vm::create_handlers called");
-
-        Ok(HashMap::new())
     }
 }
 
