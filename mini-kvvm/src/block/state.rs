@@ -22,7 +22,7 @@ use super::Block;
 
 const LAST_ACCEPTED_BLOCK_KEY: &[u8] = b"last_accepted";
 pub const BYTE_DELIMITER: &[u8] = b"/";
-pub const HASH_LEN: usize = ids::ID_LEN + 2;
+pub const HASH_LEN: usize = ids::LEN + 2;
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct ValueMeta {

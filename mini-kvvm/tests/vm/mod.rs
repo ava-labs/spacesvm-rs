@@ -44,7 +44,7 @@ async fn create_bucket_raw_json() {
     });
 
     // wait for server to start
-    sleep(Duration::from_millis(10000)).await;
+    sleep(Duration::from_millis(100)).await;
 
     // create gRPC client for Vm client.
     let client_conn = Channel::builder(format!("http://{}", addr).parse().unwrap())

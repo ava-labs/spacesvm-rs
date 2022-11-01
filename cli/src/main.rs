@@ -1,4 +1,4 @@
-use avalanche_types::jsonrpc::IssueTxRequest;
+use avalanche_types::jsonrpc::avm::IssueTxRequest;
 use clap::{Parser, Subcommand};
 use jsonrpc_client_transports::{transports, RpcError, RpcChannel};
 use jsonrpc_core::{futures, serde_json, MethodCall, serde};

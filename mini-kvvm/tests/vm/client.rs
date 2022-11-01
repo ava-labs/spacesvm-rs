@@ -124,7 +124,7 @@ impl rpcchainvm::common::vm::Vm for Client {
         Ok(String::new())
     }
 
-    async fn create_static_handlers(
+    async fn create_handlers(
         &mut self,
     ) -> Result<HashMap<String, rpcchainvm::common::http_handler::HttpHandler>> {
         let resp = self
@@ -155,7 +155,7 @@ impl rpcchainvm::common::vm::Vm for Client {
         Ok(http_handler)
     }
 
-    async fn create_handlers(
+    async fn create_static_handlers(
         &mut self,
     ) -> Result<HashMap<String, rpcchainvm::common::http_handler::HttpHandler>> {
         Ok(HashMap::new())
