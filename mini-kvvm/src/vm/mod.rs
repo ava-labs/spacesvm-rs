@@ -15,7 +15,7 @@ use avalanche_types::{
         concensus::snowman::{Block as SnowmanBlock, Initializer},
     },
 };
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use tokio::sync::{mpsc, RwLock};
 
 use crate::{
@@ -34,34 +34,16 @@ const BLOCKS_LRU_SIZE: usize = 8192;
 const BUILD_INTERVAL: Duration = Duration::from_millis(500);
 
 pub struct ChainVm {
-    /// Always defined as Some during runtime.
     pub inner: Arc<RwLock<inner::Inner>>,
-
-    /// Manages block creation and gossiping loops.
-    pub builder: Option<Arc<RwLock<block::builder::Timed>>>,
-
-    /// Manages gossip messages.
-    pub network: Option<Arc<RwLock<network::Push>>>,
-}
-
-impl Clone for ChainVm {
-    fn clone(&self) -> Self {
-        Self {
-            // Only inner is cloned.
-            inner: Arc::clone(&self.inner),
-
-            builder: None,
-            network: None,
-        }
-    }
+    /// ID of this node
+    node_id: ids::node::Id,
 }
 
 impl ChainVm {
     pub fn new() -> Self {
         Self {
             inner: Arc::new(RwLock::new(inner::Inner::new())),
-            builder: None,
-            network: None,
+            node_id: ids::node::Id::default(),
         }
     }
 }
@@ -83,7 +65,7 @@ impl crate::chain::vm::Vm for ChainVm {
         let mut vm = self.inner.write().await;
 
         log::info!("vm::submit store called");
-        storage::submit(&vm.state, &mut txs)
+        storage::submit(&vm.state.clone(), &mut txs)
             .await
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
@@ -104,7 +86,7 @@ impl crate::chain::vm::Vm for ChainVm {
     async fn notify_block_ready(&self) {
         log::info!("vm::notify_block_ready called");
 
-        let vm = self.inner.write().await;
+        let vm = self.inner.read().await;
 
         if let Some(engine) = &vm.to_engine {
             if let Err(_) = engine
@@ -127,24 +109,20 @@ impl rpcchainvm::common::apphandler::AppHandler for ChainVm {
         &self,
         _node_id: &ids::node::Id,
         _request_id: u32,
-        _deadline: time::Instant,
+        _deadline: DateTime<Utc>,
         _request: &[u8],
     ) -> Result<()> {
         log::info!("vm::app_request called");
 
-        Err(Error::new(
-            ErrorKind::Unsupported,
-            "app request not implemented",
-        ))
+        // currently no app-specific messages
+        Ok(())
     }
 
     async fn app_request_failed(&self, _node_id: &ids::node::Id, _request_id: u32) -> Result<()> {
         log::info!("vm::app_request_failed called");
 
-        Err(Error::new(
-            ErrorKind::Unsupported,
-            "app request failed not implemented",
-        ))
+        // currently no app-specific messages
+        Ok(())
     }
 
     async fn app_response(
@@ -155,19 +133,44 @@ impl rpcchainvm::common::apphandler::AppHandler for ChainVm {
     ) -> Result<()> {
         log::info!("vm::app_response called");
 
-        Err(Error::new(
-            ErrorKind::Unsupported,
-            "app response not implemented",
-        ))
+        // currently no app-specific messages
+        Ok(())
     }
 
-    async fn app_gossip(&self, _node_id: &ids::node::Id, _msg: &[u8]) -> Result<()> {
+    async fn app_gossip(&self, node_id: &ids::node::Id, msg: &[u8]) -> Result<()> {
         log::info!("vm::app_gossip called");
 
-        Err(Error::new(
-            ErrorKind::Unsupported,
-            "app gossip not implemented",
-        ))
+        log::info!(
+            "AppGossip message handler sender: {}, receiver: {}, bytes: {}",
+            &node_id,
+            &self.node_id,
+            &msg.len()
+        );
+
+        let txs: Vec<chain::tx::tx::Transaction> = serde_json::from_slice(&msg)
+            .map_err(|e| {
+                log::info!(
+                    "AppGossip provided invalid txs peer_id: {}: {}",
+                    &node_id,
+                    e.to_string()
+                )
+            })
+            .unwrap();
+
+        self.submit(txs)
+            .await
+            .map_err(|e| {
+                log::info!(
+                    "AppGossip failed to submit txs: peer_id: {}: {}",
+                    &node_id,
+                    e.to_string()
+                )
+            })
+            .unwrap();
+
+        log::info!("vm::app_gossip suscces");
+
+        Ok(())
     }
 }
 
@@ -221,6 +224,7 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
         vm.state = block::state::State::new(db);
         let genesis = Genesis::from_json(genesis_bytes)?;
         vm.genesis = genesis;
+        self.node_id = vm.ctx.as_ref().expect("inner.ctx").node_id;
 
         // Try to load last accepted
         let has = vm
@@ -519,8 +523,9 @@ impl rpcchainvm::snowman::block::ChainVm for ChainVm {
             .await
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
-        let mut builder = self.builder.as_ref().expect("vm.builder").write().await;
-        builder.handle_generate_block().await;
+        // TODO: probably needs a channel
+        // let mut builder = self.builder.as_ref().expect("vm.builder").write().await;
+        // builder.handle_generate_block().await;
 
         self.notify_block_ready().await;
 

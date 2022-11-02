@@ -13,7 +13,11 @@ use avalanche_types::{
     ids,
     rpcchainvm::{
         self,
-        common::{appsender, vm::Fx, http_handler::{HttpHandler, LockOptions}},
+        common::{
+            appsender,
+            http_handler::{HttpHandler, LockOptions},
+            vm::Fx,
+        },
         snow::State,
     },
 };
@@ -84,7 +88,9 @@ impl rpcchainvm::common::vm::Vm for Client {
         db_servers.push(versiondb_servers);
 
         let genesis_bytes = Bytes::from(
-        "{\"author\":\"subnet creator\",\"welcome_message\":\"Hello from Rust VM!\"}".as_bytes());
+            "{\"author\":\"subnet creator\",\"welcome_message\":\"Hello from Rust VM!\"}"
+                .as_bytes(),
+        );
 
         let request = InitializeRequest {
             network_id: 0,
@@ -140,16 +146,20 @@ impl rpcchainvm::common::vm::Vm for Client {
 
         let resp = resp.into_inner();
 
-        let mut http_handler: HashMap<String, rpcchainvm::common::http_handler::HttpHandler> = HashMap::new();
-        
+        let mut http_handler: HashMap<String, rpcchainvm::common::http_handler::HttpHandler> =
+            HashMap::new();
+
         for h in resp.handlers.iter() {
-            let lock_option = LockOptions::try_from(h.lock_options).map_err(|_| {
-                Error::new(
-                    ErrorKind::Other,
-                    "invalid lock option",
-                )
-            })?;
-            http_handler.insert(h.prefix.clone(), HttpHandler{lock_option, handler: None, server_addr: Some(h.server_addr.clone()) });
+            let lock_option = LockOptions::try_from(h.lock_options)
+                .map_err(|_| Error::new(ErrorKind::Other, "invalid lock option"))?;
+            http_handler.insert(
+                h.prefix.clone(),
+                HttpHandler {
+                    lock_option,
+                    handler: None,
+                    server_addr: Some(h.server_addr.clone()),
+                },
+            );
         }
 
         Ok(http_handler)

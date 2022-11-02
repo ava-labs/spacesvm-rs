@@ -4,17 +4,17 @@ use std::collections::HashMap;
 use std::io::{Error, ErrorKind};
 
 use avalanche_types::rpcchainvm::common::http_handler::{HttpHandler, LockOptions};
-use avalanche_types::{rpcchainvm, ids};
 use avalanche_types::rpcchainvm::common::message::Message;
 use avalanche_types::rpcchainvm::{common::vm::Vm, utils};
+use avalanche_types::{ids, rpcchainvm};
 use jsonrpc_core::Response;
 use mini_kvvm::genesis::Genesis;
 use mini_kvvm::vm::{self, PUBLIC_API_ENDPOINT};
 use tokio::sync::broadcast::{Receiver, Sender};
+use tokio::sync::mpsc;
 use tokio::time::sleep;
 use tokio::time::Duration;
 use tonic::transport::Channel;
-use tokio::sync::mpsc;
 
 use crate::common::{self, decode_tx};
 
@@ -56,23 +56,24 @@ async fn create_bucket_raw_json() {
 
     let db_manager = rpcchainvm::database::manager::DatabaseManager::new_from_databases(Vec::new());
     let app_sender = MockAppSender::new();
-    let (tx_engine, mut rx_engine): (mpsc::Sender<Message>, mpsc::Receiver<Message>) = mpsc::channel(1);
+    let (tx_engine, mut rx_engine): (mpsc::Sender<Message>, mpsc::Receiver<Message>) =
+        mpsc::channel(1);
 
-     tokio::spawn(async move {
+    tokio::spawn(async move {
         loop {
             let _ = rx_engine.recv().await;
         }
     });
 
-   let resp =  client.create_static_handlers().await;
-   assert!(resp.is_ok());
+    let resp = client.create_handlers().await;
+    assert!(resp.is_ok());
 
-   let handlers = resp.unwrap();
+    let handlers = resp.unwrap();
 
-   // get the "/public" handler we assume it exists because it was created during initialize.
-   let endpoint = handlers.get(PUBLIC_API_ENDPOINT).unwrap();
+    // get the "/public" handler we assume it exists because it was created during initialize.
+    let endpoint = handlers.get(PUBLIC_API_ENDPOINT).unwrap();
 
-   let addr = endpoint.server_addr.as_ref().unwrap();
+    let addr = endpoint.server_addr.as_ref().unwrap();
 
     // create gRPC client for Vm client.
     let client_conn = Channel::builder(format!("http://{}", addr).parse().unwrap())
@@ -85,16 +86,18 @@ async fn create_bucket_raw_json() {
     let genesis_bytes =
         "{\"author\":\"subnet creator\",\"welcome_message\":\"Hello from Rust VM!\"}".as_bytes();
 
-    let resp = client.initialize(
-        None,
-        db_manager,
-        genesis_bytes,
-        &[],
-        &[],
-        tx_engine,
-        &[()],
-        app_sender,        
-    ).await;
+    let resp = client
+        .initialize(
+            None,
+            db_manager,
+            genesis_bytes,
+            &[],
+            &[],
+            tx_engine,
+            &[()],
+            app_sender,
+        )
+        .await;
 
     assert!(resp.is_ok());
 
@@ -123,9 +126,9 @@ async fn create_bucket_raw_json() {
 
     let json_response_str = std::str::from_utf8(&resp_body_bytes).unwrap();
 
-    print!("{}",json_response_str);
+    print!("{}", json_response_str);
 
-        let data = test_data().as_bytes().to_vec();
+    let data = test_data().as_bytes().to_vec();
     let req = http::request::Builder::new().body(data).unwrap();
 
     // pass the http request to the serve_http_simple RPC. this same process
@@ -145,34 +148,32 @@ async fn create_bucket_raw_json() {
 
     let resp_body_bytes = resp.body().to_owned();
 
-     let json_response_str = std::str::from_utf8(&resp_body_bytes).unwrap();
+    let json_response_str = std::str::from_utf8(&resp_body_bytes).unwrap();
 
-    print!("{}",json_response_str);
+    print!("{}", json_response_str);
 
     sleep(Duration::from_secs(25)).await;
 
     // TODO shutdown;
-
 }
 
-
-#[derive(Clone)] 
+#[derive(Clone)]
 struct MockAppSender;
 
 impl MockAppSender {
     fn new() -> Box<dyn rpcchainvm::common::appsender::AppSender + Send + Sync> {
-        Box::new(MockAppSender{})
+        Box::new(MockAppSender {})
     }
 }
 
 #[tonic::async_trait]
-impl rpcchainvm::common::appsender::AppSender for MockAppSender{
-        async fn send_app_request(
+impl rpcchainvm::common::appsender::AppSender for MockAppSender {
+    async fn send_app_request(
         &self,
         _node_ids: ids::node::Set,
         _request_id: u32,
         _request: Vec<u8>,
-    ) -> std::io::Result<()>{
+    ) -> std::io::Result<()> {
         Ok(())
     }
 
@@ -185,11 +186,15 @@ impl rpcchainvm::common::appsender::AppSender for MockAppSender{
         Ok(())
     }
 
-    async fn send_app_gossip(&self, _msg: Vec<u8>) -> std::io::Result<()>{
+    async fn send_app_gossip(&self, _msg: Vec<u8>) -> std::io::Result<()> {
         Ok(())
     }
 
-    async fn send_app_gossip_specific(&self, _node_ids: ids::node::Set, _msg: Vec<u8>) -> std::io::Result<()>{
+    async fn send_app_gossip_specific(
+        &self,
+        _node_ids: ids::node::Set,
+        _msg: Vec<u8>,
+    ) -> std::io::Result<()> {
         Ok(())
     }
 }

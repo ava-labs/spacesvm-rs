@@ -3,15 +3,14 @@ use std::{
     io::{Error, ErrorKind, Result},
 };
 
-use avalanche_types::ids;
+use avalanche_types::{hash, ids};
 use eip_712::Type as ParserType;
 use ethereum_types::H256;
 use keccak_hash::keccak;
-use serde::de::Visitor;
+use radix_fmt::radix;
 use serde::{Deserialize, Serialize};
 use serde_json::to_value;
-use std::fmt;
-use serde_hex::{SerHexSeq, StrictPfx};
+use sha3::{Digest, Sha3_256};
 
 use super::{base, bucket, delete, set, tx::TransactionType, unsigned};
 
@@ -30,61 +29,26 @@ pub type Types = HashMap<String, Vec<Type>>;
 pub type TypedDataMessage = HashMap<String, MessageValue>;
 
 // TypedDataDomain represents the domain part of an EIP-712 message.
+#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
 #[derive(Deserialize, Serialize, Debug, Clone, Default)]
 pub struct TypedDataDomain {
     pub name: String,
     pub magic: String,
 }
 
-pub fn mini_kvvm_domain(_m: u64) -> TypedDataDomain {
+pub fn mini_kvvm_domain(m: u64) -> TypedDataDomain {
     return TypedDataDomain {
         name: "MiniKvvm".to_string(),
-        magic: "0x00".to_string(),
+        magic: "0x00".to_string(), // radix(m, 10).to_string(),
     };
 }
 
-#[derive(Debug, Serialize, Clone)]
-#[serde(untagged)] 
+#[derive(Debug, Clone)]
 pub enum MessageValue {
-    #[serde(with = "SerHexSeq::<StrictPfx>")]
     Vec(Vec<u8>),
-    // #[serde(with = "SerHexSeq::<StrictPfx>")]
     Bytes(Vec<u8>),
 }
-
-// impl<'de> serde::Deserialize<'de> for MessageValue {
-//     fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error> where D: serde::Deserializer<'de> {
-//         if let Ok(bar) = MessageValue::deserialize(deserializer) {
-//             match bar {
-//                 MessageValue::Vec(v) =>    match hex::decode(&v[2..]) {
-//                     Ok(s) => Ok(MessageValue::Vec(s)),
-//                     Err(e) => Err(serde::de::Error::custom(e.to_string())),
-//                 },
-//                 MessageValue::Bytes(v) =>    match hex::decode(v) {
-//                     Ok(s) => Ok(MessageValue::Bytes(s)),
-//                     Err(e) => Err(serde::de::Error::custom(e.to_string())),
-//                 },
-//             }
-//             // Ok(Foo::A(bar))
-//         } else {
-//             Err(serde::de::Error::custom("data did not match any variant of untagged enum Foo"))
-//         }
-//     }
-// }
-
-// impl Serialize for MessageValue {
-//     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-//     where
-//         S: serde::Serializer,
-//     {
-//         match self {
-//             MessageValue::Vec(v) => serializer.serialize_str(&hex::encode(v)),
-//             MessageValue::Bytes(v) => {
-//                 serializer.serialize_str(format!("0x{}", &hex::encode(v)).as_str())
-//             }
-//         }
-//     }
-// }
 
 impl MessageValue {
     pub fn to_string(self) -> String {
@@ -95,99 +59,56 @@ impl MessageValue {
     }
 }
 
-// struct MessageValueVisitor;
-// impl<'de> Visitor<'de> for MessageValueVisitor {
-//     type Value = MessageValue;
-
-//     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-//         formatter.write_str("an hex string")
-//     }
-
-//     fn visit_string<E>(self, v: String) -> std::result::Result<Self::Value, E>
-//     where
-//         E: serde::de::Error,
-//     {
-//         if v.starts_with("0x") {
-//             match hex::decode(&v[2..]) {
-//                 Ok(s) => Ok(MessageValue::Bytes(s)),
-//                 Err(e) => Err(E::custom(e.to_string())),
-//             }
-//         } else {
-//             match hex::decode(v) {
-//                 Ok(s) => Ok(MessageValue::Vec(s)),
-//                 Err(e) => Err(E::custom(e.to_string())),
-//             }
-//         }
-//     }
-// }
-
-// impl<'de> Deserialize<'de> for MessageValue {
-//     fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-//     where
-//         D: serde::Deserializer<'de>,
-//     {
-//         deserializer.deserialize_string(MessageValueVisitor)
-//     }
-// }
-
-use serde::de::{self, IntoDeserializer};
-
-
-impl<'de> Deserialize<'de> for MessageValue {
-    fn deserialize<D: de::Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
-        struct MessageValueVisitor;
-        impl<'de> de::Visitor<'de> for MessageValueVisitor {
-            type Value = MessageValue;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                write!(formatter, "a potential or array of potentials")
-            }
-
-            fn visit_seq<A: de::SeqAccess<'de>>(self, mut seq: A) -> std::result::Result<Self::Value, A::Error> {
-                panic!("############################: seq");
-                Ok(MessageValue::Bytes(vec![]))
-            }
-
-            fn visit_string<E: de::Error>(self, v: String) -> std::result::Result<Self::Value, E> {
-                if v.starts_with("0x") {
-                    match hex::decode(&v[2..]) {
-                        Ok(s) => Ok(MessageValue::Bytes(s)),
-                        Err(e) => Err(E::custom(e.to_string())),
-                    }
-                } else {
-                    match hex::decode(v) {
-                        Ok(s) => Ok(MessageValue::Vec(s)),
-                        Err(e) => Err(E::custom(e.to_string())),
-                    }
-                }
-            }
-
-
-            fn visit_str<E: de::Error>(self, v: &str) -> std::result::Result<Self::Value, E> {
-                if v.starts_with("0x") {
-                    match hex::decode(&v[2..]) {
-                        Ok(s) => Ok(MessageValue::Bytes(s)),
-                        Err(e) => Err(E::custom(e.to_string())),
-                    }
-                } else {
-                    match hex::decode(v) {
-                        Ok(s) => Ok(MessageValue::Vec(s)),
-                        Err(e) => Err(E::custom(e.to_string())),
-                    }
-                }
-            }
-
-            fn visit_map<A: de::MapAccess<'de>>(self, map: A) -> std::result::Result<Self::Value, A::Error> {
-                panic!("############################: map");
-            Ok(MessageValue::Bytes(vec![]))
-
+impl Serialize for MessageValue {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            MessageValue::Vec(v) => serializer.serialize_str(&hex::encode(v)),
+            MessageValue::Bytes(v) => {
+                serializer.serialize_str(format!("0x{}", &hex::encode(v)).as_str())
             }
         }
-
-        deserializer.deserialize_any(MessageValueVisitor)
     }
 }
 
+use serde::de::Visitor;
+use std::fmt;
+struct MessageValueVisitor;
+impl<'de> Visitor<'de> for MessageValueVisitor {
+    type Value = MessageValue;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("an hex string")
+    }
+
+    fn visit_string<E>(self, v: String) -> std::result::Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        if v.starts_with("0x") {
+            match hex::decode(&v[2..]) {
+                Ok(s) => Ok(MessageValue::Bytes(s)),
+                Err(e) => Err(E::custom(e.to_string())),
+            }
+        } else {
+            match hex::decode(v) {
+                Ok(s) => Ok(MessageValue::Vec(s)),
+                Err(e) => Err(E::custom(e.to_string())),
+            }
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for MessageValue {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_string(MessageValueVisitor)
+    }
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct TypedData {
@@ -231,7 +152,9 @@ impl TypedData {
         let r_block_id = self
             .get_typed_message(TD_BLOCK_ID.to_owned())
             .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
-        let block_id = ids::Id::from_slice(r_block_id.as_bytes());
+
+        log::info!("id len: {}", r_block_id.as_bytes().len());
+        let block_id = ids::Id::from_slice(hash::keccak256(&r_block_id.as_bytes()).as_bytes());
 
         Ok(base::Tx { block_id })
     }
@@ -329,57 +252,4 @@ pub fn hash_structured_data(typed_data: &TypedData) -> Result<H256> {
     );
     let concat = [&prefix[..], &domain_hash[..], &data_hash[..]].concat();
     Ok(keccak(concat))
-}
-
-
-#[test]
-fn this() {
-
-// let message = r#"{"message":{"blockId":"0","bucket":"6b6f6b"}}"#;
-let message = r#"{
-    "domain": {
-      "magic": "0x00",
-      "name": "MiniKvvm"
-    },
-    "message": {
-      "blockId": "0x0000000000000000000000000000000000000000000000000000000000000000",
-      "bucket": "0x6b6f6b"
-    },
-    "primary_type": {
-      "type": "Bucket"
-    },
-    "types": {
-      "EIP712Domain": [
-        {
-          "name": "name",
-          "type": "string"
-        },
-        {
-          "name": "magic",
-          "type": "uint64"
-        }
-      ],
-      "bucket": [
-        {
-          "name": "bucket",
-          "type": "string"
-        },
-        {
-          "name": "blockId",
-          "type": "string"
-        }
-      ]
-    }
-  }"#;
-
-let vec = message.as_bytes().to_vec();
-
-let new_messag: TypedData = serde_json::from_slice(&vec).unwrap();
-
-println!("{:?}", new_messag);
-
-let str= serde_json::to_string(&new_messag).unwrap();
-
-println!("{:?}", str);
-    
 }

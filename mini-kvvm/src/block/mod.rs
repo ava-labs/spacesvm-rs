@@ -2,17 +2,22 @@ pub mod builder;
 pub mod state;
 
 use std::io::{Error, ErrorKind, Result};
+use std::vec;
 
+use avalanche_types::choices::status;
+use avalanche_types::hash;
 use avalanche_types::rpcchainvm::concensus::snowman::StatusWriter;
+use avalanche_types::rpcchainvm::database;
 use avalanche_types::{
     choices::{self, status::Status},
     ids,
 };
 use derivative::{self, Derivative};
 use serde::{Deserialize, Serialize};
-use sha3::{Digest, Sha3_256};
+use sha3::{Digest, Keccak256, Sha3_256};
 
 use crate::chain::tx::tx::Transaction;
+use crate::genesis::Genesis;
 
 pub const DATA_LEN: usize = 32;
 
@@ -235,7 +240,8 @@ impl avalanche_types::rpcchainvm::concensus::snowman::Initializer for Block {
     /// Initializes a block.
     async fn init(&mut self, bytes: &[u8], status: Status) -> Result<()> {
         self.bytes = bytes.to_vec();
-        self.id = ids::Id::from_slice_with_sha256(&Sha3_256::digest(&self.bytes));
+        // this is equal to ids.ToID(crypto.Keccak256(b.bytes))
+        self.id = ids::Id::from_slice(hash::keccak256(&self.bytes).as_bytes());
         self.st = status;
         Ok(())
     }
@@ -247,4 +253,46 @@ impl avalanche_types::rpcchainvm::concensus::snowman::StatusWriter for Block {
     async fn set_status(&mut self, status: Status) {
         self.st = status;
     }
+}
+
+#[tokio::test]
+async fn test_init() {
+    use crate::block::state::State;
+    use avalanche_types::rpcchainvm::concensus::snowman::Initializer;
+
+    let state = State::new(database::memdb::Database::new());
+    let mut block = Block::new(ids::Id::empty(), 0, &[], 0, state);
+
+    let bytes = serde_json::to_vec(&Genesis::default());
+    assert!(bytes.is_ok());
+
+    // let resp = block.init(&bytes.unwrap(),status::Status::Accepted).await;
+
+    // let id = ids::Id::from_slice_with_sha256(&Sha3_256::digest (&bytes.unwrap()));
+    // println!("id: {}", id);
+
+    let bytes = "test".as_bytes();
+
+    // let id = ids::Id::from_slice_with_sha256(hash::keccak256(&bytes.unwrap()).as_bytes());
+    // println!("id: {}", id);
+
+    // let bytes = &bytes.unwrap();
+
+    println!(
+        "id: {}",
+        ids::Id::from_slice(hash::keccak256(&bytes).as_bytes())
+    );
+
+    // rust "test"
+    // [156, 34, 255, 95, 33, 240, 184, 27, 17, 62, 99, 247, 219, 109, 169, 79, 237, 239, 17, 178, 17, 155, 64, 136, 184, 150, 100, 251, 154, 60, 182, 88]
+
+    // golang
+    // [156 34 255 95 33 240 184 27 17 62 99 247 219 109 169 79 237 239 17 178 17 155 64 136 184 150 100 251 154 60 182 88]
+
+    // golang test string 2BmJZD6JA79SzY6JqCe93atfmDcv9ECaZ6wxBiQXHBXPxtQsCK
+
+    // qauoHQ9pvsV5485SNKiaxCV52JjAus97p7B5TBrQTJdujAhTw
+    // qauoHQ9pvsV5485SNKiaxCV52JjAus97p7B5TBrQTJdujAhTw
+    // println!("id: {}", block.id);
+    // assert!(resp.is_ok());
 }

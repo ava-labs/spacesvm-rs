@@ -5,7 +5,11 @@ use jsonrpc_core::{BoxFuture, Error, ErrorCode, Result};
 use jsonrpc_derive::rpc;
 use serde::{Deserialize, Serialize};
 
-use crate::chain::{storage::ValueMeta, tx, tx::decoder::TypedData};
+use crate::chain::{
+    storage::ValueMeta,
+    tx::decoder::TypedData,
+    tx::{self, unsigned},
+};
 
 #[rpc]
 pub trait Service {

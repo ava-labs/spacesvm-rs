@@ -21,13 +21,15 @@ use super::{
 /// Removes a key and value from the underlying bucket. No error will return
 /// if the key is not found.
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct Tx {
     pub base_tx: base::Tx,
     pub bucket: String,
     pub key: String,
 }
 
-#[typetag::serde]
+// important to define an unique name of the trait implementation
+#[typetag::serde(name = "delete")]
 #[tonic::async_trait]
 impl unsigned::Transaction for Tx {
     async fn get_block_id(&self) -> avalanche_types::ids::Id {

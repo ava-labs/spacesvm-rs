@@ -101,7 +101,7 @@ impl Timed {
 
     /// Signal the avalanchego engine to build a block from pending transactions
     async fn mark_building(&mut self) {
-        log::info!("mark building start");
+        log::info!("mark_building:: start");
         let vm = self.vm_inner.read().await;
         match vm
             .to_engine
@@ -128,11 +128,10 @@ impl Timed {
         let mut status = self.status.write().await;
 
         if vm.mempool.len() > 0 {
-            log::info!("mempool empty");
-
             *status = Status::MayBuild;
             self.dispatch_timer_duration(self.build_interval).await;
         } else {
+            log::info!("mempool empty");
             *status = Status::DontBuild;
         }
     }
@@ -250,21 +249,28 @@ impl Timed {
         }
     }
 
+    // Helper function to reduce lock contention
+    pub async fn get_channels(
+        &self,
+    ) -> (
+        crossbeam_channel::Receiver<()>,
+        crossbeam_channel::Receiver<()>,
+    ) {
+        let vm = self.vm_inner.read().await;
+        (vm.stop_rx.clone(), vm.mempool.subscribe_pending())
+    }
+
     /// Ensures that new transactions passed to mempool are
     /// considered for the next block.
     pub async fn build(&mut self) {
         log::info!("starting build loops");
 
-        let vm = self.vm_inner.read().await;
-        let stop_ch = vm.stop_rx.clone();
-        let mempool_pending_ch = vm.mempool.subscribe_pending();
-        drop(vm);
+        let (stop_ch, mempool_pending_ch) = self.get_channels().await;
 
         while stop_ch.try_recv() == Err(TryRecvError::Empty) {
             log::info!("build: pending HOLD");
             mempool_pending_ch.recv().unwrap();
             log::info!("build: pending mempool signal received");
-            sleep(Duration::from_secs(20)).await;
             self.signal_txs_ready().await;
         }
         log::info!("build: loop ends");

@@ -40,7 +40,7 @@ impl crate::api::Service for Service {
     /// Takes tx args and returns the tx id.
     fn issue_tx(&self, params: IssueTxArgs) -> BoxFuture<Result<IssueTxResponse>> {
         log::debug!("issue tx called");
-        let vm = self.vm_inner.clone();
+        let vm = Arc::clone(&self.vm_inner);
 
         Box::pin(async move {
             let mut inner = vm.write().await;
@@ -62,30 +62,30 @@ impl crate::api::Service for Service {
             tx.init().await.map_err(create_jsonrpc_error)?;
             let tx_id = tx.id().await;
 
-            // let mut txs = Vec::with_capacity(1);
-            // txs.push(tx);
+            let mut txs = Vec::with_capacity(1);
+            txs.push(tx);
             // vm.submit(txs).await.map_err(create_jsonrpc_error)?;
 
-            // storage::submit(&inner.state, &mut txs).await.map_err(|e| {
-            //     create_jsonrpc_error(std::io::Error::new(
-            //         std::io::ErrorKind::Other,
-            //         e.to_string(),
-            //     ))
-            // })?;
+            log::info!("issue_tx: submit");
+            storage::submit(&inner.state, &mut txs).await.map_err(|e| {
+                create_jsonrpc_error(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    e.to_string(),
+                ))
+            })?;
 
             log::info!("issue_tx add to mempool");
-            inner.mempool.add(tx).map_err(create_jsonrpc_error)?;
 
-            // for tx in txs.iter().cloned() {
-            //     let mempool = &mut inner.mempool;
-            //     let out = mempool.add(tx).map_err(|e| {
-            //         create_jsonrpc_error(std::io::Error::new(
-            //             std::io::ErrorKind::Other,
-            //             e.to_string(),
-            //         ))
-            //     })?;
-            //     log::info!("issue_tx add to mempool: {}", out);
-            // }
+            for tx in txs.iter().cloned() {
+                let mempool = &mut inner.mempool;
+                let out = mempool.add(tx).map_err(|e| {
+                    create_jsonrpc_error(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        e.to_string(),
+                    ))
+                })?;
+                log::info!("issue_tx add to mempool: {}", out);
+            }
 
             Ok(IssueTxResponse { tx_id })
         })
@@ -101,10 +101,10 @@ impl crate::api::Service for Service {
             let last_accepted = &inner.last_accepted;
             utx.set_block_id(last_accepted.id).await;
             let typed_data = utx.typed_data().await;
- 
+
             let string = serde_json::to_string(&typed_data).unwrap();
 
-            log::info!("decode_tx: {}",string);
+            log::info!("decode_tx: {}", string);
 
             Ok(DecodeTxResponse { typed_data })
         })

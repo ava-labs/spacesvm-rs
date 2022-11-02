@@ -6,7 +6,7 @@ use std::{
 
 use avalanche_types::{
     choices::status::{self, Status},
-    ids, rpcchainvm,
+    hash, ids, rpcchainvm,
 };
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Sha3_256};
@@ -220,7 +220,8 @@ impl State {
         // parse block inline
         let bytes = &serde_json::to_vec(&block)?;
         block.bytes = bytes.to_vec();
-        block.id = ids::Id::from_slice_with_sha256(&Sha3_256::digest(bytes));
+        // block.id = ids::Id::from_slice_with_sha256(&Sha3_256::digest(bytes));
+        block.id = ids::Id::from_slice(hash::keccak256(bytes).as_bytes());
         block.st = status::Status::Accepted;
         block.state = self.clone();
 
@@ -251,7 +252,9 @@ impl State {
             source = serde_json::to_vec(&block)?;
         }
         block.bytes = source.to_vec();
-        block.id = ids::Id::from_slice_with_sha256(&Sha3_256::digest(source));
+        // block.id = ids::Id::from_slice_with_sha256(&Sha3_256::digest(source));
+        block.id = ids::Id::from_slice(hash::keccak256(source).as_bytes());
+
         block.st = status;
         block.state = self.clone();
 

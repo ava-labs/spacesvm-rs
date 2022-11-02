@@ -13,8 +13,9 @@ use avalanche_types::{ids, rpcchainvm};
 use crate::block::Block;
 
 #[tonic::async_trait]
-#[typetag::serde]
-pub trait Transaction: Send + Sync {
+// #[typetag::serde]
+#[typetag::serde(tag = "type")]
+pub trait Transaction {
     async fn init(&mut self) -> Result<()>;
     async fn bytes(&self) -> &Vec<u8>;
     async fn size(&self) -> u64;

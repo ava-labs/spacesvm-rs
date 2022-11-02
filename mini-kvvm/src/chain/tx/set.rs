@@ -26,6 +26,7 @@ const HASH_LEN: usize = 66;
 /// the value will be overwritten. The root bucket must be created
 /// in advance.
 #[derive(Serialize, Deserialize, Clone, Debug)]
+
 pub struct Tx {
     pub base_tx: base::Tx,
 
@@ -40,8 +41,9 @@ pub struct Tx {
     pub value: Vec<u8>,
 }
 
+// important to define an unique name of the trait implementation
+#[typetag::serde(name = "set")]
 #[tonic::async_trait]
-#[typetag::serde]
 impl unsigned::Transaction for Tx {
     async fn get_block_id(&self) -> avalanche_types::ids::Id {
         self.base_tx.block_id

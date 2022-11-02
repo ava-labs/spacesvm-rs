@@ -33,8 +33,9 @@ pub struct Tx {
     pub bucket: String,
 }
 
+// important to define an unique name of the trait implementation
+#[typetag::serde(name = "bucket")]
 #[tonic::async_trait]
-#[typetag::serde]
 impl unsigned::Transaction for Tx {
     async fn get_block_id(&self) -> avalanche_types::ids::Id {
         self.base_tx.block_id

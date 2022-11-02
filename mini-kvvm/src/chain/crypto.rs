@@ -10,7 +10,7 @@ use sha3::{Digest, Keccak256};
 
 const LEGACY_SIG_ADJ: usize = 27;
 pub const MESSAGE_SIZE: usize = 32;
-const ECDSA_RECOVERABLE_SIG_LEN: usize  = 65;
+const ECDSA_RECOVERABLE_SIG_LEN: usize = 65;
 
 pub fn sign(dh: &[u8], secret: &SecretKey) -> Result<Vec<u8>> {
     let secp = Secp256k1::signing_only();
@@ -23,7 +23,10 @@ pub fn sign(dh: &[u8], secret: &SecretKey) -> Result<Vec<u8>> {
 
 pub fn derive_sender(dh: &[u8], sig: &[u8]) -> Result<PublicKey> {
     if sig.len() != ECDSA_RECOVERABLE_SIG_LEN {
-        return Err(Error::new(ErrorKind::Other, format!("invalid signature: {}", sig.len())));
+        return Err(Error::new(
+            ErrorKind::Other,
+            format!("invalid signature: {}", sig.len()),
+        ));
     }
 
     // Avoid modifying the signature in place in case it is used elsewhere

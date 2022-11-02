@@ -1,6 +1,7 @@
 use std::{
     io::{Error, ErrorKind, Result},
     str,
+    sync::Arc,
 };
 
 use avalanche_types::{ids, rpcchainvm};
@@ -8,10 +9,14 @@ use byteorder::{BigEndian, ByteOrder};
 use chrono::Utc;
 use ethereum_types::H160;
 use serde::{Deserialize, Serialize};
+use tokio::sync::RwLock;
 
-use crate::block::{
-    state::{self, HASH_LEN},
-    Block,
+use crate::{
+    block::{
+        state::{self, HASH_LEN},
+        Block,
+    },
+    vm::inner::Inner,
 };
 
 use super::tx::{self, bucket, Transaction};
@@ -64,22 +69,29 @@ pub struct ValueMeta {
 }
 
 pub async fn submit(state: &state::State, txs: &mut Vec<tx::tx::Transaction>) -> Result<()> {
+    log::info!("submit called");
     let now = Utc::now().timestamp() as u64;
     let db = &state.get_db().await;
 
+    log::info!("submit loop start");
     for tx in txs.iter_mut() {
+        log::info!("submit init called");
         tx.init()
             .await
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
         if tx.id().await == ids::Id::empty() {
             return Err(Error::new(ErrorKind::Other, "invalid block id"));
         }
+        log::info!("submit create dummy");
         let dummy_block = Block::new_dummy(now, tx.to_owned(), state.clone());
 
-        tx.execute(db, dummy_block)
+        log::info!("submit execute");
+        tx.execute(&db, dummy_block)
             .await
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+        log::info!("submit execute ok");
     }
+
     Ok(())
 }
 

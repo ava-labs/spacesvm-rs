@@ -12,7 +12,7 @@ use crate::chain::tx::decoder::TypedData;
 
 use super::{base, bucket, delete, set, tx::TransactionType};
 
-#[typetag::serde]
+#[typetag::serde(tag = "type")]
 #[tonic::async_trait]
 pub trait Transaction: Debug + DynClone + Send + Sync {
     async fn get_block_id(&self) -> Id;

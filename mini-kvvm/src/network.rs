@@ -61,15 +61,25 @@ impl Push {
                 format!("gossip txs failed: {}", e.to_string()),
             )
         })?;
+        log::info!("sending app gossip sent");
         Ok(())
+    }
+
+    pub async fn get_new_txs(&mut self) -> Result<Vec<chain::tx::tx::Transaction>> {
+        let mut inner = self.vm_inner.write().await;
+        log::info!("gossip_new_txs: mempool len: {}", inner.mempool.len());
+        inner.mempool.new_txs().map_err(|e| {
+            Error::new(
+                ErrorKind::Other,
+                format!("failed to get net tx from mempool: {}", e.to_string()),
+            )
+        })
     }
 
     pub async fn gossip_new_txs(&mut self) -> Result<()> {
         log::info!("gossip_new_txs: called");
 
-        let mut inner = self.vm_inner.write().await;
-        log::info!("gossip_new_txs: mempool len: {}", inner.mempool.len());
-        let new_txs = inner.mempool.new_txs()?;
+        let new_txs = self.get_new_txs().await?;
         let mut txs: Vec<chain::tx::tx::Transaction> = Vec::with_capacity(new_txs.len());
 
         log::info!("gossip_new_txs: len: {}", new_txs.len());
