@@ -45,20 +45,24 @@ impl crate::api::Service for Service {
         Box::pin(async move {
             let mut inner = vm.write().await;
             log::info!("mempool len: {}", inner.mempool.len());
+
+            log::info!("params_ typed: {:?}", params.typed_data);
+
             let unsigned_tx = params
                 .typed_data
                 .parse_typed_data()
                 .map_err(create_jsonrpc_error)?;
             log::info!("unsigned");
-            let sig_bytes = hex::decode(params.signature).map_err(|e| {
-                create_jsonrpc_error(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    e.to_string(),
-                ))
-            })?;
-            log::info!("sig bytes");
+            // let sig_bytes = hex::decode(params.signature).map_err(|e| {
+            //     create_jsonrpc_error(std::io::Error::new(
+            //         std::io::ErrorKind::Other,
+            //         e.to_string(),
+            //     ))
+            // })?;
+            log::info!("sig: {:?}", params.signature);
+            // log::info!("sig bytes");
 
-            let mut tx = chain::tx::tx::Transaction::new(unsigned_tx, sig_bytes);
+            let mut tx = chain::tx::tx::Transaction::new(unsigned_tx, params.signature);
             tx.init().await.map_err(create_jsonrpc_error)?;
             let tx_id = tx.id().await;
 
@@ -99,6 +103,7 @@ impl crate::api::Service for Service {
             let mut utx = params.tx_data.decode().map_err(create_jsonrpc_error)?;
             let inner = vm.write().await;
             let last_accepted = &inner.last_accepted;
+
             utx.set_block_id(last_accepted.id).await;
             let typed_data = utx.typed_data().await;
 

@@ -86,8 +86,15 @@ impl crate::chain::tx::Transaction for Transaction {
     async fn init(&mut self) -> Result<()> {
         let stx =
             serde_json::to_vec(&self).map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
-        let digest_hash =
-            decoder::hash_structured_data(&self.unsigned_transaction.typed_data().await)?;
+
+        let typed_data = &self.unsigned_transaction.typed_data().await;
+        log::info!("init typed_data: {:?}", &typed_data);
+
+        let digest_hash = decoder::hash_structured_data(typed_data)?;
+
+        log::info!("init dh bytes: {:?}", &digest_hash.as_bytes());
+        log::info!("init sig: {:?}", &self.signature);
+
         let sender = crypto::derive_sender(digest_hash.as_bytes(), &self.signature)?;
         self.bytes = stx;
         // self.id = ids::Id::from_slice_with_sha256(&Sha3_256::digest(&self.bytes));
@@ -95,7 +102,9 @@ impl crate::chain::tx::Transaction for Transaction {
 
         self.size = self.bytes.len() as u64;
         self.digest_hash = digest_hash.as_bytes().to_vec();
+        log::info!("sender raw: {}", &sender);
         self.sender = crypto::public_to_address(&sender);
+        log::info!("sender pub: {}", self.sender);
 
         Ok(())
     }
@@ -117,6 +126,7 @@ impl crate::chain::tx::Transaction for Transaction {
         db: &Box<dyn rpcchainvm::database::Database + Send + Sync>,
         block: Block,
     ) -> Result<()> {
+        log::info!("execute sender: {}", self.sender);
         let txn_ctx = TransactionContext {
             db: db.clone(),
             tx_id: self.id,

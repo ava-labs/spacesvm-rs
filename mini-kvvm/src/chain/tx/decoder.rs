@@ -46,6 +46,7 @@ pub fn mini_kvvm_domain(m: u64) -> TypedDataDomain {
 
 #[derive(Debug, Clone)]
 pub enum MessageValue {
+    // TODO:combine?
     Vec(Vec<u8>),
     Bytes(Vec<u8>),
 }
@@ -54,7 +55,13 @@ impl MessageValue {
     pub fn to_string(self) -> String {
         match self {
             MessageValue::Vec(v) => String::from_utf8_lossy(&v).to_string(),
-            MessageValue::Bytes(v) => String::from_utf8_lossy(&v).to_string(), //format!("0x{}", String::from_utf8_lossy(&v).to_string()),
+            MessageValue::Bytes(v) => String::from_utf8_lossy(&v).to_string(),
+        }
+    }
+    pub fn to_vec(self) -> Vec<u8> {
+        match self {
+            MessageValue::Vec(v) => v,
+            MessageValue::Bytes(v) => v,
         }
     }
 }
@@ -150,11 +157,14 @@ impl TypedData {
     // Attempts to return the base tx from typed data.
     pub fn parse_base_tx(&self) -> Result<base::Tx> {
         let r_block_id = self
-            .get_typed_message(TD_BLOCK_ID.to_owned())
+            .get_typed_message_vec(TD_BLOCK_ID.to_owned())
             .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
 
-        log::info!("id len: {}", r_block_id.as_bytes().len());
-        let block_id = ids::Id::from_slice(hash::keccak256(&r_block_id.as_bytes()).as_bytes());
+        log::info!("parse_base_tx block string: {:?}", r_block_id);
+
+        log::info!("id len: {}", r_block_id.len());
+        // let block_id = ids::Id::from_slice(hash::keccak256(&r_block_id).as_bytes());
+        let block_id = ids::Id::from_slice(&r_block_id);
 
         Ok(base::Tx { block_id })
     }
@@ -226,6 +236,16 @@ impl TypedData {
             )),
         }
     }
+
+    pub fn get_typed_message_vec(&self, key: String) -> Result<Vec<u8>> {
+        match self.message.get(&key) {
+            Some(value) => Ok(value.to_owned().to_vec()),
+            None => Err(Error::new(
+                ErrorKind::NotFound,
+                format!("typed data key missing: {:?}", key),
+            )),
+        }
+    }
 }
 
 pub fn hash_structured_data(typed_data: &TypedData) -> Result<H256> {
@@ -252,4 +272,49 @@ pub fn hash_structured_data(typed_data: &TypedData) -> Result<H256> {
     );
     let concat = [&prefix[..], &domain_hash[..], &data_hash[..]].concat();
     Ok(keccak(concat))
+}
+
+#[tokio::test]
+async fn signature_recovers() {
+    use crate::chain::{crypto::derive_sender, *};
+    use secp256k1::{rand, PublicKey, SecretKey};
+
+    let secret_key = SecretKey::new(&mut rand::thread_rng());
+    let public_key = PublicKey::from_secret_key_global(&secret_key);
+
+    let tx_data = crate::chain::tx::unsigned::TransactionData {
+        typ: TransactionType::Bucket,
+        bucket: "kvs".to_string(),
+        key: String::new(),
+        value: vec![],
+    };
+    let resp = tx_data.decode();
+    assert!(resp.is_ok());
+    let utx = resp.unwrap();
+    let hash = hash_structured_data(&utx.typed_data().await).unwrap();
+
+    let sig = crypto::sign(&hash.as_bytes(), &secret_key).unwrap();
+    let sender = derive_sender(&hash.as_bytes(), &sig).unwrap();
+    assert_eq!(public_key.to_string(), sender.to_string());
+    assert_eq!(public_key, sender,);
+
+    let tx_data = crate::chain::tx::unsigned::TransactionData {
+        typ: TransactionType::Set,
+        bucket: "kvs".to_string(),
+        key: "foo".to_string(),
+        value: "bar".as_bytes().to_vec(),
+    };
+    let resp = tx_data.decode();
+    assert!(resp.is_ok());
+    let mut utx = resp.unwrap();
+    utx.set_block_id(ids::Id::from_slice("duuuu".as_bytes()))
+        .await;
+    let hash = hash_structured_data(&utx.typed_data().await).unwrap();
+
+    let sig = crypto::sign(&hash.as_bytes(), &secret_key).unwrap();
+    // utx.set_block_id(ids::Id::from_slice("duuddddduu".as_byte())).await;
+    let hash = hash_structured_data(&utx.typed_data().await).unwrap();
+    let sender = derive_sender(&hash.as_bytes(), &sig).unwrap();
+    assert_eq!(public_key.to_string(), sender.to_string());
+    assert_eq!(public_key, sender,);
 }

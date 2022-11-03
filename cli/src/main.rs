@@ -54,6 +54,8 @@ async fn main() -> std::result::Result<(), Box<dyn error::Error>> {
     ping(&client).await?;
     println!("ping succeeded");
 
+    println!("secret {:?}", secret_key);
+
     let tx = command_to_tx(cli.command);
     futures::executor::block_on(sign_and_submit(&client, &secret_key, tx))
         .map_err(|e| e.to_string().into())
@@ -127,14 +129,29 @@ async fn sign_and_submit(client: &Client, pk: &SecretKey, tx_data: TransactionDa
         .await
         .map_err(error_handling)?;
     println!("decoded");
-    let dh = decoder::hash_structured_data(&resp.typed_data)?;
+
+    let typed_data = &resp.typed_data;
+
+    println!("cli typed data: {:?}", &typed_data);
+
+    let dh = decoder::hash_structured_data(&typed_data)?;
+
+    println!("dh bytes: {:?}", &dh.as_bytes());
+
     let signature = crypto::sign(&dh.as_bytes(), &pk)?;
-    let signature_hex = hex::encode(signature);
+    let s = crypto::derive_sender(dh.as_bytes(), &signature)?;
+    println!("sender: {}", s);
+
+    // let signature_hex = hex::encode(signature);
+
+    println!("sig: {:?}", &signature);
+
+    // println!()
 
     client
         .issue_tx(IssueTxArgs {
             typed_data: resp.typed_data,
-            signature: signature_hex,
+            signature: signature,
         })
         .await
         .map_err(error_handling)?;

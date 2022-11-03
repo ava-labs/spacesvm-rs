@@ -110,6 +110,7 @@ impl unsigned::Transaction for Tx {
         }
         let info = info.unwrap();
         if info.owner != txn_ctx.sender {
+            log::info!("owner: {}\n sender: {}", &info.owner, &txn_ctx.sender);
             return Err(Error::new(
                 ErrorKind::PermissionDenied,
                 format!("sets only allowed for bucket owner: {}", self.bucket),

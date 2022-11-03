@@ -123,18 +123,18 @@ pub async fn get_value(
 
     let tx_id = vmeta.tx_id;
 
-    log::debug!("get_value tx_id: {}", tx_id.to_string());
+    log::info!("get_value tx_id: {}", tx_id.to_string());
 
     let value_key = prefix_tx_value_key(&tx_id);
 
-    log::debug!("get_value prefix_tx_value_key: {:?}", value_key);
+    log::info!("get_value prefix_tx_value_key: {:?}", value_key);
 
     let value = db
         .get(&value_key)
         .await
         .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
-    log::debug!("get_value prefix_tx_value_key: found");
+    log::info!("get_value prefix_tx_value_key: found");
     Ok(Some(value))
 }
 
@@ -187,7 +187,7 @@ pub async fn put_bucket_info(
     mut info: bucket::Info,
     _last_expiry: u64,
 ) -> Result<()> {
-    log::debug!("put_bucket_info called: {:?}\n", bucket);
+    log::info!("put_bucket_info called: {:?}\n", bucket);
 
     // If [raw_bucket] is empty, this is a new space.
     if info.raw_bucket.is_empty() {
@@ -207,7 +207,7 @@ pub async fn get_bucket_info(
     db: &Box<dyn rpcchainvm::database::Database + Send + Sync>,
     bucket: &[u8],
 ) -> Result<Option<bucket::Info>> {
-    log::debug!("get_bucket_info called: {:?}\n", bucket);
+    log::info!("get_bucket_info called: {:?}\n", bucket);
 
     match db.get(&bucket_info_key(bucket)).await {
         Err(e) => {
@@ -217,10 +217,10 @@ pub async fn get_bucket_info(
             Err(e)
         }
         Ok(value) => {
-            log::debug!("get_bucket_info value: {:?}\n", value);
+            log::info!("get_bucket_info value: {:?}\n", value);
             let info: bucket::Info = serde_json::from_slice(&value)
                 .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
-            log::debug!("get_bucket_info info: {:?}\n", info);
+            log::info!("get_bucket_info info: {:?}\n", info);
             Ok(Some(info))
         }
     }
