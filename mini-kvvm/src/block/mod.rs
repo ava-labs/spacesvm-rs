@@ -94,11 +94,13 @@ impl Block {
 #[tonic::async_trait]
 impl avalanche_types::rpcchainvm::concensus::snowman::Block for Block {
     /// Implements "snowman.Block"
+    /// TODO: why snowman::Block has this as async???
     async fn bytes(&self) -> &[u8] {
         return self.bytes.as_ref();
     }
 
     /// Helper method which serializes the block to bytes.
+    /// TODO: why snowman::Block has this as async???
     async fn to_bytes(&self) -> Result<Vec<u8>> {
         let block = self.clone();
         let bytes = serde_json::to_vec(&block).map_err(|e| {
@@ -111,16 +113,19 @@ impl avalanche_types::rpcchainvm::concensus::snowman::Block for Block {
     }
 
     /// Implements "snowman.Block"
+    /// TODO: why snowman::Block has this as async???
     async fn height(&self) -> u64 {
         return self.height;
     }
 
     /// Implements "snowman.Block"
+    /// TODO: why snowman::Block has this as async???
     async fn timestamp(&self) -> u64 {
         return self.timestamp;
     }
 
     /// Implements "snowman.Block"
+    /// TODO: why snowman::Block has this as async???
     async fn parent(&self) -> ids::Id {
         return self.parent;
     }
@@ -182,11 +187,13 @@ impl avalanche_types::rpcchainvm::concensus::snowman::Block for Block {
 #[tonic::async_trait]
 impl avalanche_types::rpcchainvm::concensus::snowman::Decidable for Block {
     /// Implements "snowman.Block.choices.Decidable"
+    /// TODO: why snowman::Decidable has this as async???
     async fn status(&self) -> Status {
         return self.st.clone();
     }
 
     /// Implements "snowman.Block.choices.Decidable"
+    /// TODO: why snowman::Decidable has this as async???
     async fn id(&self) -> ids::Id {
         return self.id;
     }
@@ -241,6 +248,7 @@ impl avalanche_types::rpcchainvm::concensus::snowman::Decidable for Block {
 #[tonic::async_trait]
 impl avalanche_types::rpcchainvm::concensus::snowman::Initializer for Block {
     /// Initializes a block.
+    /// TODO: why snowman::Initializer has this as async???
     async fn init(&mut self, bytes: &[u8], status: Status) -> Result<()> {
         self.bytes = bytes.to_vec();
         self.id = ids::Id::from_slice_with_sha256(&Sha3_256::digest(&self.bytes));
@@ -252,6 +260,7 @@ impl avalanche_types::rpcchainvm::concensus::snowman::Initializer for Block {
 #[tonic::async_trait]
 impl avalanche_types::rpcchainvm::concensus::snowman::StatusWriter for Block {
     /// Sets the blocks status.
+    /// TODO: why snowman::StatusWriter has this as async???
     async fn set_status(&mut self, status: Status) {
         self.st = status;
     }
