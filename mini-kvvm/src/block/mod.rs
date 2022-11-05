@@ -234,12 +234,16 @@ impl avalanche_types::rpcchainvm::concensus::snowman::Decidable for Block {
 
     /// Implements "snowman.Block.choices.Decidable"
     async fn reject(&mut self) -> Result<()> {
+        // TODO: i don't think we need async for this... (needs change in avlanache types)
         self.set_status(Status::Rejected).await;
 
+        // TODO/FIX: why do we persist rejected block, can we document?
         let block = self.clone();
+        // TODO/FIX: why do we need clone...?
         self.state.put_block(&block).await.map_err(|e| {
             Error::new(
                 ErrorKind::Other,
+                // TODO/FIX: wrong error message...
                 format!("accept block failed: {}", e.to_string()),
             )
         })?;
