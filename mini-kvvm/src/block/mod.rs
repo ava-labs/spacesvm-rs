@@ -178,6 +178,7 @@ impl avalanche_types::rpcchainvm::concensus::snowman::Block for Block {
                 )
             })?;
 
+        // TODO/FIX: I don't see this children used at all???
         parent_block.children.push(self.to_owned());
 
         let mut verified_blocks = state.verified_blocks.write().await;
