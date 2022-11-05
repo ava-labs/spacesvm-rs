@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 use jsonrpc_client_transports::{transports, RpcError};
 use jsonrpc_core::futures;
 use mini_kvvm::api::ServiceClient as Client;
-use mini_kvvm::api::{DecodeTxArgs, IssueTxArgs};
+use mini_kvvm::api::{DecodeTxArgs, IssueTxArgs, ResolveArgs};
 use mini_kvvm::chain::crypto;
 use mini_kvvm::chain::tx::{decoder, tx::TransactionType, unsigned::TransactionData};
 use secp256k1::{rand, SecretKey};
@@ -41,6 +41,10 @@ enum Command {
         bucket: String,
         key: String,
     },
+    Get {
+        bucket: String,
+        key: String,
+    },
 }
 
 #[tokio::main]
@@ -56,16 +60,32 @@ async fn main() -> std::result::Result<(), Box<dyn error::Error>> {
 
     println!("secret {:?}", secret_key);
 
-    let tx = command_to_tx(cli.command);
+    match &cli.command {
+        Command::Get { bucket, key } => {
+            futures::executor::block_on(client.resolve(ResolveArgs {
+                bucket: bucket.as_bytes().to_vec(),
+                key: key.as_bytes().to_vec(),
+            }))
+            .map_err(|e| e.to_string())?;
+        }
+        _ => {}
+    }
+
+    let tx = command_to_tx(cli.command)?;
+
     futures::executor::block_on(sign_and_submit(&client, &secret_key, tx))
         .map_err(|e| e.to_string().into())
 }
 
-fn command_to_tx(command: Command) -> TransactionData {
+fn command_to_tx(command: Command) -> Result<TransactionData> {
     match command {
-        Command::Bucket { bucket } => bucket_tx(bucket),
-        Command::Set { bucket, key, value } => set_tx(bucket, key, value.as_bytes().to_vec()),
-        Command::Delete { bucket, key } => delete_tx(bucket, key),
+        Command::Bucket { bucket } => Ok(bucket_tx(bucket)),
+        Command::Set { bucket, key, value } => Ok(set_tx(bucket, key, value.as_bytes().to_vec())),
+        Command::Delete { bucket, key } => Ok(delete_tx(bucket, key)),
+        _ => Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "not a supported tx",
+        )),
     }
 }
 
@@ -148,13 +168,13 @@ async fn sign_and_submit(client: &Client, pk: &SecretKey, tx_data: TransactionDa
 
     // println!()
 
-    client
+    let resp = client
         .issue_tx(IssueTxArgs {
             typed_data: resp.typed_data,
             signature: signature,
         })
         .await
         .map_err(error_handling)?;
-    println!("sent tx");
+    println!("response: {:?}", resp);
     Ok(())
 }

@@ -39,6 +39,7 @@ log4rs = { version = "1.0" }
 lru = "0.8.0"
 prost = "0.11.0"
 radix_fmt = "1.0.0"
+ripemd = "0.1.3"
 secp256k1 = { version = "0.22.1", features = ["global-context", "rand-std", "recovery"] }
 semver = "1.0.13"
 serde = { version = "1.0.144", features = ["derive"] }
@@ -57,5 +58,6 @@ name = "integration"
 path = "tests/integration_tests.rs"
 
 [dev-dependencies]
+cli = {path="../cli"}  
 jsonrpc-tcp-server = "18.0.0"
 futures-test = "0.3.24"

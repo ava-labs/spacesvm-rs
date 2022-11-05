@@ -56,7 +56,7 @@ impl crate::chain::vm::Vm for ChainVm {
         log::info!("vm::is_bootstrapped called");
 
         let vm = self.inner.read().await;
-        return vm.bootstrapped;
+        vm.bootstrapped
     }
 
     async fn submit(&self, mut txs: Vec<chain::tx::tx::Transaction>) -> Result<()> {
@@ -89,17 +89,13 @@ impl crate::chain::vm::Vm for ChainVm {
         let vm = self.inner.read().await;
 
         if let Some(engine) = &vm.to_engine {
-            if let Err(_) = engine
+            let _ = engine
                 .send(rpcchainvm::common::message::Message::PendingTxs)
-                .await
-            {
-                log::warn!("dropping message to consensus engine");
-            };
-            return;
+                .await.map_err(|e| log::warn!("dropping message to consensus engine: {}", e.to_string()));
+            return
         }
 
         log::error!("consensus engine channel failed to initialized");
-        return;
     }
 }
 

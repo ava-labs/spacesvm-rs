@@ -17,6 +17,8 @@ use super::{base, bucket, delete, set, tx::TransactionType};
 pub trait Transaction: Debug + DynClone + Send + Sync {
     async fn get_block_id(&self) -> Id;
     async fn set_block_id(&mut self, id: Id);
+    async fn get_value(&self) -> Option<Vec<u8>>;
+    async fn set_value(&mut self, value: Vec<u8>) -> Result<()>;
     async fn execute(&self, txn_ctx: TransactionContext) -> Result<()>;
     async fn typed_data(&self) -> TypedData;
     async fn typ(&self) -> TransactionType;

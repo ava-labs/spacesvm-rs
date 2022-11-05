@@ -101,7 +101,7 @@ async fn create_bucket_raw_json() {
 
     assert!(resp.is_ok());
 
-    sleep(Duration::from_secs(10)).await;
+    sleep(Duration::from_secs(1)).await;
 
     // create a generic http request with json fixture to decode tx
     let data = decode_tx().as_bytes().to_vec();

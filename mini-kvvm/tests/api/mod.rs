@@ -68,16 +68,16 @@ async fn test_rpc_client(client: gen_client::Client) {
     assert!(resp.is_ok());
     assert!(resp.unwrap().success);
 
-    // // bucket tx: create kvs bucket
-    // let tx_data = unsigned::TransactionData {
-    //     typ: TransactionType::Bucket,
-    //     bucket: "kvs".to_string(),
-    //     key: "".to_string(),
-    //     value: vec![],
-    // };
+    // bucket tx: create kvs bucket
+    let tx_data = unsigned::TransactionData {
+        typ: TransactionType::Bucket,
+        bucket: "kvs".to_string(),
+        key: "".to_string(),
+        value: vec![],
+    };
 
-    // let resp = client.decode_tx(DecodeTxArgs { tx_data }).await;
-    // assert!(resp.is_ok());
+    let resp = client.decode_tx(DecodeTxArgs { tx_data }).await;
+    assert!(resp.is_ok());
 
     // let secret_key = SecretKey::new(&mut rand::thread_rng());
     // let typed_data = resp.unwrap().typed_data;

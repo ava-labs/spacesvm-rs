@@ -125,29 +125,29 @@ impl State {
 
         for tx in block.txs.iter_mut() {
             if is_set_tx(&tx).await {
-                let maybe_set_tx = tx
-                    .unsigned_transaction
-                    .as_any()
-                    .await
-                    .downcast_ref::<set::Tx>();
-
-                if maybe_set_tx.is_none() {
-                    continue;
+                let maybe_value = &tx.unsigned_transaction.get_value().await;
+                if maybe_value.is_none() {
+                    continue
                 }
-                let set_tx = maybe_set_tx.unwrap();
+                let value = maybe_value.as_ref().unwrap();
                 log::info!(
                     "set_last_accepted put prefix_tx_value_key: {:?}\n",
                     prefix_tx_value_key(&tx.id)
                 );
                 log::info!(
                     "set_last_accepted put prefix_tx_value_key value: {:?}\n",
-                    &set_tx.value
+                    value
                 );
+
+                log::error!("writing value to disk");
+                // write the value of the tx to disk
                 inner
                     .db
-                    .put(&prefix_tx_value_key(&tx.id), &set_tx.value)
+                    .put(&prefix_tx_value_key(&tx.id), &value)
                     .await
                     .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+
+                    tx.unsigned_transaction.set_value(tx.id.to_vec()).await? // used to properly parse on restore
             }
         }
 
@@ -282,15 +282,5 @@ impl State {
 }
 
 async fn is_set_tx(tx: &chain::tx::tx::Transaction) -> bool {
-    match tx.unsigned_transaction.typ().await {
-        chain::tx::tx::TransactionType::Bucket => false,
-        chain::tx::tx::TransactionType::Set => true,
-        chain::tx::tx::TransactionType::Delete => false,
-        chain::tx::tx::TransactionType::Unknown => false,
-    }
-}
-
-#[tokio::test]
-async fn parse_block_test() {
-    // TODO
+    tx.unsigned_transaction.typ().await == chain::tx::tx::TransactionType::Set
 }

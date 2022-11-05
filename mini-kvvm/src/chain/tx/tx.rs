@@ -11,8 +11,7 @@ use sha3::{Digest, Sha3_256};
 use crate::{block::Block, chain::crypto, chain::storage::set_transaction};
 
 use super::{decoder, unsigned::TransactionContext};
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "type")]
 pub enum TransactionType {
     /// Root namespace.
@@ -126,7 +125,7 @@ impl crate::chain::tx::Transaction for Transaction {
         db: &Box<dyn rpcchainvm::database::Database + Send + Sync>,
         block: Block,
     ) -> Result<()> {
-        log::info!("execute sender: {}", self.sender);
+        log::info!("execute: sender: {}", self.sender);
         let txn_ctx = TransactionContext {
             db: db.clone(),
             tx_id: self.id,
@@ -139,10 +138,12 @@ impl crate::chain::tx::Transaction for Transaction {
             .await
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
+        log::info!("execute: set tx");
         set_transaction(db.clone(), self.to_owned())
             .await
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
+        log::info!("execute complete");
         Ok(())
     }
 }

@@ -4,10 +4,14 @@ use std::{
     sync::Arc,
 };
 
-use avalanche_types::{ids, rpcchainvm};
+use avalanche_types::{
+    hash, ids,
+    rpcchainvm::{self, database},
+};
 use byteorder::{BigEndian, ByteOrder};
 use chrono::Utc;
 use ethereum_types::H160;
+use log::info;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
@@ -16,10 +20,15 @@ use crate::{
         state::{self, HASH_LEN},
         Block,
     },
+    chain::crypto,
     vm::inner::Inner,
 };
 
-use super::tx::{self, bucket, Transaction};
+use super::tx::{
+    self,
+    bucket::{self, Info},
+    Transaction,
+};
 
 const SHORT_ID_LEN: usize = 20;
 const BLOCK_PREFIX: u8 = 0x0;
@@ -118,16 +127,17 @@ pub async fn get_value(
         .await
         .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
+    // log::error!("get_value value: {:?}", value);
     let vmeta: ValueMeta = serde_json::from_slice(&value)
         .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
 
     let tx_id = vmeta.tx_id;
 
-    log::info!("get_value tx_id: {}", tx_id.to_string());
+    log::error!("get_value tx_id: {:?}", tx_id);
 
     let value_key = prefix_tx_value_key(&tx_id);
 
-    log::info!("get_value prefix_tx_value_key: {:?}", value_key);
+    // log::error!("get_value key: {:?}", value_key);
 
     let value = db
         .get(&value_key)
@@ -161,6 +171,7 @@ pub async fn get_value_meta(
     }
 }
 
+// Attempts to write the value
 pub async fn put_bucket_key(
     db: &mut Box<dyn rpcchainvm::database::Database + Send + Sync>,
     bucket: &[u8],
@@ -178,6 +189,8 @@ pub async fn put_bucket_key(
     let rv_meta = serde_json::to_vec(&vmeta)
         .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
 
+    log::error!("put_value key: {:?}", k);
+
     return db.put(&k, &rv_meta).await;
 }
 
@@ -189,7 +202,7 @@ pub async fn put_bucket_info(
 ) -> Result<()> {
     log::info!("put_bucket_info called: {:?}\n", bucket);
 
-    // If [raw_bucket] is empty, this is a new space.
+    // If [raw_bucket] is empty, this is a new bucket.
     if info.raw_bucket.is_empty() {
         let r_bucket = raw_bucket(bucket, info.created)
             .await
@@ -203,6 +216,7 @@ pub async fn put_bucket_info(
     db.put(&bucket_info_key(bucket), &value).await
 }
 
+// Attempts to get info from a bucket.
 pub async fn get_bucket_info(
     db: &Box<dyn rpcchainvm::database::Database + Send + Sync>,
     bucket: &[u8],
@@ -218,6 +232,7 @@ pub async fn get_bucket_info(
         }
         Ok(value) => {
             log::info!("get_bucket_info value: {:?}\n", value);
+
             let info: bucket::Info = serde_json::from_slice(&value)
                 .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
             log::info!("get_bucket_info info: {:?}\n", info);
@@ -225,16 +240,15 @@ pub async fn get_bucket_info(
         }
     }
 }
-
 pub async fn raw_bucket(bucket: &[u8], block_time: u64) -> Result<ids::short::Id> {
-    let mut r: Vec<u8> = Vec::from(bucket);
-    let bucket_len = bucket.len();
-    r.resize(20, 0);
-    r[bucket_len] = BYTE_DELIMITER;
-    BigEndian::write_u64(&mut r[bucket_len + 1..], block_time);
-    let hash = H160::from_slice(&r);
+    let mut r: Vec<u8> = Vec::new();
+    r.extend_from_slice(bucket);
+    r.push(BYTE_DELIMITER);
+    r.resize(bucket.len() + 1 + 8, 0);
+    BigEndian::write_u64(&mut r[bucket.len() + 1..].to_vec(), 0);
+    let hash = crypto::compute_hash_160(&r);
 
-    Ok(ids::short::Id::from_slice(hash.as_bytes()))
+    Ok(ids::short::Id::from_slice(&hash))
 }
 
 /// Returns true if a bucket with the same name already exists.
@@ -245,7 +259,7 @@ pub async fn has_bucket(
     return db.has(&bucket_info_key(bucket)).await;
 }
 
-/// [keyPrefix] + [delimiter] + [raw_bucket] + [delimiter] + [key]
+/// 'KEY_PREFIX' + 'BYTE_DELIMITER' + [r_bucket] + 'BYTE_DELIMITER' + [key]
 pub fn bucket_value_key(r_bucket: ids::short::Id, key: &[u8]) -> Vec<u8> {
     let mut k: Vec<u8> = Vec::with_capacity(2 + SHORT_ID_LEN + 1 + key.len());
     k.push(KEY_PREFIX);
@@ -256,7 +270,7 @@ pub fn bucket_value_key(r_bucket: ids::short::Id, key: &[u8]) -> Vec<u8> {
     k
 }
 
-/// 'INFO_PREFIX' + 'BYTE_DELIMITER' + 'bucket'
+/// 'INFO_PREFIX' + 'BYTE_DELIMITER' + [bucket]
 pub fn bucket_info_key(bucket: &[u8]) -> Vec<u8> {
     let mut k: Vec<u8> = Vec::with_capacity(bucket.len() + 2);
     k.push(INFO_PREFIX);
@@ -298,4 +312,95 @@ pub fn is_not_found(error: &Error) -> bool {
         return true;
     }
     return false;
+}
+
+#[test]
+fn test_prefix() {
+    // 'KEY_PREFIX' [4] + 'BYTE_DELIMITER' [47] + [raw_bucket] 0 x 20 + 'BYTE_DELIMITER' [4] + [key] [102, 111, 111]
+    assert_eq!(
+        bucket_value_key(ids::short::Id::empty(), "foo".as_bytes().to_vec().as_ref()),
+        [4, 47, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 47, 102, 111, 111]
+    );
+    // 'INFO_PREFIX' [3] + 'BYTE_DELIMITER' [47] + 'bucket' [102, 111, 111]
+    assert_eq!(
+        bucket_info_key("foo".as_bytes().to_vec().as_ref()),
+        [3, 47, 102, 111, 111]
+    );
+    // 'BLOCK_PREFIX' [0] + 'BYTE_DELIMITER' [47] + 'block_id' 0 x 32
+    assert_eq!(
+        prefix_block_key(&ids::Id::empty()),
+        [
+            0, 47, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0
+        ]
+    );
+    // 'TX_PREFIX' [1] + 'BYTE_DELIMITER' [47] + 'tx_id' 0 x 32
+    assert_eq!(
+        prefix_tx_key(&ids::Id::empty()),
+        [
+            1, 47, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0
+        ]
+    );
+    // 'TX_VALUE_PREFIX' [2] + 'BYTE_DELIMITER' [47] + 'tx_id' 0 x 32
+    assert_eq!(
+        prefix_tx_value_key(&ids::Id::empty()),
+        [
+            2, 47, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0
+        ]
+    )
+}
+
+#[tokio::test]
+async fn test_raw_bucket() {
+    let resp = raw_bucket("kvs".as_bytes(), 0).await;
+    assert!(resp.is_ok());
+    assert_eq!(
+        resp.unwrap(),
+        ids::short::Id::from_slice(&[
+            28, 196, 105, 174, 208 ,254, 253,229 ,213 ,10 ,32 ,26 ,54 ,105, 74 ,64, 119 ,12, 91 ,61
+        ])
+    )
+}
+
+#[tokio::test]
+async fn test_bucket_info_rt() {
+    let bucket = "kvs".as_bytes();
+    let new_info = Info {
+        created: 0,
+        updated: 1,
+        owner: H160::default(),
+        raw_bucket: ids::short::Id::empty(),
+    };
+    let mut db = database::memdb::Database::new();
+    // put
+    let resp = put_bucket_info(&mut db, &bucket, new_info, 2).await;
+    assert!(resp.is_ok());
+
+    // get
+    let resp = get_bucket_info(&mut db, &bucket).await;
+    assert!(resp.as_ref().is_ok());
+    assert!(resp.as_ref().unwrap().is_some());
+    let info = resp.unwrap().unwrap();
+    assert_eq!(
+        info.raw_bucket,
+        ids::short::Id::from_slice(&[
+            28, 196, 105, 174, 208 ,254, 253,229 ,213 ,10 ,32 ,26 ,54 ,105, 74 ,64, 119 ,12, 91 ,61
+        ])
+    );
+}
+
+#[tokio::test]
+async fn test_bucket_key_rt() {
+        let bucket = "kvs".as_bytes();
+        let key = "foo".as_bytes();
+
+    let mut db = database::memdb::Database::new();
+
+    let resp = get_value_meta(&mut db, bucket,key).await;
+    assert!(resp.as_ref().is_ok());
+    assert!(resp.as_ref().unwrap().is_none());
+    // put_bucket_key(&mut db,bucket, key,vmeta)
+
 }

@@ -91,10 +91,10 @@ impl Timed {
     /// other than [DontBuild], then the attempt has already begun and this notification
     /// can be safely skipped.
     async fn signal_txs_ready(&mut self) {
-        if *self.status.read().await == Status::DontBuild {
-            log::info!("### dont build");
-            return;
-        }
+        // if *self.status.read().await == Status::DontBuild {
+        //     log::info!("### dont build");
+        //     return;
+        // }
 
         self.mark_building().await
     }

@@ -6,6 +6,7 @@ pub mod vm;
 #[cfg(test)]
 mod tests {
     use super::{crypto::derive_sender, *};
+    use avalanche_types::ids;
     use secp256k1::{rand, PublicKey, SecretKey};
 
     #[test]
@@ -16,6 +17,8 @@ mod tests {
         let hash = keccak_hash::keccak("yolo message".as_bytes());
         let sig = crypto::sign(&hash.as_bytes(), &secret_key).unwrap();
         let sender = derive_sender(&hash.as_bytes(), &sig).unwrap();
-        assert_eq!(public_key.to_string(), sender.to_string(),)
+        assert_eq!(public_key.to_string(), sender.to_string());
+
+        println!("id: {:?}", ids::Id::from_slice("baz".as_bytes()));
     }
 }

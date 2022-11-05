@@ -40,6 +40,14 @@ impl unsigned::Transaction for Tx {
         self.base_tx.block_id = id;
     }
 
+    async fn get_value(&self) -> Option<Vec<u8>> {
+        None
+    }
+
+    async fn set_value(&mut self, value: Vec<u8>) -> std::io::Result<()>{
+        Err(Error::new(ErrorKind::Unsupported, "value is not supported for delete tx"))
+    }
+
     /// Provides downcast support for the trait object.
     /// ref. https://doc.rust-lang.org/std/any/index.html
     async fn as_any(&self) -> &(dyn Any + Send + Sync) {
@@ -77,11 +85,11 @@ impl unsigned::Transaction for Tx {
         }
 
         // while we do not use value meta currently we verify it exists.
-        let v = storage::get_value_meta(&db, self.bucket.as_bytes(), self.key.as_bytes()).await?;
-        if v.is_none() {
-            log::info!("value meta key not found: {}", self.key);
-            return Ok(());
-        }
+        let v = storage::get_value_meta(&db, self.bucket.as_bytes(), self.key.as_bytes())
+            .await
+            .map_err(|e| {
+                Error::new(ErrorKind::Other, format!("failed to get value meta: {}", e))
+            })?;
 
         storage::delete_bucket_key(&mut txn_ctx.db, self.bucket.as_bytes(), self.key.as_bytes())
             .await

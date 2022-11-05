@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use sha3::Digest;
 
 use crate::chain::{
-    storage::{self, get_bucket_info, put_bucket_info, put_bucket_key, ValueMeta},
+    storage::{self, get_bucket_info, is_not_found, put_bucket_info, put_bucket_key, ValueMeta},
     tx::decoder::{create_typed_data, MessageValue, Type, TypedData},
 };
 
@@ -53,6 +53,15 @@ impl unsigned::Transaction for Tx {
         self.base_tx.block_id = id;
     }
 
+    async fn get_value(&self) -> Option<Vec<u8>> {
+        Some(self.value.clone())
+    }
+
+    async fn set_value(&mut self, value: Vec<u8>) -> std::io::Result<()>{
+        self.value = value;
+        Ok(())
+    }
+
     /// Provides downcast support for the trait object.
     /// ref. https://doc.rust-lang.org/std/any/index.html
     async fn as_any(&self) -> &(dyn Any + Send + Sync) {
@@ -95,8 +104,6 @@ impl unsigned::Transaction for Tx {
         let v = storage::get_value_meta(&db, self.bucket.as_bytes(), self.key.as_bytes()).await?;
         if v.is_none() {
             new_vmeta.created = txn_ctx.block_time;
-        } else {
-            new_vmeta.created = v.unwrap().created;
         }
 
         let info = get_bucket_info(&db, self.bucket.as_bytes())
@@ -147,12 +154,16 @@ impl unsigned::Transaction for Tx {
             type_: TD_STRING.to_owned(),
         });
         tx_fields.push(Type {
-            name: TD_BLOCK_ID.to_owned(),
+            name: TD_KEY.to_owned(),
             type_: TD_STRING.to_owned(),
         });
         tx_fields.push(Type {
             name: TD_VALUE.to_owned(),
             type_: TD_BYTES.to_owned(),
+        });
+        tx_fields.push(Type {
+            name: TD_BLOCK_ID.to_owned(),
+            type_: TD_STRING.to_owned(),
         });
 
         let mut message = HashMap::with_capacity(3);
@@ -185,7 +196,7 @@ fn value_hash(value: &[u8]) -> String {
 }
 
 #[tokio::test]
-async fn service_test() {
+async fn set_tx_test() {
     use super::unsigned::Transaction;
     use std::str::FromStr;
 
@@ -204,7 +215,7 @@ async fn service_test() {
         value: "bar".as_bytes().to_vec(),
     };
     let resp = tx.execute(ut_ctx).await;
-    assert!(resp.unwrap_err().to_string().contains("bucket not found"));
+    assert!(resp.unwrap_err().kind() == ErrorKind::NotFound);
 
     // create bucket
     let db = avalanche_types::rpcchainvm::database::memdb::Database::new();

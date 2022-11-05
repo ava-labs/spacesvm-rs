@@ -21,6 +21,7 @@ use avalanche_types::{
         snow::State,
     },
 };
+use chrono::{DateTime, Utc};
 use prost::bytes::Bytes;
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
@@ -133,16 +134,12 @@ impl rpcchainvm::common::vm::Vm for Client {
     async fn create_handlers(
         &mut self,
     ) -> Result<HashMap<String, rpcchainvm::common::http_handler::HttpHandler>> {
-        let resp = self
-            .inner
-            .create_static_handlers(Empty {})
-            .await
-            .map_err(|e| {
-                Error::new(
-                    ErrorKind::Other,
-                    format!("create static handler request failed: {:?}", e),
-                )
-            })?;
+        let resp = self.inner.create_handlers(Empty {}).await.map_err(|e| {
+            Error::new(
+                ErrorKind::Other,
+                format!("create handler request failed: {:?}", e),
+            )
+        })?;
 
         let resp = resp.into_inner();
 
@@ -197,7 +194,7 @@ impl rpcchainvm::common::apphandler::AppHandler for Client {
         &self,
         node_id: &ids::node::Id,
         request_id: u32,
-        deadline: time::Instant,
+        deadline: DateTime<Utc>,
         request: &[u8],
     ) -> Result<()> {
         Ok(())
