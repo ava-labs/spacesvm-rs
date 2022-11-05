@@ -206,11 +206,8 @@ impl avalanche_types::rpcchainvm::concensus::snowman::Decidable for Block {
     async fn accept(&mut self) -> Result<()> {
         self.set_status(Status::Accepted).await;
 
-        // TODO: why do we call "put_block" and "set_last_accepted"
-        // isn't "set_last_accepted" already persists the block with block key?
         let block_id = self.id().await;
         let block = self.clone();
-        // TODO: why "clone"? can we just put_block(self)?
         self.state.put_block(&block).await.map_err(|e| {
             Error::new(
                 ErrorKind::Other,
@@ -237,9 +234,7 @@ impl avalanche_types::rpcchainvm::concensus::snowman::Decidable for Block {
         // TODO: i don't think we need async for this... (needs change in avlanache types)
         self.set_status(Status::Rejected).await;
 
-        // TODO/FIX: why do we persist rejected block, can we document?
         let block = self.clone();
-        // TODO/FIX: why do we need clone...?
         self.state.put_block(&block).await.map_err(|e| {
             Error::new(
                 ErrorKind::Other,
