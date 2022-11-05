@@ -132,6 +132,7 @@ impl avalanche_types::rpcchainvm::concensus::snowman::Block for Block {
 
     /// Implements "snowman.Block"
     async fn verify(&mut self) -> Result<()> {
+        // TODO: should we return if parent is empty (genesis)???
         let parent_id = self.parent().await;
 
         let mut parent_block = self.state.get_block(parent_id).await.map_err(|e| {
