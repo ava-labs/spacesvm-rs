@@ -44,8 +44,11 @@ impl unsigned::Transaction for Tx {
         None
     }
 
-    async fn set_value(&mut self, value: Vec<u8>) -> std::io::Result<()>{
-        Err(Error::new(ErrorKind::Unsupported, "value is not supported for delete tx"))
+    async fn set_value(&mut self, value: Vec<u8>) -> std::io::Result<()> {
+        Err(Error::new(
+            ErrorKind::Unsupported,
+            "value is not supported for delete tx",
+        ))
     }
 
     /// Provides downcast support for the trait object.

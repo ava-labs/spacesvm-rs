@@ -359,7 +359,8 @@ async fn test_raw_bucket() {
     assert_eq!(
         resp.unwrap(),
         ids::short::Id::from_slice(&[
-            28, 196, 105, 174, 208 ,254, 253,229 ,213 ,10 ,32 ,26 ,54 ,105, 74 ,64, 119 ,12, 91 ,61
+            28, 196, 105, 174, 208, 254, 253, 229, 213, 10, 32, 26, 54, 105, 74, 64, 119, 12, 91,
+            61
         ])
     )
 }
@@ -386,21 +387,21 @@ async fn test_bucket_info_rt() {
     assert_eq!(
         info.raw_bucket,
         ids::short::Id::from_slice(&[
-            28, 196, 105, 174, 208 ,254, 253,229 ,213 ,10 ,32 ,26 ,54 ,105, 74 ,64, 119 ,12, 91 ,61
+            28, 196, 105, 174, 208, 254, 253, 229, 213, 10, 32, 26, 54, 105, 74, 64, 119, 12, 91,
+            61
         ])
     );
 }
 
 #[tokio::test]
 async fn test_bucket_key_rt() {
-        let bucket = "kvs".as_bytes();
-        let key = "foo".as_bytes();
+    let bucket = "kvs".as_bytes();
+    let key = "foo".as_bytes();
 
     let mut db = database::memdb::Database::new();
 
-    let resp = get_value_meta(&mut db, bucket,key).await;
+    let resp = get_value_meta(&mut db, bucket, key).await;
     assert!(resp.as_ref().is_ok());
     assert!(resp.as_ref().unwrap().is_none());
     // put_bucket_key(&mut db,bucket, key,vmeta)
-
 }

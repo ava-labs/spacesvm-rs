@@ -91,8 +91,9 @@ impl crate::chain::vm::Vm for ChainVm {
         if let Some(engine) = &vm.to_engine {
             let _ = engine
                 .send(rpcchainvm::common::message::Message::PendingTxs)
-                .await.map_err(|e| log::warn!("dropping message to consensus engine: {}", e.to_string()));
-            return
+                .await
+                .map_err(|e| log::warn!("dropping message to consensus engine: {}", e.to_string()));
+            return;
         }
 
         log::error!("consensus engine channel failed to initialized");
@@ -489,9 +490,9 @@ impl rpcchainvm::snowman::block::ChainVm for ChainVm {
                 Some(tx) => {
                     log::info!("attempting to execute tx:{}", tx.id);
                     let db = vm.state.get_db().await;
-                    tx.execute(&db, &block)
-                        .await
-                        .map_err(|e| Error::new(ErrorKind::Other, format!("failed to execute tx: {:?}",e)))?;
+                    tx.execute(&db, &block).await.map_err(|e| {
+                        Error::new(ErrorKind::Other, format!("failed to execute tx: {:?}", e))
+                    })?;
                 }
                 _ => break,
             }
@@ -504,13 +505,12 @@ impl rpcchainvm::snowman::block::ChainVm for ChainVm {
         block
             .init(&bytes.unwrap(), status::Status::Processing)
             .await
-            .map_err(|e| Error::new(ErrorKind::Other, format!("failed to init block: {:?}",e)))?;
+            .map_err(|e| Error::new(ErrorKind::Other, format!("failed to init block: {:?}", e)))?;
 
         // Verify block to ensure it is formed correctly (don't save) <- TODO
-        block
-            .verify()
-            .await
-            .map_err(|e| Error::new(ErrorKind::Other, format!("failed to verify block: {:?}",e)))?;
+        block.verify().await.map_err(|e| {
+            Error::new(ErrorKind::Other, format!("failed to verify block: {:?}", e))
+        })?;
 
         // TODO: probably needs a channel
         // let mut builder = self.builder.as_ref().expect("vm.builder").write().await;

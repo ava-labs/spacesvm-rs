@@ -3,13 +3,11 @@ pub mod data;
 use std::{
     io::Result,
     sync::{Arc, RwLock},
-    time::Duration,
 };
 
 use avalanche_types::ids;
-use tokio::time::sleep;
 
-use crate::{chain::tx::tx::Transaction, vm::ChainVm};
+use crate::chain::tx::tx::Transaction;
 
 use self::data::{Data, Entry};
 
@@ -256,16 +254,17 @@ async fn test_mempool() {
 }
 
 #[tokio::test]
-async fn test_mempool_multi_thread() {
+async fn test_mempool_thread_safe() {
     use crate::chain::crypto;
     use crate::chain::tx::{decoder, tx::TransactionType, unsigned};
     use secp256k1::{rand, SecretKey};
+    use tokio::time::sleep;
 
-    let vm = ChainVm::new();
+    let vm = crate::vm::ChainVm::new();
 
-    let vm1 = vm.inner.clone();
+    let inner = Arc::clone(&vm.inner);
     tokio::spawn(async move {
-        let mut inner = vm1.write().await;
+        let mut vm_inner = inner.write().await;
         let tx_data_1 = unsigned::TransactionData {
             typ: TransactionType::Bucket,
             bucket: "foo".to_string(),
@@ -274,26 +273,26 @@ async fn test_mempool_multi_thread() {
         };
         let resp = tx_data_1.decode();
         assert!(resp.is_ok());
-        let utx_1 = resp.unwrap();
+        let utx = resp.unwrap();
         let secret_key = SecretKey::new(&mut rand::thread_rng());
-        let dh_1 = decoder::hash_structured_data(&utx_1.typed_data().await).unwrap();
-        let sig_1 = crypto::sign(&dh_1.as_bytes(), &secret_key).unwrap();
-        let tx_1 = Transaction::new(utx_1, sig_1);
+        let dh = decoder::hash_structured_data(&utx.typed_data().await).unwrap();
+        let sig = crypto::sign(&dh.as_bytes(), &secret_key).unwrap();
+        let tx = Transaction::new(utx, sig);
 
-        // add tx_1 to mempool
-        let resp = inner.mempool.add(tx_1);
+        // add tx to mempool
+        let resp = vm_inner.mempool.add(tx);
         assert!(resp.is_ok());
-        log::info!("wrote!")
     });
 
-    let vm2 = vm.inner.clone();
+    let inner = Arc::clone(&vm.inner);
     tokio::spawn(async move {
-        sleep(Duration::from_secs(3)).await;
-        let mut inner = vm2.write().await;
-        let resp = inner.mempool.new_txs();
-        assert!(resp.is_ok());
-        log::info!("inner: {}", resp.unwrap().len())
+        sleep(std::time::Duration::from_micros(10)).await;
+        let mut vm_inner = inner.write().await;
+        let resp = vm_inner.mempool.new_txs();
+        assert!(&resp.is_ok());
+        // check that inner mempool has been updated in the other thread
+        assert_eq!(resp.unwrap().len(), 1);
     });
 
-    sleep(Duration::from_secs(5)).await;
+    sleep(std::time::Duration::from_millis(100)).await;
 }

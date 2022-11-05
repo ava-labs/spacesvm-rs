@@ -127,7 +127,7 @@ impl State {
             if is_set_tx(&tx).await {
                 let maybe_value = &tx.unsigned_transaction.get_value().await;
                 if maybe_value.is_none() {
-                    continue
+                    continue;
                 }
                 let value = maybe_value.as_ref().unwrap();
                 log::info!(
@@ -147,7 +147,7 @@ impl State {
                     .await
                     .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
-                    tx.unsigned_transaction.set_value(tx.id.to_vec()).await? // used to properly parse on restore
+                tx.unsigned_transaction.set_value(tx.id.to_vec()).await? // used to properly parse on restore
             }
         }
 

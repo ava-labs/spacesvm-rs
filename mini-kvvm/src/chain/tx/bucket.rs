@@ -1,4 +1,8 @@
-use std::{any::Any, collections::HashMap, io::{Result, Error, ErrorKind}};
+use std::{
+    any::Any,
+    collections::HashMap,
+    io::{Error, ErrorKind, Result},
+};
 
 use avalanche_types::ids;
 use serde::{Deserialize, Serialize};
@@ -49,8 +53,11 @@ impl unsigned::Transaction for Tx {
         None
     }
 
-    async fn set_value(&mut self, value: Vec<u8>) -> std::io::Result<()>{
-        Err(Error::new(ErrorKind::Unsupported, "value is not supported for delete tx"))
+    async fn set_value(&mut self, value: Vec<u8>) -> std::io::Result<()> {
+        Err(Error::new(
+            ErrorKind::Unsupported,
+            "value is not supported for delete tx",
+        ))
     }
 
     /// Provides downcast support for the trait object.

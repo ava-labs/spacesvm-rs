@@ -7,16 +7,16 @@ use avalanche_types::ids;
 
 use crate::chain::tx::tx::Transaction;
 
-/// In memory representation of mempool.
+/// In memory representation of mempool data.
 #[derive(Debug)]
 pub struct Data {
     pub items: VecDeque<Entry>,
     pub lookup: HashMap<ids::Id, Entry>,
-    /// Vec of [Tx] that are ready to be gossiped.
+    /// Vec of Tx that are ready to be gossiped.
     pub new_txs: Vec<Transaction>,
 }
 
-/// Object representing a transaction stored in mempool.
+/// Object representing a transaction entry stored in mempool.
 #[derive(Debug, Default, Clone)]
 pub struct Entry {
     pub id: ids::Id,
@@ -72,6 +72,7 @@ impl Data {
         Ok(self.items.pop_back())
     }
 
+    /// Atempts to retrieve an entry from the inner lookup map.
     pub fn get(&self, id: &ids::Id) -> Result<Option<Entry>> {
         match self.lookup.get(id) {
             Some(v) => Ok(Some(v.to_owned())),
@@ -80,12 +81,10 @@ impl Data {
     }
 
     pub fn has(&self, id: &ids::Id) -> Result<bool> {
-        match self.get(id) {
-            Ok(resp) => match resp {
-                Some(_) => Ok(true),
-                None => Ok(false),
-            },
-            Err(e) => Err(e),
+        let resp = self.get(id)?;
+        if resp.is_some() {
+            return Ok(true);
         }
+        Ok(false)
     }
 }

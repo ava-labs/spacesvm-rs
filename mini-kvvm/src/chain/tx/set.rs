@@ -57,7 +57,7 @@ impl unsigned::Transaction for Tx {
         Some(self.value.clone())
     }
 
-    async fn set_value(&mut self, value: Vec<u8>) -> std::io::Result<()>{
+    async fn set_value(&mut self, value: Vec<u8>) -> std::io::Result<()> {
         self.value = value;
         Ok(())
     }

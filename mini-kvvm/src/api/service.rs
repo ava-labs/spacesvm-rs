@@ -186,7 +186,6 @@ async fn service_test() {
     let secret_key = SecretKey::new(&mut rand::thread_rng());
     let og_public_key = PublicKey::from_secret_key_global(&secret_key);
 
-
     //
     // create kvs bucket
     //
