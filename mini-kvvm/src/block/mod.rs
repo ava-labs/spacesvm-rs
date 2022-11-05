@@ -132,6 +132,8 @@ impl avalanche_types::rpcchainvm::concensus::snowman::Block for Block {
 
     /// Implements "snowman.Block"
     async fn verify(&mut self) -> Result<()> {
+        // TODO: check if this block has already been accepted or verified?
+
         // TODO: should we return if parent is empty (genesis)???
         let parent_id = self.parent().await;
 
