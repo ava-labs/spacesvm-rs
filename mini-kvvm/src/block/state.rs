@@ -171,6 +171,7 @@ impl State {
 
     /// Attempts to return block from cache given a valid block id.
     /// If the cache is not hit check the database.
+    /// TODO/FIX: document invariants -- can pending blocks be found in db, or only accepted blocks can be found
     pub async fn get_block(&mut self, block_id: ids::Id) -> Result<Block> {
         log::debug!("get block called\n");
 
