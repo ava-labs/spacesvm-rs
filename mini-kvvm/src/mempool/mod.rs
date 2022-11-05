@@ -58,7 +58,7 @@ impl Mempool {
 
         let mut data = self.data.write().unwrap();
         if data.has(tx_id)? {
-            return Ok(false);
+            return Ok(false)
         }
         let old_len = data.len();
 
@@ -83,10 +83,11 @@ impl Mempool {
     /// Pops the first entry from the list.
     pub fn pop_back(&self) -> Option<Transaction> {
         let mut data = self.data.write().unwrap();
-        match data.items.pop_back() {
-            Some(entry) => entry.tx,
-            None => None,
+        if let Some(entry) = data.items.pop_back() {
+            return entry.tx
         }
+
+        None
     }
 
     /// Returns len of mempool data.
@@ -113,7 +114,7 @@ impl Mempool {
             log::info!("new_txs: found a tx");
             if data.has(&tx.id)? {
                 log::info!("new_txs: already have");
-                // continue;
+                continue;
             }
             selected.push(tx);
             log::info!("pushed selected");
@@ -136,8 +137,6 @@ impl Mempool {
                 }
             }
         }
-        // drop write lock
-        drop(data);
 
         for id in to_remove.iter() {
             log::debug!("attempting to prune id: {}", id);
@@ -254,7 +253,7 @@ async fn test_mempool() {
 }
 
 #[tokio::test]
-async fn test_mempool_thread_safe() {
+async fn test_mempool_threads() {
     use crate::chain::crypto;
     use crate::chain::tx::{decoder, tx::TransactionType, unsigned};
     use secp256k1::{rand, SecretKey};

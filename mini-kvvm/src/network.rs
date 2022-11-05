@@ -105,16 +105,12 @@ impl Push {
 
         let mempool = &vm.mempool;
 
-        // Gossip at most the target units of a block at once
         while mempool.len() > 0 {
-            match mempool.pop_back() {
-                Some(tx) => {
-                    // Note: when regossiping, we force resend even though we may have done it
-                    // recently.
-                    self.gossiped_tx.put(tx.id, ());
-                    txs.push(tx);
-                }
-                None => return Ok(()),
+            if let Some(tx) = mempool.pop_back() {
+                // Note: when regossiping, we force resend even though we may have done it
+                // recently.
+                self.gossiped_tx.put(tx.id, ());
+                txs.push(tx);
             }
         }
 
@@ -137,7 +133,6 @@ impl Push {
         );
 
         let mut vm = self.vm_inner.write().await;
-
         chain::storage::submit(&vm.state, &mut txs)
             .await
             .map_err(|e| {
@@ -152,10 +147,12 @@ impl Push {
             })?;
 
         for tx in txs.iter_mut() {
-            let _ = vm
-                .mempool
-                .add(tx.to_owned())
-                .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+            vm.mempool.add(tx.to_owned()).map_err(|e| {
+                Error::new(
+                    ErrorKind::Other,
+                    format!("failed to add tx to mempool: {:?}", e),
+                )
+            })?;
         }
 
         Ok(())
