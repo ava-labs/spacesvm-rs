@@ -206,6 +206,8 @@ impl avalanche_types::rpcchainvm::concensus::snowman::Decidable for Block {
     async fn accept(&mut self) -> Result<()> {
         self.set_status(Status::Accepted).await;
 
+        // TODO: why do we call "put_block" and "set_last_accepted"
+        // isn't "set_last_accepted" already persists the block with block key?
         let block_id = self.id().await;
         let block = self.clone();
         self.state.put_block(&block).await.map_err(|e| {
