@@ -4,7 +4,7 @@ use std::{
     collections::HashMap,
     io::{Error, ErrorKind, Result},
     sync::Arc,
-    time::{self, Duration},
+    time::Duration,
 };
 
 use avalanche_types::{
@@ -213,23 +213,22 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
         let mut vm = self.inner.write().await;
         let current = db_manager.current().await?;
         let db = current.db.clone();
+        let genesis = Genesis::from_json(genesis_bytes)?;
 
         vm.ctx = ctx;
         vm.to_engine = Some(to_engine);
         vm.app_sender = Some(app_sender);
         vm.state = block::state::State::new(db);
-        let genesis = Genesis::from_json(genesis_bytes)?;
         vm.genesis = genesis;
         self.node_id = vm.ctx.as_ref().expect("inner.ctx").node_id;
 
-        // Try to load last accepted
+        // Attempt to load last accepted
         let has = vm
             .state
             .has_last_accepted()
             .await
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
-        log::info!("vm::initialize: 2");
         // Check if last accepted block exists
         if has {
             let block_id = vm
@@ -314,7 +313,7 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
         let mut vm = self.inner.write().await;
 
         match snow_state.try_into() {
-            // Initializing is called by chains manager when it is creating the chain.
+            // Initializing is set by chain manager when it is creating the chain.
             Ok(rpcchainvm::snow::State::Initializing) => {
                 log::info!("set_state: initializing");
                 vm.bootstrapped = false;
@@ -342,7 +341,7 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
 
     /// Returns the version of the VM this node is running.
     async fn version(&self) -> Result<String> {
-        log::info!("vm::shutdown called");
+        log::info!("vm::version called");
 
         Ok(String::from(VERSION))
     }
@@ -373,16 +372,11 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
 
         // Initialize the jsonrpc public service and handler
         let service = api::service::Service::new(self.inner.clone());
-        // log::info!("vm::create_static_handlers called 2");
         let mut handler = jsonrpc_core::IoHandler::new();
         handler.extend_with(api::Service::to_delegate(service));
 
-        log::info!("vm::create_static_handlers -----{:?}", handler);
-
         let http_handler = rpcchainvm::common::http_handler::HttpHandler::new_from_u8(0, handler)
             .map_err(|_| Error::from(ErrorKind::InvalidData))?;
-
-        log::info!("vm::create_static_handlers -----end");
 
         let mut handlers = HashMap::new();
         handlers.insert(String::from(PUBLIC_API_ENDPOINT), http_handler);
@@ -419,12 +413,12 @@ impl rpcchainvm::snowman::block::Getter for ChainVm {
                 Error::new(ErrorKind::Other, format!("failed to get block: {:?}", e))
             })?;
 
-        // If block on disk, it must've been accepted
+        // if block on disk it must have been accepted
         let block = vm
             .state
             .parse_block(Some(block.to_owned()), vec![], Status::Accepted)
             .await
-            .map_err(|e| Error::new(ErrorKind::Other, format!("failed to get block: {:?}", e)))?;
+            .map_err(|e| Error::new(ErrorKind::Other, format!("failed to parse block: {:?}", e)))?;
 
         Ok(Box::new(block))
     }
@@ -493,12 +487,11 @@ impl rpcchainvm::snowman::block::ChainVm for ChainVm {
         loop {
             match vm.mempool.pop_back() {
                 Some(tx) => {
-                    log::info!("writing tx{:?}\n", tx);
-                    // verify
+                    log::info!("attempting to execute tx:{}", tx.id);
                     let db = vm.state.get_db().await;
-                    tx.execute(&db, block.clone())
+                    tx.execute(&db, &block)
                         .await
-                        .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+                        .map_err(|e| Error::new(ErrorKind::Other, format!("failed to execute tx: {:?}",e)))?;
                 }
                 _ => break,
             }
@@ -511,13 +504,13 @@ impl rpcchainvm::snowman::block::ChainVm for ChainVm {
         block
             .init(&bytes.unwrap(), status::Status::Processing)
             .await
-            .unwrap();
+            .map_err(|e| Error::new(ErrorKind::Other, format!("failed to init block: {:?}",e)))?;
 
         // Verify block to ensure it is formed correctly (don't save) <- TODO
         block
             .verify()
             .await
-            .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| Error::new(ErrorKind::Other, format!("failed to verify block: {:?}",e)))?;
 
         // TODO: probably needs a channel
         // let mut builder = self.builder.as_ref().expect("vm.builder").write().await;

@@ -23,6 +23,6 @@ pub trait Transaction {
     async fn execute(
         &self,
         db: &Box<dyn rpcchainvm::database::Database + Send + Sync>,
-        block: Block,
+        block: &Block,
     ) -> Result<()>;
 }

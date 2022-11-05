@@ -123,7 +123,7 @@ impl crate::chain::tx::Transaction for Transaction {
     async fn execute(
         &self,
         db: &Box<dyn rpcchainvm::database::Database + Send + Sync>,
-        block: Block,
+        block: &Block,
     ) -> Result<()> {
         log::info!("execute: sender: {}", self.sender);
         let txn_ctx = TransactionContext {

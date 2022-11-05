@@ -95,7 +95,7 @@ pub async fn submit(state: &state::State, txs: &mut Vec<tx::tx::Transaction>) ->
         let dummy_block = Block::new_dummy(now, tx.to_owned(), state.clone());
 
         log::info!("submit execute");
-        tx.execute(&db, dummy_block)
+        tx.execute(&db, &dummy_block)
             .await
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
         log::info!("submit execute ok");
