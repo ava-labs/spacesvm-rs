@@ -24,7 +24,7 @@ use super::Block;
 
 const BLOCKS_LRU_SIZE: usize = 8192;
 const LAST_ACCEPTED_BLOCK_KEY: &[u8] = b"last_accepted";
-pub const BYTE_DELIMITER: &[u8] = b"/";
+pub const BYTE_DELIMITER: &[u8] = b"/"; // TODO/FIX: not used
 pub const HASH_LEN: usize = ids::ID_LEN + 2;
 
 #[derive(Serialize, Deserialize, Default)]
@@ -33,6 +33,7 @@ pub struct ValueMeta {
     tx_id: ids::Id,
 }
 
+/// TODO: document why we need wrapper...
 #[derive(Serialize, Deserialize, Default)]
 pub struct BlockWrapper {
     block: Vec<u8>,
@@ -212,6 +213,8 @@ impl State {
         // parse block inline
         let bytes = &serde_json::to_vec(&block)?;
         block.bytes = bytes.to_vec();
+        // TODO/FIX: from_slice_with_sha256 already hashes the block... why we hash twice?
+        // TODO/FIX: latest avalanche_types renamed this to Id::sha256
         block.id = ids::Id::from_slice_with_sha256(&Sha3_256::digest(bytes));
         block.st = status::Status::Accepted;
         block.state = self.clone();
@@ -225,6 +228,7 @@ impl State {
     }
 
     /// Attempts to return block from state given a valid block id.
+    /// TODO/FIX: document when one should use this over set_last_accepted_block
     pub async fn put_block(&mut self, block: &Block) -> Result<()> {
         let mut db = self.inner.db.write().await;
         let mut cache = self.lru.cache.write().await;
@@ -242,6 +246,7 @@ impl State {
         cache.put(block_copy.id, block.to_owned());
 
         // put wrapped block into database
+        // TODO/FIX: why not using block key prefix???
         db.put(&block_copy.id.to_vec(), &wrapped_bytes)
             .await
             .map_err(|e| {
@@ -259,10 +264,13 @@ impl State {
     pub async fn parse_block(&self, mut source: Vec<u8>, status: Status) -> Result<Block> {
         let mut block = Block::default();
 
+        // TODO: this is weird... parse should not need to handle this edge case
+        // and Block should have a method called Block::parse that takes raw bytes and status
         if source.is_empty() {
             source = serde_json::to_vec(&block)?;
         }
         block.bytes = source.to_vec();
+        // TODO/FIX: why do we hash twice...
         block.id = ids::Id::from_slice_with_sha256(&Sha3_256::digest(source));
         block.st = status;
         block.state = self.clone();

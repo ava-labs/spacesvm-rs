@@ -158,6 +158,7 @@ impl avalanche_types::rpcchainvm::concensus::snowman::Block for Block {
             ));
         }
 
+        // TODO/FIX: why verified blocks are accepted automatic???
         let state = self.state.clone();
         state
             .set_last_accepted(self.to_owned())
