@@ -210,6 +210,7 @@ impl avalanche_types::rpcchainvm::concensus::snowman::Decidable for Block {
         // isn't "set_last_accepted" already persists the block with block key?
         let block_id = self.id().await;
         let block = self.clone();
+        // TODO: why "clone"? can we just put_block(self)?
         self.state.put_block(&block).await.map_err(|e| {
             Error::new(
                 ErrorKind::Other,
