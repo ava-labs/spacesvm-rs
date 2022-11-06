@@ -424,6 +424,8 @@ impl rpcchainvm::snowman::block::Parser for ChainVm {
     ) -> Result<Box<dyn rpcchainvm::concensus::snowman::Block + Send + Sync>> {
         let mut vm = self.inner.write().await;
 
+        // TODO: why do we need parse block via state manger?
+        // we should just implement standalone Block::from_slice
         let new_block = vm
             .state
             .parse_block(bytes.to_vec(), Status::Processing)
