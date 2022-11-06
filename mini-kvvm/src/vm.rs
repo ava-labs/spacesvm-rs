@@ -370,6 +370,8 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
     > {
         log::debug!("create_static_handlers called");
 
+        // TODO: why all services are static?  not in handlers?
+
         // Initialize the jsonrpc public service and handler
         let service = api::service::Service::new(self.clone());
         let mut handler = jsonrpc_core::IoHandler::new();
