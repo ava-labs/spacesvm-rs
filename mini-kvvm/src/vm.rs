@@ -433,6 +433,7 @@ impl rpcchainvm::snowman::block::Parser for ChainVm {
         log::debug!("parsed block id: {}", new_block.id);
 
         match vm.state.get_block(new_block.id).await {
+            // TODO: document why we return old, vs. new?
             Ok(old_block) => {
                 log::debug!("returning previously parsed block id: {}", old_block.id);
                 return Ok(Box::new(old_block));
