@@ -422,6 +422,7 @@ impl rpcchainvm::snowman::block::Parser for ChainVm {
         // TOOD: make this generic
         bytes: &[u8],
     ) -> Result<Box<dyn rpcchainvm::concensus::snowman::Block + Send + Sync>> {
+        // TODO: why do we need mutable refernce here? we're just parsing?
         let mut vm = self.inner.write().await;
 
         let new_block = vm
