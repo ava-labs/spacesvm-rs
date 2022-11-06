@@ -399,6 +399,7 @@ impl rpcchainvm::snowman::block::Getter for ChainVm {
     /// Attempt to load a block.
     async fn get_block(
         &self,
+        // TOOD: make this reference
         id: ids::Id,
     ) -> Result<Box<dyn rpcchainvm::concensus::snowman::Block + Send + Sync>> {
         let mut vm = self.inner.write().await;
@@ -417,6 +418,7 @@ impl rpcchainvm::snowman::block::Parser for ChainVm {
     /// Attempt to create a block from a stream of bytes.
     async fn parse_block(
         &self,
+        // TOOD: make this generic
         bytes: &[u8],
     ) -> Result<Box<dyn rpcchainvm::concensus::snowman::Block + Send + Sync>> {
         let mut vm = self.inner.write().await;
