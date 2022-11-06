@@ -30,7 +30,6 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 // TODO: make configurable
 const MEMPOOL_SIZE: usize = 1024;
-const BLOCKS_LRU_SIZE: usize = 8192;
 const BUILD_INTERVAL: Duration = Duration::from_millis(500);
 
 pub struct ChainVm {
@@ -45,6 +44,12 @@ impl ChainVm {
             inner: Arc::new(RwLock::new(inner::Inner::new())),
             node_id: ids::node::Id::default(),
         }
+    }
+}
+
+impl Default for ChainVm {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -93,10 +98,9 @@ impl crate::chain::vm::Vm for ChainVm {
                 .send(rpcchainvm::common::message::Message::PendingTxs)
                 .await
                 .map_err(|e| log::warn!("dropping message to consensus engine: {}", e.to_string()));
-            return;
+        } else {
+            log::error!("consensus engine channel failed to initialized");
         }
-
-        log::error!("consensus engine channel failed to initialized");
     }
 }
 
@@ -144,7 +148,7 @@ impl rpcchainvm::common::apphandler::AppHandler for ChainVm {
             &msg.len()
         );
 
-        let txs: Vec<chain::tx::tx::Transaction> = serde_json::from_slice(&msg)
+        let txs: Vec<chain::tx::tx::Transaction> = serde_json::from_slice(msg)
             .map_err(|e| {
                 log::info!(
                     "AppGossip provided invalid txs peer_id: {}: {}",
@@ -165,7 +169,7 @@ impl rpcchainvm::common::apphandler::AppHandler for ChainVm {
             })
             .unwrap();
 
-        log::info!("vm::app_gossip suscces");
+        log::info!("vm::app_gossip success");
 
         Ok(())
     }
@@ -263,7 +267,7 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
 
             let genesis_block_id = genesis_block.id;
             vm.state
-                .set_last_accepted(genesis_block.clone())
+                .set_last_accepted(&mut genesis_block)
                 .await
                 .map_err(|e| {
                     Error::new(ErrorKind::Other, format!("failed to accept block: {:?}", e))
@@ -313,30 +317,29 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
 
         let mut vm = self.inner.write().await;
 
-        match snow_state.try_into() {
+        match snow_state {
             // Initializing is set by chain manager when it is creating the chain.
-            Ok(rpcchainvm::snow::State::Initializing) => {
+            rpcchainvm::snow::State::Initializing => {
                 log::info!("set_state: initializing");
                 vm.bootstrapped = false;
                 Ok(())
             }
-            Ok(rpcchainvm::snow::State::StateSyncing) => {
+            rpcchainvm::snow::State::StateSyncing => {
                 log::info!("set_state: state syncing");
                 Err(Error::new(ErrorKind::Other, "state sync is not supported"))
             }
             // Bootstrapping is called by the bootstrapper to signal bootstrapping has started.
-            Ok(rpcchainvm::snow::State::Bootstrapping) => {
+            rpcchainvm::snow::State::Bootstrapping => {
                 log::info!("set_state: bootstrapping");
                 vm.bootstrapped = false;
                 Ok(())
             }
             // NormalOp os called when consensus has started signalling bootstrap phase is complete.
-            Ok(rpcchainvm::snow::State::NormalOp) => {
+            rpcchainvm::snow::State::NormalOp => {
                 log::info!("set_state: normal op");
                 vm.bootstrapped = true;
                 Ok(())
             }
-            Err(_) => Err(Error::new(ErrorKind::Other, "unknown state")),
         }
     }
 
@@ -397,29 +400,29 @@ impl rpcchainvm::snowman::block::Getter for ChainVm {
 
         let mut vm = self.inner.write().await;
 
-        let accepted_blocks = &mut vm.accepted_blocks;
         // has block been accepted by the vm and cached.
-        if let Some(cached) = accepted_blocks.get(&id) {
+        if let Some(cached) = vm.state.get_accepted_block(id).await {
             return Ok(Box::new(cached.to_owned()));
         }
 
         // has block been verified, but not yet accepted
         if let Some(block) = vm.state.get_verified_block(id).await {
-            return Ok(Box::new(block.to_owned()));
+            return Ok(Box::new(block));
         }
 
         // check on disk state
-        let block =
-            vm.state.get_block(id).await.map_err(|e| {
-                Error::new(ErrorKind::Other, format!("failed to get block: {:?}", e))
-            })?;
+        let block = vm
+            .state
+            .get_block(id)
+            .await
+            .map_err(|e| Error::new(ErrorKind::Other, format!("failed to get block: {}", e)))?;
 
         // if block on disk it must have been accepted
         let block = vm
             .state
             .parse_block(Some(block.to_owned()), vec![], Status::Accepted)
             .await
-            .map_err(|e| Error::new(ErrorKind::Other, format!("failed to parse block: {:?}", e)))?;
+            .map_err(|e| Error::new(ErrorKind::Other, format!("failed to parse block: {}", e)))?;
 
         Ok(Box::new(block))
     }
@@ -439,7 +442,7 @@ impl rpcchainvm::snowman::block::Parser for ChainVm {
             .state
             .parse_block(None, bytes.to_vec(), Status::Processing)
             .await
-            .map_err(|e| Error::new(ErrorKind::Other, format!("failed to parse block: {:?}", e)))?;
+            .map_err(|e| Error::new(ErrorKind::Other, format!("failed to parse block: {}", e)))?;
 
         log::info!("parsed block id: {}", new_block.id);
 
@@ -462,7 +465,7 @@ impl rpcchainvm::snowman::block::ChainVm for ChainVm {
         log::info!("vm::build_block called");
 
         let mut vm = self.inner.write().await;
-        if vm.mempool.len() == 0 {
+        if vm.mempool.is_empty() {
             return Err(Error::new(ErrorKind::Other, "no pending blocks"));
         }
 
@@ -471,7 +474,7 @@ impl rpcchainvm::snowman::block::ChainVm for ChainVm {
             .state
             .get_block(preferred)
             .await
-            .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| Error::new(ErrorKind::Other, format!("failed to get block: {}", e)))?;
 
         let next_time = Utc::now().timestamp() as u64;
 
@@ -485,17 +488,12 @@ impl rpcchainvm::snowman::block::ChainVm for ChainVm {
         );
 
         let txs = Vec::new();
-        loop {
-            match vm.mempool.pop_back() {
-                Some(tx) => {
-                    log::info!("attempting to execute tx:{}", tx.id);
-                    let db = vm.state.get_db().await;
-                    tx.execute(&db, &block).await.map_err(|e| {
-                        Error::new(ErrorKind::Other, format!("failed to execute tx: {:?}", e))
-                    })?;
-                }
-                _ => break,
-            }
+        while let Some(tx) = vm.mempool.pop_back() {
+            log::info!("attempting to execute tx:{}", tx.id);
+            let db = vm.state.get_db().await;
+            tx.execute(&db, &block).await.map_err(|e| {
+                Error::new(ErrorKind::Other, format!("failed to execute tx: {}", e))
+            })?;
         }
 
         block.txs = txs;
@@ -505,12 +503,13 @@ impl rpcchainvm::snowman::block::ChainVm for ChainVm {
         block
             .init(&bytes.unwrap(), status::Status::Processing)
             .await
-            .map_err(|e| Error::new(ErrorKind::Other, format!("failed to init block: {:?}", e)))?;
+            .map_err(|e| Error::new(ErrorKind::Other, format!("failed to init block: {}", e)))?;
 
         // Verify block to ensure it is formed correctly (don't save) <- TODO
-        block.verify().await.map_err(|e| {
-            Error::new(ErrorKind::Other, format!("failed to verify block: {:?}", e))
-        })?;
+        block
+            .verify()
+            .await
+            .map_err(|e| Error::new(ErrorKind::Other, format!("failed to verify block: {}", e)))?;
 
         // TODO: probably needs a channel
         // let mut builder = self.builder.as_ref().expect("vm.builder").write().await;

@@ -58,7 +58,7 @@ impl Mempool {
 
         let mut data = self.data.write().unwrap();
         if data.has(tx_id)? {
-            return Ok(false)
+            return Ok(false);
         }
         let old_len = data.len();
 
@@ -84,7 +84,7 @@ impl Mempool {
     pub fn pop_back(&self) -> Option<Transaction> {
         let mut data = self.data.write().unwrap();
         if let Some(entry) = data.items.pop_back() {
-            return entry.tx
+            return entry.tx;
         }
 
         None

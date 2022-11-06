@@ -3,14 +3,12 @@ use std::{
     io::{Error, ErrorKind, Result},
 };
 
-use avalanche_types::{hash, ids};
+use avalanche_types::ids;
 use eip_712::Type as ParserType;
 use ethereum_types::H256;
 use keccak_hash::keccak;
-use radix_fmt::radix;
-use serde::{Deserialize, Serialize};
+use serde::{de, Deserialize, Serialize};
 use serde_json::to_value;
-use sha3::{Digest, Sha3_256};
 
 use super::{base, bucket, delete, set, tx::TransactionType, unsigned};
 
@@ -29,19 +27,17 @@ pub type Types = HashMap<String, Vec<Type>>;
 pub type TypedDataMessage = HashMap<String, MessageValue>;
 
 // TypedDataDomain represents the domain part of an EIP-712 message.
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
 #[derive(Deserialize, Serialize, Debug, Clone, Default)]
 pub struct TypedDataDomain {
     pub name: String,
     pub magic: String,
 }
 
-pub fn mini_kvvm_domain(m: u64) -> TypedDataDomain {
-    return TypedDataDomain {
+pub fn mini_kvvm_domain(_m: u64) -> TypedDataDomain {
+    TypedDataDomain {
         name: "MiniKvvm".to_string(),
         magic: "0x00".to_string(), // radix(m, 10).to_string(),
-    };
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -80,40 +76,48 @@ impl Serialize for MessageValue {
     }
 }
 
-use serde::de::Visitor;
-use std::fmt;
-struct MessageValueVisitor;
-impl<'de> Visitor<'de> for MessageValueVisitor {
-    type Value = MessageValue;
+impl<'de> Deserialize<'de> for MessageValue {
+    fn deserialize<D: de::Deserializer<'de>>(
+        deserializer: D,
+    ) -> std::result::Result<Self, D::Error> {
+        struct MessageValueVisitor;
+        impl<'de> de::Visitor<'de> for MessageValueVisitor {
+            type Value = MessageValue;
 
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str("an hex string")
-    }
-
-    fn visit_string<E>(self, v: String) -> std::result::Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
-        if v.starts_with("0x") {
-            match hex::decode(&v[2..]) {
-                Ok(s) => Ok(MessageValue::Bytes(s)),
-                Err(e) => Err(E::custom(e.to_string())),
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                write!(formatter, "a potential or array of potentials")
             }
-        } else {
-            match hex::decode(v) {
-                Ok(s) => Ok(MessageValue::Vec(s)),
-                Err(e) => Err(E::custom(e.to_string())),
+
+            fn visit_string<E: de::Error>(self, v: String) -> std::result::Result<Self::Value, E> {
+                if v.starts_with("0x") {
+                    match hex::decode(&v[2..]) {
+                        Ok(s) => Ok(MessageValue::Bytes(s)),
+                        Err(e) => Err(E::custom(e.to_string())),
+                    }
+                } else {
+                    match hex::decode(v) {
+                        Ok(s) => Ok(MessageValue::Vec(s)),
+                        Err(e) => Err(E::custom(e.to_string())),
+                    }
+                }
+            }
+
+            fn visit_str<E: de::Error>(self, v: &str) -> std::result::Result<Self::Value, E> {
+                if v.starts_with("0x") {
+                    match hex::decode(&v[2..]) {
+                        Ok(s) => Ok(MessageValue::Bytes(s)),
+                        Err(e) => Err(E::custom(e.to_string())),
+                    }
+                } else {
+                    match hex::decode(v) {
+                        Ok(s) => Ok(MessageValue::Vec(s)),
+                        Err(e) => Err(E::custom(e.to_string())),
+                    }
+                }
             }
         }
-    }
-}
 
-impl<'de> Deserialize<'de> for MessageValue {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        deserializer.deserialize_string(MessageValueVisitor)
+        deserializer.deserialize_any(MessageValueVisitor)
     }
 }
 
@@ -183,10 +187,10 @@ impl TypedData {
                 let bucket = self
                     .get_typed_message(TD_BUCKET.to_owned())
                     .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
-                return Ok(Box::new(bucket::Tx {
+                Ok(Box::new(bucket::Tx {
                     base_tx,
-                    bucket: bucket.to_owned(),
-                }));
+                    bucket: bucket,
+                }))
             }
 
             TransactionType::Set => {
@@ -199,12 +203,12 @@ impl TypedData {
                 let value = self
                     .get_typed_message(TD_VALUE.to_owned())
                     .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
-                return Ok(Box::new(set::Tx {
+                Ok(Box::new(set::Tx {
                     base_tx,
-                    bucket: bucket.to_owned(),
-                    key: key.to_owned(),
+                    bucket: bucket,
+                    key: key,
                     value: value.as_bytes().to_vec(),
-                }));
+                }))
             }
 
             TransactionType::Delete => {
@@ -214,11 +218,11 @@ impl TypedData {
                 let key = self
                     .get_typed_message(TD_KEY.to_owned())
                     .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
-                return Ok(Box::new(delete::Tx {
+                Ok(Box::new(delete::Tx {
                     base_tx,
-                    bucket: bucket.to_owned(),
-                    key: key.to_owned(),
-                }));
+                    bucket: bucket,
+                    key: key,
+                }))
             }
             TransactionType::Unknown => Err(Error::new(
                 ErrorKind::Other,

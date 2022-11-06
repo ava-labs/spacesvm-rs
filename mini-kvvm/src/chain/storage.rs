@@ -1,19 +1,13 @@
 use std::{
     io::{Error, ErrorKind, Result},
     str,
-    sync::Arc,
 };
 
-use avalanche_types::{
-    hash, ids,
-    rpcchainvm::{self, database},
-};
+use avalanche_types::{ids, rpcchainvm};
 use byteorder::{BigEndian, ByteOrder};
 use chrono::Utc;
-use ethereum_types::H160;
-use log::info;
+
 use serde::{Deserialize, Serialize};
-use tokio::sync::RwLock;
 
 use crate::{
     block::{
@@ -21,14 +15,9 @@ use crate::{
         Block,
     },
     chain::crypto,
-    vm::inner::Inner,
 };
 
-use super::tx::{
-    self,
-    bucket::{self, Info},
-    Transaction,
-};
+use super::tx::{self, bucket, Transaction};
 
 const SHORT_ID_LEN: usize = 20;
 const BLOCK_PREFIX: u8 = 0x0;
@@ -53,7 +42,7 @@ pub async fn delete_bucket_key(
     bucket: &[u8],
     key: &[u8],
 ) -> Result<()> {
-    match get_bucket_info(&db, bucket).await? {
+    match get_bucket_info(db, bucket).await? {
         None => Err(Error::new(
             ErrorKind::InvalidData,
             format!("bucket not found"),
@@ -109,7 +98,7 @@ pub async fn get_value(
     bucket: &[u8],
     key: &[u8],
 ) -> Result<Option<Vec<u8>>> {
-    let info: Option<tx::bucket::Info> = match get_bucket_info(&db, bucket).await {
+    let info: Option<tx::bucket::Info> = match get_bucket_info(db, bucket).await {
         Ok(info) => info,
         Err(e) => {
             if is_not_found(&e) {
@@ -178,7 +167,7 @@ pub async fn put_bucket_key(
     key: &[u8],
     vmeta: ValueMeta,
 ) -> Result<()> {
-    let resp = get_bucket_info(&db, bucket)
+    let resp = get_bucket_info(db, bucket)
         .await
         .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
     if resp.is_none() {
@@ -256,7 +245,7 @@ pub async fn has_bucket(
     db: &Box<dyn rpcchainvm::database::Database + Send + Sync>,
     bucket: &[u8],
 ) -> Result<bool> {
-    return db.has(&bucket_info_key(bucket)).await;
+    db.has(&bucket_info_key(bucket)).await
 }
 
 /// 'KEY_PREFIX' + 'BYTE_DELIMITER' + [r_bucket] + 'BYTE_DELIMITER' + [key]
@@ -311,7 +300,7 @@ pub fn is_not_found(error: &Error) -> bool {
     if error.kind() == ErrorKind::NotFound && error.to_string().contains("not found") {
         return true;
     }
-    return false;
+    false
 }
 
 #[test]
@@ -367,6 +356,9 @@ async fn test_raw_bucket() {
 
 #[tokio::test]
 async fn test_bucket_info_rt() {
+    use super::tx::bucket::Info;
+    use ethereum_types::H160;
+
     let bucket = "kvs".as_bytes();
     let new_info = Info {
         created: 0,
@@ -374,7 +366,7 @@ async fn test_bucket_info_rt() {
         owner: H160::default(),
         raw_bucket: ids::short::Id::empty(),
     };
-    let mut db = database::memdb::Database::new();
+    let mut db = rpcchainvm::database::memdb::Database::new();
     // put
     let resp = put_bucket_info(&mut db, &bucket, new_info, 2).await;
     assert!(resp.is_ok());
@@ -398,7 +390,7 @@ async fn test_bucket_key_rt() {
     let bucket = "kvs".as_bytes();
     let key = "foo".as_bytes();
 
-    let mut db = database::memdb::Database::new();
+    let mut db = rpcchainvm::database::memdb::Database::new();
 
     let resp = get_value_meta(&mut db, bucket, key).await;
     assert!(resp.as_ref().is_ok());

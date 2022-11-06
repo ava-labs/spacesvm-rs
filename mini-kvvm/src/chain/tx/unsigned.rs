@@ -1,5 +1,4 @@
 use std::{
-    any::Any,
     fmt::Debug,
     io::{Error, ErrorKind, Result},
 };
@@ -22,8 +21,6 @@ pub trait Transaction: Debug + DynClone + Send + Sync {
     async fn execute(&self, txn_ctx: TransactionContext) -> Result<()>;
     async fn typed_data(&self) -> TypedData;
     async fn typ(&self) -> TransactionType;
-    async fn as_any(&self) -> &(dyn Any + Send + Sync);
-    async fn as_any_mut(&mut self) -> &mut (dyn Any + Send + Sync);
 }
 
 // ref. https://docs.rs/dyn-clone/latest/dyn_clone/macro.clone_trait_object.html

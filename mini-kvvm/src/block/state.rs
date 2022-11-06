@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     io::{Error, ErrorKind, Result},
+    num::NonZeroUsize,
     sync::Arc,
 };
 
@@ -8,17 +9,17 @@ use avalanche_types::{
     choices::status::{self, Status},
     hash, ids, rpcchainvm,
 };
+use lru::LruCache;
 use serde::{Deserialize, Serialize};
-use sha3::{Digest, Sha3_256};
 use tokio::sync::RwLock;
 
 use crate::chain::{
     self,
     storage::{prefix_block_key, prefix_tx_value_key},
-    tx::{set, Transaction},
+    tx::Transaction,
 };
 
-use super::Block;
+use super::{Block, BLOCKS_LRU_SIZE};
 
 const LAST_ACCEPTED_BLOCK_KEY: &[u8] = b"last_accepted";
 pub const BYTE_DELIMITER: &[u8] = b"/";
@@ -56,14 +57,19 @@ impl Default for StateInner {
             db: rpcchainvm::database::memdb::Database::new(),
             last_accepted: ids::Id::empty(),
             verified_blocks: HashMap::new(),
+            accepted_blocks: LruCache::new(NonZeroUsize::new(BLOCKS_LRU_SIZE).unwrap()),
         }
     }
 }
 
 pub struct StateInner {
     db: Box<dyn rpcchainvm::database::Database + Send + Sync>,
+    /// The last accepted block by this VM
     last_accepted: ids::Id,
+    /// Blocks that have been verified but not yet accepted
     verified_blocks: HashMap<ids::Id, Block>,
+    /// Cache of accepted blocks
+    accepted_blocks: LruCache<ids::Id, Block>,
 }
 
 impl State {
@@ -73,19 +79,39 @@ impl State {
                 db,
                 verified_blocks: HashMap::new(),
                 last_accepted: ids::Id::empty(),
+                accepted_blocks: LruCache::new(NonZeroUsize::new(BLOCKS_LRU_SIZE).unwrap()),
             })),
         };
     }
 
-    /// Adds a verified block to the verified_blocks hash. Returns the old value of the block
+    /// Returns block from LRU cache or None if not found.
+    pub async fn get_accepted_block(&self, id: ids::Id) -> Option<Block> {
+        let mut inner = self.inner.write().await;
+
+        if let Some(block) = inner.accepted_blocks.get(&id) {
+            return Some(block.to_owned());
+        }
+
+        None
+    }
+
+    /// Adds an accepted block to the LRU cache. Returns the old value of the block
     /// if a key is updated. If the key is new it returns None.
+    pub async fn set_accepted_block(&self, id: ids::Id, block: &Block) -> Result<Option<Block>> {
+        let mut inner = self.inner.write().await;
+
+        Ok(inner.accepted_blocks.put(id, block.to_owned()))
+    }
+
+    /// Returns block from map or None if not found.
     pub async fn get_verified_block(&self, id: ids::Id) -> Option<Block> {
         let inner = self.inner.read().await;
 
-        match inner.verified_blocks.get(&id) {
-            Some(b) => Some(b.to_owned()),
-            None => None,
+        if let Some(block) = inner.verified_blocks.get(&id) {
+            return Some(block.to_owned());
         }
+
+        None
     }
 
     /// Adds a verified block to the verified_blocks hash. Returns the old value of the block
@@ -105,7 +131,7 @@ impl State {
     }
 
     /// Persists last accepted block Id into database.
-    pub async fn set_last_accepted(&self, mut block: Block) -> Result<()> {
+    pub async fn set_last_accepted(&self, block: &mut Block) -> Result<()> {
         let block_id = block.id;
 
         // persist last_accepted Id to database with fixed key
@@ -119,7 +145,7 @@ impl State {
             .map_err(|e| {
                 Error::new(
                     ErrorKind::Other,
-                    format!("failed to put last accepted block: {:?}", e),
+                    format!("failed to put last accepted block: {}", e),
                 )
             })?;
 
@@ -196,31 +222,29 @@ impl State {
         //  restore the unlinked values associated with all set_tx.value
         for tx in block.txs.iter_mut() {
             if is_set_tx(&tx).await {
-                let set_tx = tx
-                    .unsigned_transaction
-                    .as_any_mut()
-                    .await
-                    .downcast_mut::<set::Tx>()
-                    .unwrap();
-                if set_tx.value.is_empty() {
+                if let Some(tx_value) = tx.unsigned_transaction.get_value().await {
+                    let tx_id = &ids::Id::from_slice(&tx_value);
+
+                    let value = inner
+                        .db
+                        .get(&prefix_tx_value_key(tx_id))
+                        .await
+                        .map_err(|e| {
+                            Error::new(
+                                ErrorKind::Other,
+                                format!("failed to get tx value key: {}", e),
+                            )
+                        })?;
+                    tx.unsigned_transaction.set_value(value).await?
+                } else {
                     continue;
                 }
-
-                let tx_id = &ids::Id::from_slice(&set_tx.value);
-
-                let value = inner
-                    .db
-                    .get(&prefix_tx_value_key(tx_id))
-                    .await
-                    .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
-                set_tx.value = value;
             }
         }
 
         // parse block inline
         let bytes = &serde_json::to_vec(&block)?;
         block.bytes = bytes.to_vec();
-        // block.id = ids::Id::from_slice_with_sha256(&Sha3_256::digest(bytes));
         block.id = ids::Id::from_slice(hash::keccak256(bytes).as_bytes());
         block.st = status::Status::Accepted;
         block.state = self.clone();
@@ -252,7 +276,6 @@ impl State {
             source = serde_json::to_vec(&block)?;
         }
         block.bytes = source.to_vec();
-        // block.id = ids::Id::from_slice_with_sha256(&Sha3_256::digest(source));
         block.id = ids::Id::from_slice(hash::keccak256(source).as_bytes());
 
         block.st = status;
@@ -269,10 +292,8 @@ impl State {
     pub async fn has_last_accepted(&self) -> Result<bool> {
         let inner = self.inner.read().await;
 
-        match inner.db.has(LAST_ACCEPTED_BLOCK_KEY).await {
-            Ok(found) => Ok(found),
-            Err(e) => Err(Error::new(ErrorKind::Other, e.to_string())),
-        }
+        inner.db.has(LAST_ACCEPTED_BLOCK_KEY).await?;
+        Ok(true)
     }
 
     pub async fn get_db(&self) -> Box<dyn rpcchainvm::database::Database + Send + Sync> {

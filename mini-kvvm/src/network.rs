@@ -41,12 +41,8 @@ impl Push {
             return Ok(());
         }
 
-        let b = serde_json::to_vec(&txs).map_err(|e| {
-            Error::new(
-                ErrorKind::Other,
-                format!("failed to marshal txs: {}", e.to_string()),
-            )
-        })?;
+        let b = serde_json::to_vec(&txs)
+            .map_err(|e| Error::new(ErrorKind::Other, format!("failed to marshal txs: {}", e)))?;
 
         log::info!("sending app gossip txs: {} size: {}", txs.len(), b.len());
         let vm = self.vm_inner.read().await;
@@ -55,12 +51,10 @@ impl Push {
             .as_ref()
             .ok_or_else(|| Error::new(ErrorKind::NotFound, "app_sender not found"))?;
 
-        appsender.send_app_gossip(b).await.map_err(|e| {
-            Error::new(
-                ErrorKind::Other,
-                format!("gossip txs failed: {}", e.to_string()),
-            )
-        })?;
+        appsender
+            .send_app_gossip(b)
+            .await
+            .map_err(|e| Error::new(ErrorKind::Other, format!("gossip txs failed: {}", e)))?;
         log::info!("sending app gossip sent");
         Ok(())
     }
@@ -71,7 +65,7 @@ impl Push {
         inner.mempool.new_txs().map_err(|e| {
             Error::new(
                 ErrorKind::Other,
-                format!("failed to get net tx from mempool: {}", e.to_string()),
+                format!("failed to get net tx from mempool: {}", e),
             )
         })
     }
@@ -105,7 +99,7 @@ impl Push {
 
         let mempool = &vm.mempool;
 
-        while mempool.len() > 0 {
+        while !mempool.is_empty() {
             if let Some(tx) = mempool.pop_back() {
                 // Note: when regossiping, we force resend even though we may have done it
                 // recently.
@@ -114,7 +108,7 @@ impl Push {
             }
         }
 
-        return self.send_txs(txs).await;
+        self.send_txs(txs).await
     }
 
     pub async fn app_gossip(&mut self, node_id: ids::node::Id, message: &[u8]) -> Result<()> {
@@ -124,7 +118,7 @@ impl Push {
             message
         );
 
-        let mut txs: Vec<chain::tx::tx::Transaction> = serde_json::from_slice(&message).unwrap();
+        let mut txs: Vec<chain::tx::tx::Transaction> = serde_json::from_slice(message).unwrap();
 
         // submit incoming gossip
         log::debug!(
@@ -138,11 +132,7 @@ impl Push {
             .map_err(|e| {
                 Error::new(
                     ErrorKind::Other,
-                    format!(
-                        "appgossip failed to submit txs peer_id: {}: {}",
-                        node_id,
-                        e.to_string()
-                    ),
+                    format!("appgossip failed to submit txs peer_id: {}: {}", node_id, e),
                 )
             })?;
 
@@ -150,7 +140,7 @@ impl Push {
             vm.mempool.add(tx.to_owned()).map_err(|e| {
                 Error::new(
                     ErrorKind::Other,
-                    format!("failed to add tx to mempool: {:?}", e),
+                    format!("failed to add tx to mempool: {}", e),
                 )
             })?;
         }

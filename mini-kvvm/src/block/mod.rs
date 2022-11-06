@@ -20,6 +20,7 @@ use crate::chain::tx::tx::Transaction;
 use crate::genesis::Genesis;
 
 pub const DATA_LEN: usize = 32;
+pub const BLOCKS_LRU_SIZE: usize = 8192;
 
 #[derive(Serialize, Deserialize, Clone, Derivative)]
 #[derivative(Debug, Default)]
@@ -164,15 +165,12 @@ impl avalanche_types::rpcchainvm::concensus::snowman::Block for Block {
         }
 
         let state = self.state.clone();
-        state
-            .set_last_accepted(self.to_owned())
-            .await
-            .map_err(|e| {
-                Error::new(
-                    ErrorKind::Other,
-                    format!("set last accepted failed: {}", e.to_string()),
-                )
-            })?;
+        state.set_last_accepted(&mut self).await.map_err(|e| {
+            Error::new(
+                ErrorKind::Other,
+                format!("set last accepted failed: {}", e.to_string()),
+            )
+        })?;
 
         parent_block.children.push(self.to_owned());
         state
@@ -205,16 +203,20 @@ impl avalanche_types::rpcchainvm::concensus::snowman::Decidable for Block {
         self.set_status(Status::Accepted).await;
 
         let block_id = self.id().await;
-        let block = self.clone();
-        // self.state.put_block(&block).await.map_err(|e| {
-        //     Error::new(
-        //         ErrorKind::Other,
-        //         format!("accept block failed: {}", e.to_string()),
-        //     )
-        // })?;
+        let mut block = self.clone();
+        // add block to cache
+        self.state
+            .set_accepted_block(block_id, &block)
+            .await
+            .map_err(|e| {
+                Error::new(
+                    ErrorKind::Other,
+                    format!("failed to add block to cache: {}", e.to_string()),
+                )
+            })?;
 
         self.state
-            .set_last_accepted(block)
+            .set_last_accepted(&mut block)
             .await
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 

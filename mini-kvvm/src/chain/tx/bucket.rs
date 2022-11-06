@@ -1,5 +1,4 @@
 use std::{
-    any::Any,
     collections::HashMap,
     io::{Error, ErrorKind, Result},
 };
@@ -53,23 +52,11 @@ impl unsigned::Transaction for Tx {
         None
     }
 
-    async fn set_value(&mut self, value: Vec<u8>) -> std::io::Result<()> {
+    async fn set_value(&mut self, _value: Vec<u8>) -> std::io::Result<()> {
         Err(Error::new(
             ErrorKind::Unsupported,
             "value is not supported for delete tx",
         ))
-    }
-
-    /// Provides downcast support for the trait object.
-    /// ref. https://doc.rust-lang.org/std/any/index.html
-    async fn as_any(&self) -> &(dyn Any + Send + Sync) {
-        self
-    }
-
-    /// Provides downcast support for the trait object.
-    /// ref. https://doc.rust-lang.org/std/any/index.html
-    async fn as_any_mut(&mut self) -> &mut (dyn Any + Send + Sync) {
-        self
     }
 
     async fn typ(&self) -> TransactionType {

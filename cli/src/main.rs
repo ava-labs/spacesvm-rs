@@ -60,15 +60,12 @@ async fn main() -> std::result::Result<(), Box<dyn error::Error>> {
 
     println!("secret {:?}", secret_key);
 
-    match &cli.command {
-        Command::Get { bucket, key } => {
-            futures::executor::block_on(client.resolve(ResolveArgs {
-                bucket: bucket.as_bytes().to_vec(),
-                key: key.as_bytes().to_vec(),
-            }))
-            .map_err(|e| e.to_string())?;
-        }
-        _ => {}
+    if let Command::Get { bucket, key } = &cli.command {
+        futures::executor::block_on(client.resolve(ResolveArgs {
+            bucket: bucket.as_bytes().to_vec(),
+            key: key.as_bytes().to_vec(),
+        }))
+        .map_err(|e| e.to_string())?;
     }
 
     let tx = command_to_tx(cli.command)?;
@@ -100,8 +97,8 @@ fn get_or_create_pk(path: &str) -> Result<SecretKey> {
     let contents = std::fs::read_to_string(path)?;
     let parsed = hex::decode(contents)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
-    Ok(SecretKey::from_slice(&parsed)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?)
+    SecretKey::from_slice(&parsed)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
 }
 
 fn bucket_tx(bucket: String) -> TransactionData {
@@ -154,11 +151,11 @@ async fn sign_and_submit(client: &Client, pk: &SecretKey, tx_data: TransactionDa
 
     println!("cli typed data: {:?}", &typed_data);
 
-    let dh = decoder::hash_structured_data(&typed_data)?;
+    let dh = decoder::hash_structured_data(typed_data)?;
 
     println!("dh bytes: {:?}", &dh.as_bytes());
 
-    let signature = crypto::sign(&dh.as_bytes(), &pk)?;
+    let signature = crypto::sign(dh.as_bytes(), pk)?;
     let s = crypto::derive_sender(dh.as_bytes(), &signature)?;
     println!("sender: {}", s);
 
@@ -171,7 +168,7 @@ async fn sign_and_submit(client: &Client, pk: &SecretKey, tx_data: TransactionDa
     let resp = client
         .issue_tx(IssueTxArgs {
             typed_data: resp.typed_data,
-            signature: signature,
+            signature,
         })
         .await
         .map_err(error_handling)?;

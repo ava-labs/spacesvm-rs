@@ -1,13 +1,10 @@
-use std::num::NonZeroUsize;
-
 use avalanche_types::{ids, rpcchainvm};
-use lru::LruCache;
 use semver::Version;
 use tokio::sync::mpsc;
 
 use crate::{block, genesis::Genesis, mempool};
 
-use super::{BLOCKS_LRU_SIZE, MEMPOOL_SIZE};
+use super::MEMPOOL_SIZE;
 
 pub struct Inner {
     pub ctx: Option<rpcchainvm::context::Context>,
@@ -22,7 +19,6 @@ pub struct Inner {
     pub last_accepted: block::Block,
     pub preferred_block_id: ids::Id,
     pub mempool: mempool::Mempool,
-    pub accepted_blocks: LruCache<ids::Id, block::Block>,
 
     pub builder_stop_rx: crossbeam_channel::Receiver<()>,
     pub builder_stop_tx: crossbeam_channel::Sender<()>,
@@ -71,7 +67,6 @@ impl Inner {
 
             // init
             mempool: mempool::Mempool::new(MEMPOOL_SIZE),
-            accepted_blocks: LruCache::new(NonZeroUsize::new(BLOCKS_LRU_SIZE).unwrap()),
             builder_stop_rx,
             builder_stop_tx,
             done_build_rx,
@@ -81,5 +76,11 @@ impl Inner {
             stop_rx,
             stop_tx,
         }
+    }
+}
+
+impl Default for Inner {
+    fn default() -> Self {
+        Self::new()
     }
 }

@@ -6,12 +6,12 @@ use std::{
 use avalanche_types::{hash, ids, rpcchainvm};
 use ethereum_types::Address;
 use serde::{Deserialize, Serialize};
-use sha3::{Digest, Sha3_256};
 
 use crate::{block::Block, chain::crypto, chain::storage::set_transaction};
 
 use super::{decoder, unsigned::TransactionContext};
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(tag = "type")]
 pub enum TransactionType {
     /// Root namespace.
@@ -96,7 +96,6 @@ impl crate::chain::tx::Transaction for Transaction {
 
         let sender = crypto::derive_sender(digest_hash.as_bytes(), &self.signature)?;
         self.bytes = stx;
-        // self.id = ids::Id::from_slice_with_sha256(&Sha3_256::digest(&self.bytes));
         self.id = ids::Id::from_slice(hash::keccak256(&self.bytes).as_bytes());
 
         self.size = self.bytes.len() as u64;
@@ -122,7 +121,7 @@ impl crate::chain::tx::Transaction for Transaction {
 
     async fn execute(
         &self,
-        db: &Box<dyn rpcchainvm::database::Database + Send + Sync>,
+        db: &'life1 Box<dyn rpcchainvm::database::Database + Send + Sync>,
         block: &Block,
     ) -> Result<()> {
         log::info!("execute: sender: {}", self.sender);
@@ -152,7 +151,7 @@ pub fn new_tx(
     utx: Box<dyn super::unsigned::Transaction + Send + Sync>,
     signature: Vec<u8>,
 ) -> Transaction {
-    return Transaction {
+    Transaction {
         unsigned_transaction: utx,
         signature,
 
@@ -162,7 +161,7 @@ pub fn new_tx(
         id: ids::Id::empty(),
         size: 0,
         sender: Address::zero(),
-    };
+    }
 }
 
 #[tokio::test]

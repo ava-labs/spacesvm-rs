@@ -13,7 +13,6 @@ use avalanche_types::{ids, rpcchainvm};
 use crate::block::Block;
 
 #[tonic::async_trait]
-// #[typetag::serde]
 #[typetag::serde(tag = "type")]
 pub trait Transaction {
     async fn init(&mut self) -> Result<()>;
@@ -22,7 +21,7 @@ pub trait Transaction {
     async fn id(&self) -> ids::Id;
     async fn execute(
         &self,
-        db: &Box<dyn rpcchainvm::database::Database + Send + Sync>,
+        db: &'life1 Box<dyn rpcchainvm::database::Database + Send + Sync>,
         block: &Block,
     ) -> Result<()>;
 }

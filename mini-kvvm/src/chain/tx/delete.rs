@@ -1,5 +1,4 @@
 use std::{
-    any::Any,
     collections::HashMap,
     io::{Error, ErrorKind, Result},
 };
@@ -37,30 +36,18 @@ impl unsigned::Transaction for Tx {
     }
 
     async fn set_block_id(&mut self, id: avalanche_types::ids::Id) {
-        self.base_tx.block_id = id;
+        self.base_tx.block_id = id
     }
 
     async fn get_value(&self) -> Option<Vec<u8>> {
         None
     }
 
-    async fn set_value(&mut self, value: Vec<u8>) -> std::io::Result<()> {
+    async fn set_value(&mut self, _value: Vec<u8>) -> std::io::Result<()> {
         Err(Error::new(
             ErrorKind::Unsupported,
             "value is not supported for delete tx",
         ))
-    }
-
-    /// Provides downcast support for the trait object.
-    /// ref. https://doc.rust-lang.org/std/any/index.html
-    async fn as_any(&self) -> &(dyn Any + Send + Sync) {
-        self
-    }
-
-    /// Provides downcast support for the trait object.
-    /// ref. https://doc.rust-lang.org/std/any/index.html
-    async fn as_any_mut(&mut self) -> &mut (dyn Any + Send + Sync) {
-        self
     }
 
     async fn typ(&self) -> TransactionType {
@@ -93,6 +80,10 @@ impl unsigned::Transaction for Tx {
             .map_err(|e| {
                 Error::new(ErrorKind::Other, format!("failed to get value meta: {}", e))
             })?;
+
+        if v.is_none() {
+            return Err(Error::new(ErrorKind::Other, "key is missing"));
+        }
 
         storage::delete_bucket_key(&mut txn_ctx.db, self.bucket.as_bytes(), self.key.as_bytes())
             .await

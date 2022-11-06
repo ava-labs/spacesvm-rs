@@ -1,5 +1,4 @@
 use std::{
-    any::Any,
     collections::HashMap,
     io::{Error, ErrorKind},
 };
@@ -8,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use sha3::Digest;
 
 use crate::chain::{
-    storage::{self, get_bucket_info, is_not_found, put_bucket_info, put_bucket_key, ValueMeta},
+    storage::{self, get_bucket_info, put_bucket_info, put_bucket_key, ValueMeta},
     tx::decoder::{create_typed_data, MessageValue, Type, TypedData},
 };
 
@@ -60,18 +59,6 @@ impl unsigned::Transaction for Tx {
     async fn set_value(&mut self, value: Vec<u8>) -> std::io::Result<()> {
         self.value = value;
         Ok(())
-    }
-
-    /// Provides downcast support for the trait object.
-    /// ref. https://doc.rust-lang.org/std/any/index.html
-    async fn as_any(&self) -> &(dyn Any + Send + Sync) {
-        self
-    }
-
-    /// Provides downcast support for the trait object.
-    /// ref. https://doc.rust-lang.org/std/any/index.html
-    async fn as_any_mut(&mut self) -> &mut (dyn Any + Send + Sync) {
-        self
     }
 
     async fn typ(&self) -> TransactionType {
@@ -148,7 +135,7 @@ impl unsigned::Transaction for Tx {
     }
 
     async fn typed_data(&self) -> TypedData {
-        let mut tx_fields: Vec<Type> = Vec::with_capacity(2);
+        let mut tx_fields: Vec<Type> = vec![];
         tx_fields.push(Type {
             name: TD_BUCKET.to_owned(),
             type_: TD_STRING.to_owned(),

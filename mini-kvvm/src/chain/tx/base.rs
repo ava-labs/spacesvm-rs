@@ -13,7 +13,7 @@ pub struct Tx {
 
 impl Tx {
     pub async fn get_block_id(&self) -> avalanche_types::ids::Id {
-        return self.block_id;
+        self.block_id
     }
 
     pub async fn set_block_id(&mut self, id: avalanche_types::ids::Id) {
