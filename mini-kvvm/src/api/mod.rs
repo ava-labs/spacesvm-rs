@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::chain::{
     storage::ValueMeta,
     tx::decoder::TypedData,
-    tx::{self, unsigned},
+    tx::{self},
 };
 
 #[rpc]

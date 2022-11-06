@@ -1,9 +1,12 @@
-use std::{io::ErrorKind, sync::Arc};
+use std::sync::Arc;
 
 use crate::{
     api::*,
-    chain::{self, storage, tx::Transaction, vm::Vm},
-    vm::{self, inner::Inner},
+    chain::{
+        self, storage,
+        tx::{unsigned, Transaction},
+    },
+    vm::inner::Inner,
 };
 
 use tokio::sync::RwLock;

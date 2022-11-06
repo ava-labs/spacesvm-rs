@@ -40,7 +40,7 @@ pub async fn create_genesis_block(state: &State, data: Vec<u8>) -> Result<ids::I
 
     let genesis_block_id = genesis_block.id;
     state
-        .set_last_accepted(genesis_block)
+        .set_last_accepted(&mut genesis_block)
         .await
         .map_err(|e| Error::new(ErrorKind::Other, format!("failed to accept block: {:?}", e)))?;
 
