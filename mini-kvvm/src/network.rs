@@ -165,18 +165,19 @@ impl Push {
         log::debug!("shutdown regossip loop");
     }
 
+    // Helper function initialize builder
+    pub async fn init(&self) -> crossbeam_channel::Receiver<()> {
+        let vm = self.vm_inner.read().await;
+        vm.stop_rx.clone()
+    }
+
     pub async fn gossip(&mut self) {
         log::info!("starting gossip loops");
-        let inner = self.vm_inner.read().await;
-        let stop_ch = inner.stop_rx.clone();
-        drop(inner);
+        let stop_ch = self.init().await;
 
         while stop_ch.try_recv() == Err(TryRecvError::Empty) {
             sleep(GOSSIP_INTERVAL).await;
-            // let mut inner = self.vm_inner.write().await;
-            // let new_txs = inner.mempool.new_txs();
-            // drop(inner);
-            log::info!("tick gossip");
+            log::debug!("tick gossip");
 
             let _ = self.gossip_new_txs().await;
         }

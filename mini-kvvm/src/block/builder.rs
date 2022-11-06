@@ -9,7 +9,7 @@ use std::{
 
 use avalanche_types::rpcchainvm;
 use crossbeam_channel::TryRecvError;
-use tokio::{sync::RwLock, time::sleep};
+use tokio::sync::RwLock;
 
 use crate::vm;
 
@@ -30,7 +30,7 @@ pub struct Timed {
     vm_inner: Arc<RwLock<vm::inner::Inner>>,
 }
 
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum Status {
     /// Indicates there's no need to build a block.
     DontBuild,
@@ -91,47 +91,48 @@ impl Timed {
     /// other than [DontBuild], then the attempt has already begun and this notification
     /// can be safely skipped.
     async fn signal_txs_ready(&mut self) {
-        // if *self.status.read().await == Status::DontBuild {
-        //     log::info!("### dont build");
-        //     return;
-        // }
+        if *self.status.read().await == Status::DontBuild {
+            log::debug!(
+                "skipping sending message to consensus status: {:?}",
+                Status::DontBuild
+            );
+            return;
+        }
 
         self.mark_building().await
     }
 
-    /// Signal the avalanchego engine to build a block from pending transactions
+    /// Signal the consensus engine to build a block from pending transactions
     async fn mark_building(&mut self) {
-        log::info!("mark_building:: start");
+        log::debug!("sending message to engine");
         let vm = self.vm_inner.read().await;
-        match vm
+        let t = vm
             .to_engine
             .as_ref()
             .expect("builder.vm_inner")
             .send(rpcchainvm::common::message::Message::PendingTxs)
             .await
-        {
-            Ok(_) => {
-                let mut status = self.status.write().await;
-                *status = Status::Building;
-            }
-            Err(e) => log::error!("dropping message to consensus engine: {}", e.to_string()),
-        }
-        log::info!("mark building end");
+            .map_err(|e| log::error!("dropping message to consensus engine: {}", e))
+            .unwrap();
+
+        log::debug!("update status: {:?}", Status::Building);
+        let mut status = self.status.write().await;
+        *status = Status::Building;
     }
 
     /// Should be called immediately after [build_block].
     // [HandleGenerateBlock] invocation could lead to quiescence, building a block with
     // some delay, or attempting to build another block immediately
     pub async fn handle_generate_block(&mut self) {
-        log::info!("handle generate bock called");
         let vm = self.vm_inner.read().await;
         let mut status = self.status.write().await;
 
         if vm.mempool.len() > 0 {
+            log::debug!("update status: {:?}", Status::MayBuild);
             *status = Status::MayBuild;
             self.dispatch_timer_duration(self.build_interval).await;
         } else {
-            log::info!("mempool empty");
+            log::debug!("mempool empty");
             *status = Status::DontBuild;
         }
     }
@@ -249,8 +250,8 @@ impl Timed {
         }
     }
 
-    // Helper function to reduce lock contention
-    pub async fn get_channels(
+    // Helper function initialize builder
+    pub async fn init(
         &self,
     ) -> (
         crossbeam_channel::Receiver<()>,
@@ -265,14 +266,12 @@ impl Timed {
     pub async fn build(&mut self) {
         log::info!("starting build loops");
 
-        let (stop_ch, mempool_pending_ch) = self.get_channels().await;
+        let (stop_ch, mempool_pending_ch) = self.init().await;
 
         while stop_ch.try_recv() == Err(TryRecvError::Empty) {
-            log::info!("build: pending HOLD");
             mempool_pending_ch.recv().unwrap();
-            log::info!("build: pending mempool signal received");
+            log::debug!("build: pending mempool signal received");
             self.signal_txs_ready().await;
         }
-        log::info!("build: loop ends");
     }
 }

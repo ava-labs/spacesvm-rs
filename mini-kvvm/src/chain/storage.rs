@@ -25,7 +25,6 @@ const TX_PREFIX: u8 = 0x1;
 const TX_VALUE_PREFIX: u8 = 0x2;
 const INFO_PREFIX: u8 = 0x3;
 const KEY_PREFIX: u8 = 0x4;
-const _BALANCE_PREFIX: u8 = 0x5;
 
 pub const BYTE_DELIMITER: u8 = b'/';
 
@@ -67,27 +66,21 @@ pub struct ValueMeta {
 }
 
 pub async fn submit(state: &state::State, txs: &mut Vec<tx::tx::Transaction>) -> Result<()> {
-    log::info!("submit called");
     let now = Utc::now().timestamp() as u64;
     let db = &state.get_db().await;
 
-    log::info!("submit loop start");
     for tx in txs.iter_mut() {
-        log::info!("submit init called");
         tx.init()
             .await
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
         if tx.id().await == ids::Id::empty() {
             return Err(Error::new(ErrorKind::Other, "invalid block id"));
         }
-        log::info!("submit create dummy");
         let dummy_block = Block::new_dummy(now, tx.to_owned(), state.clone());
 
-        log::info!("submit execute");
         tx.execute(&db, &dummy_block)
             .await
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
-        log::info!("submit execute ok");
     }
 
     Ok(())
@@ -116,7 +109,6 @@ pub async fn get_value(
         .await
         .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
-    // log::error!("get_value value: {:?}", value);
     let vmeta: ValueMeta = serde_json::from_slice(&value)
         .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
 
@@ -126,14 +118,11 @@ pub async fn get_value(
 
     let value_key = prefix_tx_value_key(&tx_id);
 
-    // log::error!("get_value key: {:?}", value_key);
-
     let value = db
         .get(&value_key)
         .await
         .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
-    log::info!("get_value prefix_tx_value_key: found");
     Ok(Some(value))
 }
 
@@ -175,10 +164,9 @@ pub async fn put_bucket_key(
     }
 
     let k = bucket_value_key(resp.unwrap().raw_bucket, key);
+    log::debug!("put_value key: {:?}", k);
     let rv_meta = serde_json::to_vec(&vmeta)
         .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
-
-    log::error!("put_value key: {:?}", k);
 
     return db.put(&k, &rv_meta).await;
 }
@@ -189,8 +177,6 @@ pub async fn put_bucket_info(
     mut info: bucket::Info,
     _last_expiry: u64,
 ) -> Result<()> {
-    log::info!("put_bucket_info called: {:?}\n", bucket);
-
     // If [raw_bucket] is empty, this is a new bucket.
     if info.raw_bucket.is_empty() {
         let r_bucket = raw_bucket(bucket, info.created)
@@ -210,8 +196,6 @@ pub async fn get_bucket_info(
     db: &Box<dyn rpcchainvm::database::Database + Send + Sync>,
     bucket: &[u8],
 ) -> Result<Option<bucket::Info>> {
-    log::info!("get_bucket_info called: {:?}\n", bucket);
-
     match db.get(&bucket_info_key(bucket)).await {
         Err(e) => {
             if is_not_found(&e) {
@@ -220,11 +204,8 @@ pub async fn get_bucket_info(
             Err(e)
         }
         Ok(value) => {
-            log::info!("get_bucket_info value: {:?}\n", value);
-
             let info: bucket::Info = serde_json::from_slice(&value)
                 .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
-            log::info!("get_bucket_info info: {:?}\n", info);
             Ok(Some(info))
         }
     }
@@ -233,7 +214,7 @@ pub async fn raw_bucket(bucket: &[u8], block_time: u64) -> Result<ids::short::Id
     let mut r: Vec<u8> = Vec::new();
     r.extend_from_slice(bucket);
     r.push(BYTE_DELIMITER);
-    r.resize(bucket.len() + 1 + 8, 0);
+    r.resize(bucket.len() + 1 + 8, block_time.try_into().unwrap());
     BigEndian::write_u64(&mut r[bucket.len() + 1..].to_vec(), 0);
     let hash = crypto::compute_hash_160(&r);
 
@@ -383,17 +364,4 @@ async fn test_bucket_info_rt() {
             61
         ])
     );
-}
-
-#[tokio::test]
-async fn test_bucket_key_rt() {
-    let bucket = "kvs".as_bytes();
-    let key = "foo".as_bytes();
-
-    let mut db = rpcchainvm::database::memdb::Database::new();
-
-    let resp = get_value_meta(&mut db, bucket, key).await;
-    assert!(resp.as_ref().is_ok());
-    assert!(resp.as_ref().unwrap().is_none());
-    // put_bucket_key(&mut db,bucket, key,vmeta)
 }
