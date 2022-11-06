@@ -403,6 +403,7 @@ impl rpcchainvm::snowman::block::Getter for ChainVm {
         id: ids::Id,
     ) -> Result<Box<dyn rpcchainvm::concensus::snowman::Block + Send + Sync>> {
         // TODO: why do we need mutable reference?
+        // TODO: why write lock?
         let mut vm = self.inner.write().await;
 
         let block =
@@ -423,6 +424,7 @@ impl rpcchainvm::snowman::block::Parser for ChainVm {
         bytes: &[u8],
     ) -> Result<Box<dyn rpcchainvm::concensus::snowman::Block + Send + Sync>> {
         // TODO: why do we need mutable refernce here? we're just parsing?
+        // TODO: why write lock?
         let mut vm = self.inner.write().await;
 
         let new_block = vm
@@ -521,6 +523,7 @@ impl rpcchainvm::snowman::block::ChainVm for ChainVm {
 
     // Returns the Id of the last accepted block.
     async fn last_accepted(&self) -> Result<ids::Id> {
+        // TODO: why write lock?
         let vm = self.inner.write().await;
         let state = vm.state.clone();
         let last_accepted_id = state.get_last_accepted().await?;
