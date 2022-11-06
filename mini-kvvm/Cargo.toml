@@ -15,9 +15,7 @@ path = "src/bin/mini-kvvm/main.rs"
 
 [dependencies]
 avalanche-proto = { version = "0.17.0" }
-# avalanche-types = { version = "0.0.74" }
-avalanche-types = { path = "../../../avalanche-rust/avalanche-rust/crates/avalanche-types" }
-
+avalanche-types = { version = "0.0.124" }
 byteorder = "1.4.3"
 chan = "0.1.23"
 chrono = "0.4.19"
@@ -57,7 +55,6 @@ typetag = "0.2"
 name = "integration"
 path = "tests/integration_tests.rs"
 
-[dev-dependencies]
-cli = {path="../cli"}  
+[dev-dependencies] 
 jsonrpc-tcp-server = "18.0.0"
 futures-test = "0.3.24"
