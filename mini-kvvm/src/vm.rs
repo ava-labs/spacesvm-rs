@@ -239,7 +239,10 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
         genesis_bytes: &[u8],
         _upgrade_bytes: &[u8],
         _config_bytes: &[u8],
+
+        // TODO: why we don't use to_engine???
         _to_engine: Sender<rpcchainvm::common::message::Message>,
+
         _fxs: &[rpcchainvm::common::vm::Fx],
         app_sender: Box<dyn rpcchainvm::common::appsender::AppSender + Send + Sync>,
     ) -> Result<()> {
