@@ -402,6 +402,7 @@ impl rpcchainvm::snowman::block::Getter for ChainVm {
         // TOOD: make this reference
         id: ids::Id,
     ) -> Result<Box<dyn rpcchainvm::concensus::snowman::Block + Send + Sync>> {
+        // TODO: why do we need mutable reference?
         let mut vm = self.inner.write().await;
 
         let block =
