@@ -106,7 +106,7 @@ impl Timed {
     async fn mark_building(&mut self) {
         log::debug!("sending message to engine");
         let vm = self.vm_inner.read().await;
-        let t = vm
+        vm
             .to_engine
             .as_ref()
             .expect("builder.vm_inner")
