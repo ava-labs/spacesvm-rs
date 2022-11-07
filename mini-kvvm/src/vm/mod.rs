@@ -10,9 +10,9 @@ use std::{
 use avalanche_types::{
     choices::status::{self, Status},
     ids,
-    rpcchainvm::{
+    subnet::{
         self,
-        concensus::snowman::{Block as SnowmanBlock, Initializer},
+        rpc::concensus::snowman::{Block, Initializer},
     },
 };
 use chrono::{DateTime, Utc};
@@ -53,7 +53,7 @@ impl Default for ChainVm {
     }
 }
 
-impl avalanche_types::rpcchainvm::vm::Vm for ChainVm {}
+impl avalanche_types::subnet::rpc::vm::Vm for ChainVm {}
 
 #[tonic::async_trait]
 impl crate::chain::vm::Vm for ChainVm {
@@ -95,7 +95,7 @@ impl crate::chain::vm::Vm for ChainVm {
 
         if let Some(engine) = &vm.to_engine {
             let _ = engine
-                .send(rpcchainvm::common::message::Message::PendingTxs)
+                .send(subnet::rpc::common::message::Message::PendingTxs)
                 .await
                 .map_err(|e| log::warn!("dropping message to consensus engine: {}", e.to_string()));
         } else {
@@ -105,7 +105,7 @@ impl crate::chain::vm::Vm for ChainVm {
 }
 
 #[tonic::async_trait]
-impl rpcchainvm::common::apphandler::AppHandler for ChainVm {
+impl subnet::rpc::common::apphandler::AppHandler for ChainVm {
     async fn app_request(
         &self,
         _node_id: &ids::node::Id,
@@ -176,7 +176,7 @@ impl rpcchainvm::common::apphandler::AppHandler for ChainVm {
 }
 
 #[tonic::async_trait]
-impl rpcchainvm::common::vm::Connector for ChainVm {
+impl subnet::rpc::common::vm::Connector for ChainVm {
     async fn connected(&self, _id: &ids::node::Id) -> Result<()> {
         log::info!("vm::connected called");
 
@@ -193,25 +193,25 @@ impl rpcchainvm::common::vm::Connector for ChainVm {
 }
 
 #[tonic::async_trait]
-impl rpcchainvm::health::Checkable for ChainVm {
+impl subnet::rpc::health::Checkable for ChainVm {
     async fn health_check(&self) -> Result<Vec<u8>> {
         Ok("200".as_bytes().to_vec())
     }
 }
 
 #[tonic::async_trait]
-impl rpcchainvm::common::vm::Vm for ChainVm {
+impl subnet::rpc::common::vm::Vm for ChainVm {
     /// Initialize this Vm.
     async fn initialize(
         &mut self,
-        ctx: Option<rpcchainvm::context::Context>,
-        db_manager: Box<dyn rpcchainvm::database::manager::Manager + Send + Sync>,
+        ctx: Option<subnet::rpc::context::Context>,
+        db_manager: Box<dyn subnet::rpc::database::manager::Manager + Send + Sync>,
         genesis_bytes: &[u8],
         _upgrade_bytes: &[u8],
         _config_bytes: &[u8],
-        to_engine: mpsc::Sender<rpcchainvm::common::message::Message>,
-        _fxs: &[rpcchainvm::common::vm::Fx],
-        app_sender: Box<dyn rpcchainvm::common::appsender::AppSender + Send + Sync>,
+        to_engine: mpsc::Sender<subnet::rpc::common::message::Message>,
+        _fxs: &[subnet::rpc::common::vm::Fx],
+        app_sender: Box<dyn subnet::rpc::common::appsender::AppSender + Send + Sync>,
     ) -> Result<()> {
         log::info!("vm::initialize called");
 
@@ -312,30 +312,30 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
     }
 
     /// Communicates to Vm the next state phase.
-    async fn set_state(&self, snow_state: rpcchainvm::snow::State) -> Result<()> {
+    async fn set_state(&self, snow_state: subnet::rpc::snow::State) -> Result<()> {
         log::info!("vm::set_state called");
 
         let mut vm = self.inner.write().await;
 
         match snow_state {
             // Initializing is set by chain manager when it is creating the chain.
-            rpcchainvm::snow::State::Initializing => {
+            subnet::rpc::snow::State::Initializing => {
                 log::info!("set_state: initializing");
                 vm.bootstrapped = false;
                 Ok(())
             }
-            rpcchainvm::snow::State::StateSyncing => {
+            subnet::rpc::snow::State::StateSyncing => {
                 log::info!("set_state: state syncing");
                 Err(Error::new(ErrorKind::Other, "state sync is not supported"))
             }
             // Bootstrapping is called by the bootstrapper to signal bootstrapping has started.
-            rpcchainvm::snow::State::Bootstrapping => {
+            subnet::rpc::snow::State::Bootstrapping => {
                 log::info!("set_state: bootstrapping");
                 vm.bootstrapped = false;
                 Ok(())
             }
             // NormalOp os called when consensus has started signalling bootstrap phase is complete.
-            rpcchainvm::snow::State::NormalOp => {
+            subnet::rpc::snow::State::NormalOp => {
                 log::info!("set_state: normal op");
                 vm.bootstrapped = true;
                 Ok(())
@@ -355,7 +355,7 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
     async fn create_static_handlers(
         &mut self,
     ) -> std::io::Result<
-        std::collections::HashMap<String, rpcchainvm::common::http_handler::HttpHandler>,
+        std::collections::HashMap<String, subnet::rpc::common::http_handler::HttpHandler>,
     > {
         log::info!("vm::create_static_handlers called");
 
@@ -369,7 +369,7 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
     ) -> std::io::Result<
         std::collections::HashMap<
             String,
-            avalanche_types::rpcchainvm::common::http_handler::HttpHandler,
+            avalanche_types::subnet::rpc::common::http_handler::HttpHandler,
         >,
     > {
         log::info!("vm::create_handlers called");
@@ -379,7 +379,7 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
         let mut handler = jsonrpc_core::IoHandler::new();
         handler.extend_with(api::Service::to_delegate(service));
 
-        let http_handler = rpcchainvm::common::http_handler::HttpHandler::new_from_u8(0, handler)
+        let http_handler = subnet::rpc::common::http_handler::HttpHandler::new_from_u8(0, handler)
             .map_err(|_| Error::from(ErrorKind::InvalidData))?;
 
         let mut handlers = HashMap::new();
@@ -390,12 +390,12 @@ impl rpcchainvm::common::vm::Vm for ChainVm {
 }
 
 #[tonic::async_trait]
-impl rpcchainvm::snowman::block::Getter for ChainVm {
+impl subnet::rpc::snowman::block::Getter for ChainVm {
     /// Attempt to load a block.
     async fn get_block(
         &self,
         id: ids::Id,
-    ) -> Result<Box<dyn rpcchainvm::concensus::snowman::Block + Send + Sync>> {
+    ) -> Result<Box<dyn subnet::rpc::concensus::snowman::Block + Send + Sync>> {
         log::info!("vm::get_block called");
 
         let mut vm = self.inner.write().await;
@@ -429,12 +429,12 @@ impl rpcchainvm::snowman::block::Getter for ChainVm {
 }
 
 #[tonic::async_trait]
-impl rpcchainvm::snowman::block::Parser for ChainVm {
+impl subnet::rpc::snowman::block::Parser for ChainVm {
     /// Attempt to create a block from a stream of bytes.
     async fn parse_block(
         &self,
         bytes: &[u8],
-    ) -> Result<Box<dyn rpcchainvm::concensus::snowman::Block + Send + Sync>> {
+    ) -> Result<Box<dyn subnet::rpc::concensus::snowman::Block + Send + Sync>> {
         log::info!("vm::get_block called");
 
         let mut vm = self.inner.write().await;
@@ -457,11 +457,11 @@ impl rpcchainvm::snowman::block::Parser for ChainVm {
 }
 
 #[tonic::async_trait]
-impl rpcchainvm::snowman::block::ChainVm for ChainVm {
+impl subnet::rpc::snowman::block::ChainVm for ChainVm {
     /// Attempt to create a new block.
     async fn build_block(
         &self,
-    ) -> Result<Box<dyn rpcchainvm::concensus::snowman::Block + Send + Sync>> {
+    ) -> Result<Box<dyn subnet::rpc::concensus::snowman::Block + Send + Sync>> {
         log::info!("vm::build_block called");
 
         let mut vm = self.inner.write().await;
@@ -542,7 +542,7 @@ impl rpcchainvm::snowman::block::ChainVm for ChainVm {
     /// Attempts to issue a transaction into consensus.
     async fn issue_tx(
         &self,
-    ) -> Result<Box<dyn rpcchainvm::concensus::snowman::Block + Send + Sync>> {
+    ) -> Result<Box<dyn subnet::rpc::concensus::snowman::Block + Send + Sync>> {
         log::info!("vm::issue_tx called");
 
         Err(Error::new(

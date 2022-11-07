@@ -1,6 +1,6 @@
 use std::io::Result;
 
-use avalanche_types::rpcchainvm;
+use avalanche_types::subnet;
 use clap::{crate_version, Arg, Command};
 use log::info;
 
@@ -45,12 +45,9 @@ async fn main() -> Result<()> {
     ) = tokio::sync::broadcast::channel(1);
 
     info!("starting mini-kvvm-rs");
-    let vm_server = avalanche_types::rpcchainvm::vm::server::Server::new(
-        Box::new(vm::ChainVm::new()),
-        stop_ch_tx,
-    );
+    let vm_server = subnet::rpc::vm::server::Server::new(Box::new(vm::ChainVm::new()), stop_ch_tx);
 
-    rpcchainvm::plugin::serve(vm_server, stop_ch_rx)
+    subnet::rpc::plugin::serve(vm_server, stop_ch_rx)
         .await
         .expect("failed to start gRPC server");
 

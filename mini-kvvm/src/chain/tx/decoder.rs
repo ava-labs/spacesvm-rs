@@ -3,7 +3,7 @@ use std::{
     io::{Error, ErrorKind, Result},
 };
 
-use avalanche_types::ids;
+use avalanche_types::{ids, key};
 use eip_712::Type as ParserType;
 use ethereum_types::H256;
 use keccak_hash::keccak;
@@ -280,11 +280,8 @@ pub fn hash_structured_data(typed_data: &TypedData) -> Result<H256> {
 
 #[tokio::test]
 async fn signature_recovers() {
-    use crate::chain::{crypto::derive_sender, *};
-    use secp256k1::{rand, PublicKey, SecretKey};
-
-    let secret_key = SecretKey::new(&mut rand::thread_rng());
-    let public_key = PublicKey::from_secret_key_global(&secret_key);
+    let secret_key = key::secp256k1::private_key::Key::generate().unwrap();
+    let public_key = secret_key.to_public_key();
 
     let tx_data = crate::chain::tx::unsigned::TransactionData {
         typ: TransactionType::Bucket,
@@ -297,8 +294,9 @@ async fn signature_recovers() {
     let utx = resp.unwrap();
     let hash = hash_structured_data(&utx.typed_data().await).unwrap();
 
-    let sig = crypto::sign(&hash.as_bytes(), &secret_key).unwrap();
-    let sender = derive_sender(&hash.as_bytes(), &sig).unwrap();
+    let sig = secret_key.sign_digest(hash.as_bytes()).unwrap();
+    let sender =
+        key::secp256k1::public_key::Key::from_signature(hash.as_bytes(), &sig.to_bytes()).unwrap();
     assert_eq!(public_key.to_string(), sender.to_string());
     assert_eq!(public_key, sender,);
 
@@ -315,10 +313,10 @@ async fn signature_recovers() {
         .await;
     let hash = hash_structured_data(&utx.typed_data().await).unwrap();
 
-    let sig = crypto::sign(&hash.as_bytes(), &secret_key).unwrap();
-    // utx.set_block_id(ids::Id::from_slice("duuddddduu".as_byte())).await;
+    let sig = secret_key.sign_digest(hash.as_bytes()).unwrap();
     let hash = hash_structured_data(&utx.typed_data().await).unwrap();
-    let sender = derive_sender(&hash.as_bytes(), &sig).unwrap();
+    let sender =
+        key::secp256k1::public_key::Key::from_signature(hash.as_bytes(), &sig.to_bytes()).unwrap();
     assert_eq!(public_key.to_string(), sender.to_string());
     assert_eq!(public_key, sender,);
 }

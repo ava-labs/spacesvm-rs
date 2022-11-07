@@ -8,18 +8,16 @@ use avalanche_types::{
     self,
     choices::status,
     ids,
-    rpcchainvm::{
+    subnet::{
         self,
-        common::vm::Vm,
-        concensus::snowman::{Block, Initializer},
-        database::manager::{versioned_database, DatabaseManager},
+        rpc::{
+            common::vm::Vm,
+            concensus::snowman::{Block, Initializer},
+        },
     },
 };
 use mini_kvvm::block::{self, state::State};
-use tokio::{
-    net::TcpListener,
-    sync::{mpsc, RwLock},
-};
+use tokio::{net::TcpListener, sync::mpsc};
 use tokio_stream::wrappers::TcpListenerStream;
 use tonic::transport::Channel;
 
@@ -60,23 +58,28 @@ pub async fn create_conn() -> Channel {
 
 pub async fn initialize_vm(
     vm: &mut vm::ChainVm,
-) -> Result<mpsc::Receiver<rpcchainvm::common::message::Message>> {
-    let db = rpcchainvm::database::memdb::Database::new();
+) -> Result<mpsc::Receiver<subnet::rpc::common::message::Message>> {
+    let db = subnet::rpc::database::memdb::Database::new();
 
-    let mut versioned_dbs: Vec<versioned_database::VersionedDatabase> = Vec::with_capacity(1);
-    versioned_dbs.push(versioned_database::VersionedDatabase::new(
-        db,
-        semver::Version::parse("0.0.7").unwrap(),
-    ));
-    let db_manager = DatabaseManager::new_from_databases(versioned_dbs);
+    let mut versioned_dbs: Vec<
+        subnet::rpc::database::manager::versioned_database::VersionedDatabase,
+    > = Vec::with_capacity(1);
+    versioned_dbs.push(
+        subnet::rpc::database::manager::versioned_database::VersionedDatabase::new(
+            db,
+            semver::Version::parse("0.0.7").unwrap(),
+        ),
+    );
+    let db_manager =
+        subnet::rpc::database::manager::DatabaseManager::new_from_databases(versioned_dbs);
 
     let genesis_bytes =
         "{\"author\":\"subnet creator\",\"welcome_message\":\"Hello from Rust VM!\"}".as_bytes();
 
     // setup engine channel
     let (tx_engine, rx_engine): (
-        mpsc::Sender<rpcchainvm::common::message::Message>,
-        mpsc::Receiver<rpcchainvm::common::message::Message>,
+        mpsc::Sender<subnet::rpc::common::message::Message>,
+        mpsc::Receiver<subnet::rpc::common::message::Message>,
     ) = mpsc::channel(100);
 
     // init vm
@@ -89,7 +92,7 @@ pub async fn initialize_vm(
             &[],
             tx_engine,
             &[],
-            rpcchainvm::common::appsender::client::Client::new(create_conn().await),
+            subnet::rpc::common::appsender::client::Client::new(create_conn().await),
         )
         .await;
 

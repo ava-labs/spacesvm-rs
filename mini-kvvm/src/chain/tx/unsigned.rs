@@ -3,7 +3,7 @@ use std::{
     io::{Error, ErrorKind, Result},
 };
 
-use avalanche_types::{ids::Id, rpcchainvm};
+use avalanche_types::{ids::Id, subnet};
 use dyn_clone::DynClone;
 use serde::{Deserialize, Serialize};
 
@@ -27,7 +27,7 @@ pub trait Transaction: Debug + DynClone + Send + Sync {
 dyn_clone::clone_trait_object!(Transaction);
 
 pub struct TransactionContext {
-    pub db: Box<dyn rpcchainvm::database::Database + Send + Sync>,
+    pub db: Box<dyn subnet::rpc::database::Database + Send + Sync>,
     pub block_time: u64,
     pub tx_id: Id,
     pub sender: ethereum_types::Address,

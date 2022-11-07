@@ -3,7 +3,7 @@ use std::{
     str,
 };
 
-use avalanche_types::{ids, rpcchainvm};
+use avalanche_types::{ids, subnet};
 use byteorder::{BigEndian, ByteOrder};
 use chrono::Utc;
 
@@ -29,7 +29,7 @@ const KEY_PREFIX: u8 = 0x4;
 pub const BYTE_DELIMITER: u8 = b'/';
 
 pub async fn set_transaction(
-    mut db: Box<dyn avalanche_types::rpcchainvm::database::Database + Send + Sync>,
+    mut db: Box<dyn avalanche_types::subnet::rpc::database::Database + Send + Sync>,
     tx: tx::tx::Transaction,
 ) -> Result<()> {
     let k = prefix_tx_key(&tx.id);
@@ -37,7 +37,7 @@ pub async fn set_transaction(
 }
 
 pub async fn delete_bucket_key(
-    db: &mut Box<dyn avalanche_types::rpcchainvm::database::Database + Send + Sync>,
+    db: &mut Box<dyn avalanche_types::subnet::rpc::database::Database + Send + Sync>,
     bucket: &[u8],
     key: &[u8],
 ) -> Result<()> {
@@ -87,7 +87,7 @@ pub async fn submit(state: &state::State, txs: &mut Vec<tx::tx::Transaction>) ->
 }
 
 pub async fn get_value(
-    db: &Box<dyn avalanche_types::rpcchainvm::database::Database + Send + Sync>,
+    db: &Box<dyn avalanche_types::subnet::rpc::database::Database + Send + Sync>,
     bucket: &[u8],
     key: &[u8],
 ) -> Result<Option<Vec<u8>>> {
@@ -127,7 +127,7 @@ pub async fn get_value(
 }
 
 pub async fn get_value_meta(
-    db: &Box<dyn avalanche_types::rpcchainvm::database::Database + Send + Sync>,
+    db: &Box<dyn avalanche_types::subnet::rpc::database::Database + Send + Sync>,
     bucket: &[u8],
     key: &[u8],
 ) -> Result<Option<ValueMeta>> {
@@ -151,7 +151,7 @@ pub async fn get_value_meta(
 
 // Attempts to write the value
 pub async fn put_bucket_key(
-    db: &mut Box<dyn rpcchainvm::database::Database + Send + Sync>,
+    db: &mut Box<dyn subnet::rpc::database::Database + Send + Sync>,
     bucket: &[u8],
     key: &[u8],
     vmeta: ValueMeta,
@@ -172,7 +172,7 @@ pub async fn put_bucket_key(
 }
 
 pub async fn put_bucket_info(
-    db: &mut Box<dyn rpcchainvm::database::Database + Send + Sync>,
+    db: &mut Box<dyn subnet::rpc::database::Database + Send + Sync>,
     bucket: &[u8],
     mut info: bucket::Info,
     _last_expiry: u64,
@@ -193,7 +193,7 @@ pub async fn put_bucket_info(
 
 // Attempts to get info from a bucket.
 pub async fn get_bucket_info(
-    db: &Box<dyn rpcchainvm::database::Database + Send + Sync>,
+    db: &Box<dyn subnet::rpc::database::Database + Send + Sync>,
     bucket: &[u8],
 ) -> Result<Option<bucket::Info>> {
     match db.get(&bucket_info_key(bucket)).await {
@@ -223,7 +223,7 @@ pub async fn raw_bucket(bucket: &[u8], block_time: u64) -> Result<ids::short::Id
 
 /// Returns true if a bucket with the same name already exists.
 pub async fn has_bucket(
-    db: &Box<dyn rpcchainvm::database::Database + Send + Sync>,
+    db: &Box<dyn subnet::rpc::database::Database + Send + Sync>,
     bucket: &[u8],
 ) -> Result<bool> {
     db.has(&bucket_info_key(bucket)).await
@@ -347,7 +347,7 @@ async fn test_bucket_info_rt() {
         owner: H160::default(),
         raw_bucket: ids::short::Id::empty(),
     };
-    let mut db = rpcchainvm::database::memdb::Database::new();
+    let mut db = subnet::rpc::database::memdb::Database::new();
     // put
     let resp = put_bucket_info(&mut db, &bucket, new_info, 2).await;
     assert!(resp.is_ok());

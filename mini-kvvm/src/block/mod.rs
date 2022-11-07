@@ -4,11 +4,10 @@ pub mod state;
 use std::io::{Error, ErrorKind, Result};
 use std::vec;
 
-use avalanche_types::hash;
-use avalanche_types::rpcchainvm::concensus::snowman::StatusWriter;
 use avalanche_types::{
     choices::{self, status::Status},
-    ids,
+    hash, ids,
+    subnet::{self, rpc::concensus::snowman::StatusWriter},
 };
 use derivative::{self, Derivative};
 use serde::{Deserialize, Serialize};
@@ -94,7 +93,7 @@ impl Block {
 }
 
 #[tonic::async_trait]
-impl avalanche_types::rpcchainvm::concensus::snowman::Block for Block {
+impl avalanche_types::subnet::rpc::concensus::snowman::Block for Block {
     /// Implements "snowman.Block"
     async fn bytes(&self) -> &[u8] {
         return self.bytes.as_ref();
@@ -183,7 +182,7 @@ impl avalanche_types::rpcchainvm::concensus::snowman::Block for Block {
 }
 
 #[tonic::async_trait]
-impl avalanche_types::rpcchainvm::concensus::snowman::Decidable for Block {
+impl avalanche_types::subnet::rpc::concensus::snowman::Decidable for Block {
     /// Implements "snowman.Block.choices.Decidable"
     async fn status(&self) -> Status {
         return self.st.clone();
@@ -234,7 +233,7 @@ impl avalanche_types::rpcchainvm::concensus::snowman::Decidable for Block {
 }
 
 #[tonic::async_trait]
-impl avalanche_types::rpcchainvm::concensus::snowman::Initializer for Block {
+impl avalanche_types::subnet::rpc::concensus::snowman::Initializer for Block {
     /// Initializes a block.
     async fn init(&mut self, bytes: &[u8], status: Status) -> Result<()> {
         self.bytes = bytes.to_vec();
@@ -246,7 +245,7 @@ impl avalanche_types::rpcchainvm::concensus::snowman::Initializer for Block {
 }
 
 #[tonic::async_trait]
-impl avalanche_types::rpcchainvm::concensus::snowman::StatusWriter for Block {
+impl avalanche_types::subnet::rpc::concensus::snowman::StatusWriter for Block {
     /// Sets the blocks status.
     async fn set_status(&mut self, status: Status) {
         self.st = status;

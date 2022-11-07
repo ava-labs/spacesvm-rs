@@ -7,7 +7,7 @@ use std::{
 
 use avalanche_types::{
     choices::status::{self, Status},
-    hash, ids, rpcchainvm,
+    hash, ids, subnet,
 };
 use lru::LruCache;
 use serde::{Deserialize, Serialize};
@@ -54,7 +54,7 @@ impl Default for StateInner {
     // Memdb by default
     fn default() -> StateInner {
         StateInner {
-            db: rpcchainvm::database::memdb::Database::new(),
+            db: subnet::rpc::database::memdb::Database::new(),
             last_accepted: ids::Id::empty(),
             verified_blocks: HashMap::new(),
             accepted_blocks: LruCache::new(NonZeroUsize::new(BLOCKS_LRU_SIZE).unwrap()),
@@ -63,7 +63,7 @@ impl Default for StateInner {
 }
 
 pub struct StateInner {
-    db: Box<dyn rpcchainvm::database::Database + Send + Sync>,
+    db: Box<dyn subnet::rpc::database::Database + Send + Sync>,
     /// The last accepted block by this VM
     last_accepted: ids::Id,
     /// Blocks that have been verified but not yet accepted
@@ -73,7 +73,7 @@ pub struct StateInner {
 }
 
 impl State {
-    pub fn new(db: Box<dyn rpcchainvm::database::Database + Send + Sync>) -> Self {
+    pub fn new(db: Box<dyn subnet::rpc::database::Database + Send + Sync>) -> Self {
         return Self {
             inner: Arc::new(RwLock::new(StateInner {
                 db,
@@ -296,7 +296,7 @@ impl State {
         Ok(true)
     }
 
-    pub async fn get_db(&self) -> Box<dyn rpcchainvm::database::Database + Send + Sync> {
+    pub async fn get_db(&self) -> Box<dyn subnet::rpc::database::Database + Send + Sync> {
         let inner = self.inner.read().await;
         inner.db.clone()
     }

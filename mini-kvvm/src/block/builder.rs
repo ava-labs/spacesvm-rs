@@ -7,7 +7,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use avalanche_types::rpcchainvm;
+use avalanche_types::subnet;
 use crossbeam_channel::TryRecvError;
 use tokio::sync::RwLock;
 
@@ -110,7 +110,7 @@ impl Timed {
             .to_engine
             .as_ref()
             .expect("builder.vm_inner")
-            .send(rpcchainvm::common::message::Message::PendingTxs)
+            .send(subnet::rpc::common::message::Message::PendingTxs)
             .await
             .map_err(|e| log::error!("dropping message to consensus engine: {}", e))
             .unwrap();

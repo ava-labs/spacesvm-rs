@@ -8,7 +8,7 @@ pub mod unsigned;
 
 use std::io::Result;
 
-use avalanche_types::{ids, rpcchainvm};
+use avalanche_types::{ids, subnet};
 
 use crate::block::Block;
 
@@ -21,7 +21,7 @@ pub trait Transaction {
     async fn id(&self) -> ids::Id;
     async fn execute(
         &self,
-        db: &'life1 Box<dyn rpcchainvm::database::Database + Send + Sync>,
+        db: &'life1 Box<dyn subnet::rpc::database::Database + Send + Sync>,
         block: &Block,
     ) -> Result<()>;
 }

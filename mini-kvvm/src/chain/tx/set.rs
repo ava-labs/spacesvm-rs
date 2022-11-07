@@ -188,7 +188,7 @@ async fn set_tx_test() {
     use std::str::FromStr;
 
     // set tx bucket not found
-    let db = avalanche_types::rpcchainvm::database::memdb::Database::new();
+    let db = avalanche_types::subnet::rpc::database::memdb::Database::new();
     let ut_ctx = unsigned::TransactionContext {
         db,
         block_time: 0,
@@ -205,7 +205,7 @@ async fn set_tx_test() {
     assert!(resp.unwrap_err().kind() == ErrorKind::NotFound);
 
     // create bucket
-    let db = avalanche_types::rpcchainvm::database::memdb::Database::new();
+    let db = avalanche_types::subnet::rpc::database::memdb::Database::new();
     let ut_ctx = unsigned::TransactionContext {
         db: db.clone(),
         block_time: 0,

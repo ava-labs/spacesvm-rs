@@ -3,11 +3,11 @@ use std::{
     io::{Error, ErrorKind, Result},
 };
 
-use avalanche_types::{hash, ids, rpcchainvm};
+use avalanche_types::{hash, ids, key, subnet};
 use ethereum_types::Address;
 use serde::{Deserialize, Serialize};
 
-use crate::{block::Block, chain::crypto, chain::storage::set_transaction};
+use crate::{block::Block, chain::storage::set_transaction};
 
 use super::{decoder, unsigned::TransactionContext};
 
@@ -87,22 +87,17 @@ impl crate::chain::tx::Transaction for Transaction {
             serde_json::to_vec(&self).map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
         let typed_data = &self.unsigned_transaction.typed_data().await;
-        log::info!("init typed_data: {:?}", &typed_data);
-
         let digest_hash = decoder::hash_structured_data(typed_data)?;
 
-        log::info!("init dh bytes: {:?}", &digest_hash.as_bytes());
-        log::info!("init sig: {:?}", &self.signature);
-
-        let sender = crypto::derive_sender(digest_hash.as_bytes(), &self.signature)?;
+        let sender = key::secp256k1::public_key::Key::from_signature(
+            digest_hash.as_bytes(),
+            &self.signature,
+        )?;
         self.bytes = stx;
         self.id = ids::Id::from_slice(hash::keccak256(&self.bytes).as_bytes());
-
         self.size = self.bytes.len() as u64;
         self.digest_hash = digest_hash.as_bytes().to_vec();
-        log::info!("sender raw: {}", &sender);
-        self.sender = crypto::public_to_address(&sender);
-        log::info!("sender pub: {}", self.sender);
+        self.sender = sender.to_h160();
 
         Ok(())
     }
@@ -121,7 +116,7 @@ impl crate::chain::tx::Transaction for Transaction {
 
     async fn execute(
         &self,
-        db: &'life1 Box<dyn rpcchainvm::database::Database + Send + Sync>,
+        db: &'life1 Box<dyn subnet::rpc::database::Database + Send + Sync>,
         block: &Block,
     ) -> Result<()> {
         log::info!("execute: sender: {}", self.sender);

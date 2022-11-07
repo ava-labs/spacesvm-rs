@@ -1,4 +1,4 @@
-use avalanche_types::{ids, rpcchainvm};
+use avalanche_types::{ids, subnet};
 use semver::Version;
 use tokio::sync::mpsc;
 
@@ -7,9 +7,9 @@ use crate::{block, genesis::Genesis, mempool};
 use super::MEMPOOL_SIZE;
 
 pub struct Inner {
-    pub ctx: Option<rpcchainvm::context::Context>,
-    pub to_engine: Option<mpsc::Sender<rpcchainvm::common::message::Message>>,
-    pub app_sender: Option<Box<dyn rpcchainvm::common::appsender::AppSender + Send + Sync>>,
+    pub ctx: Option<subnet::rpc::context::Context>,
+    pub to_engine: Option<mpsc::Sender<subnet::rpc::common::message::Message>>,
+    pub app_sender: Option<Box<dyn subnet::rpc::common::appsender::AppSender + Send + Sync>>,
 
     pub state: block::state::State,
     pub bootstrapped: bool,

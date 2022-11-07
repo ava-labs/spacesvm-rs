@@ -9,7 +9,6 @@ use mini_kvvm::{
     chain::{crypto, tx::decoder, tx::tx::TransactionType, tx::unsigned},
     vm,
 };
-use secp256k1::{rand, SecretKey};
 
 use crate::common::create_genesis_block;
 
