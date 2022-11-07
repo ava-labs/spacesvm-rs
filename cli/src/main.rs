@@ -1,11 +1,10 @@
+use avalanche_types::key;
 use clap::{Parser, Subcommand};
 use jsonrpc_client_transports::{transports, RpcError};
 use jsonrpc_core::futures;
 use mini_kvvm::api::ServiceClient as Client;
 use mini_kvvm::api::{DecodeTxArgs, IssueTxArgs, ResolveArgs};
-use mini_kvvm::chain::crypto;
 use mini_kvvm::chain::tx::{decoder, tx::TransactionType, unsigned::TransactionData};
-use secp256k1::{rand, SecretKey};
 use std::error;
 use std::fs::File;
 use std::io::{Result, Write};
@@ -54,11 +53,7 @@ async fn main() -> std::result::Result<(), Box<dyn error::Error>> {
     let secret_key = get_or_create_pk(&cli.private_key_file)?;
     let connection = transports::http::connect::<Client>(&cli.endpoint);
     let client = futures::executor::block_on(connection)?;
-    println!("ping...");
     ping(&client).await?;
-    println!("ping succeeded");
-
-    println!("secret {:?}", secret_key);
 
     if let Command::Get { bucket, key } = &cli.command {
         futures::executor::block_on(client.resolve(ResolveArgs {
@@ -86,18 +81,18 @@ fn command_to_tx(command: Command) -> Result<TransactionData> {
     }
 }
 
-fn get_or_create_pk(path: &str) -> Result<SecretKey> {
+fn get_or_create_pk(path: &str) -> Result<key::secp256k1::private_key::Key> {
     if !Path::new(path).try_exists()? {
-        let secret_key = SecretKey::new(&mut rand::thread_rng());
+        let secret_key = key::secp256k1::private_key::Key::generate().unwrap();
         let mut f = File::create(path)?;
-        let hex = hex::encode(&secret_key.secret_bytes());
+        let hex = hex::encode(&secret_key.to_bytes());
         f.write_all(hex.as_bytes())?;
         return Ok(secret_key);
     }
     let contents = std::fs::read_to_string(path)?;
     let parsed = hex::decode(contents)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
-    SecretKey::from_slice(&parsed)
+    key::secp256k1::private_key::Key::from_bytes(&parsed)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
 }
 
@@ -137,38 +132,27 @@ async fn ping(client: &Client) -> Result<()> {
     Ok(())
 }
 
-async fn sign_and_submit(client: &Client, pk: &SecretKey, tx_data: TransactionData) -> Result<()> {
+async fn sign_and_submit(
+    client: &Client,
+    pk: &key::secp256k1::private_key::Key,
+    tx_data: TransactionData,
+) -> Result<()> {
     let error_handling =
         |e: RpcError| std::io::Error::new(std::io::ErrorKind::Other, dbg!(e).to_string());
-    println!("decoding");
     let resp = client
         .decode_tx(DecodeTxArgs { tx_data })
         .await
         .map_err(error_handling)?;
-    println!("decoded");
 
     let typed_data = &resp.typed_data;
 
-    println!("cli typed data: {:?}", &typed_data);
-
     let dh = decoder::hash_structured_data(typed_data)?;
-
-    println!("dh bytes: {:?}", &dh.as_bytes());
-
-    let signature = crypto::sign(dh.as_bytes(), pk)?;
-    let s = crypto::derive_sender(dh.as_bytes(), &signature)?;
-    println!("sender: {}", s);
-
-    // let signature_hex = hex::encode(signature);
-
-    println!("sig: {:?}", &signature);
-
-    // println!()
+    let sig = pk.sign_digest(&dh.as_bytes())?;
 
     let resp = client
         .issue_tx(IssueTxArgs {
             typed_data: resp.typed_data,
-            signature,
+            signature: sig.to_bytes().to_vec(),
         })
         .await
         .map_err(error_handling)?;

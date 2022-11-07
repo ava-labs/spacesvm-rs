@@ -12,7 +12,6 @@ homepage = "https://avax.network"
 avalanche-types = { version = "0.0.129", features = ["rpcchainvm"] }
 clap = { version = "4.0", features = ["derive"] }
 env_logger = "0.9.1"
-secp256k1 = { version = "0.22.1", features = ["global-context", "rand-std", "recovery"] }
 hex = "0.4.3"
 http-manager = "0.0.3"
 jsonrpc-core = "18.0.0"
