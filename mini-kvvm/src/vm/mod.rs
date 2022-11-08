@@ -242,14 +242,14 @@ impl subnet::rpc::common::vm::Vm for ChainVm {
                 .await
                 .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
-            let block = vm
+            let mut block = vm
                 .state
                 .get_block(block_id)
                 .await
                 .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
             vm.preferred = block_id;
-            vm.last_accepted = block;
+            vm.state.set_last_accepted(&mut block).await?;
             log::info!("initialized vm from last accepted block id: {:?}", block_id)
         } else {
             let mut genesis_block =
@@ -273,7 +273,7 @@ impl subnet::rpc::common::vm::Vm for ChainVm {
                     Error::new(ErrorKind::Other, format!("failed to accept block: {:?}", e))
                 })?;
 
-            vm.last_accepted = genesis_block;
+            vm.state.set_last_accepted(&mut genesis_block).await?;
             vm.preferred = genesis_block_id;
             log::info!("initialized from genesis block: {}", genesis_block_id);
         }
@@ -287,9 +287,7 @@ impl subnet::rpc::common::vm::Vm for ChainVm {
         // start timed block builder
         let inner = Arc::clone(&self.inner);
         tokio::spawn(async move {
-            block::builder::Timed::new(BUILD_INTERVAL, inner)
-                .build()
-                .await;
+            block::builder::Builder::new(inner).build().await;
         });
 
         Ok(())
@@ -469,6 +467,8 @@ impl subnet::rpc::snowman::block::ChainVm for ChainVm {
             return Err(Error::new(ErrorKind::Other, "no pending blocks"));
         }
 
+        self.notify_block_ready().await;
+
         let preferred = vm.preferred;
         let parent = vm
             .state
@@ -498,24 +498,21 @@ impl subnet::rpc::snowman::block::ChainVm for ChainVm {
 
         block.txs = txs;
 
-        // Compute block hash and marshaled representation
+        // compute block hash and marshaled representation
         let bytes = block.to_bytes().await;
         block
             .init(&bytes.unwrap(), status::Status::Processing)
             .await
             .map_err(|e| Error::new(ErrorKind::Other, format!("failed to init block: {}", e)))?;
 
-        // Verify block to ensure it is formed correctly (don't save) <- TODO
+        // verify block to ensure it is formed correctly
         block
             .verify()
             .await
             .map_err(|e| Error::new(ErrorKind::Other, format!("failed to verify block: {}", e)))?;
 
-        // TODO: probably needs a channel
-        // let mut builder = self.builder.as_ref().expect("vm.builder").write().await;
-        // builder.handle_generate_block().await;
-
-        self.notify_block_ready().await;
+        // ok to build new block
+        vm.block_status = block::builder::Status::MayBuild;
 
         Ok(Box::new(block))
     }
@@ -525,7 +522,7 @@ impl subnet::rpc::snowman::block::ChainVm for ChainVm {
         log::info!("vm::set_preference called");
 
         let mut vm = self.inner.write().await;
-        vm.preferred_block_id = id;
+        vm.preferred = id;
 
         Ok(())
     }
@@ -535,8 +532,9 @@ impl subnet::rpc::snowman::block::ChainVm for ChainVm {
         log::info!("vm::last_accepted called");
 
         let vm = self.inner.read().await;
+        let last = vm.state.get_last_accepted().await?;
 
-        Ok(vm.last_accepted.id)
+        Ok(last)
     }
 
     /// Attempts to issue a transaction into consensus.

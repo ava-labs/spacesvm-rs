@@ -77,9 +77,13 @@ impl crate::api::Service for Service {
         Box::pin(async move {
             let mut utx = params.tx_data.decode().map_err(create_jsonrpc_error)?;
             let inner = vm.write().await;
-            let last_accepted = &inner.last_accepted;
+            let last_accepted = &inner
+                .state
+                .get_last_accepted()
+                .await
+                .map_err(create_jsonrpc_error)?;
 
-            utx.set_block_id(last_accepted.id).await;
+            utx.set_block_id(*last_accepted).await;
             let typed_data = utx.typed_data().await;
 
             let string = serde_json::to_string(&typed_data).unwrap();

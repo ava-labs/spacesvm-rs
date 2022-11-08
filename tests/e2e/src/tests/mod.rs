@@ -42,6 +42,7 @@ async fn e2e() {
         vm_name: "minikvvm".to_string(),
         genesis: "/tmp/minikvvm.genesis.json".to_string(),
         subnet_id: None,
+        ..Default::default()
     });
 
     info!("starting...");

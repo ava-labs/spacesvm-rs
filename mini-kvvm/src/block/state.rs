@@ -7,7 +7,8 @@ use std::{
 
 use avalanche_types::{
     choices::status::{self, Status},
-    hash, ids, subnet,
+    hash, ids,
+    subnet::{self, rpc::database::errors},
 };
 use lru::LruCache;
 use serde::{Deserialize, Serialize};
@@ -203,7 +204,7 @@ impl State {
                 Ok(block_id)
             }
             Err(e) => {
-                if e.kind() == ErrorKind::NotFound && e.to_string().contains("not found") {
+                if errors::is_not_found(&e) {
                     return Ok(ids::Id::empty());
                 }
                 return Err(e);
@@ -215,6 +216,11 @@ impl State {
     pub async fn get_block(&mut self, block_id: ids::Id) -> Result<Block> {
         log::debug!("get block called");
         let inner = self.inner.read().await;
+
+        if let Some(b) = inner.verified_blocks.get(&block_id) {
+            log::info!("found verified block");
+            return Ok(b.clone());
+        }
 
         let block_bytes = inner.db.get(&prefix_block_key(&block_id)).await?;
         let mut block: Block = serde_json::from_slice(&block_bytes)?;
@@ -292,8 +298,15 @@ impl State {
     pub async fn has_last_accepted(&self) -> Result<bool> {
         let inner = self.inner.read().await;
 
-        inner.db.has(LAST_ACCEPTED_BLOCK_KEY).await?;
-        Ok(true)
+        match inner.db.has(LAST_ACCEPTED_BLOCK_KEY).await {
+            Ok(has) => Ok(has),
+            Err(err) => {
+                if errors::is_not_found(&err) {
+                    return Ok(false);
+                }
+                return Err(err);
+            }
+        }
     }
 
     pub async fn get_db(&self) -> Box<dyn subnet::rpc::database::Database + Send + Sync> {

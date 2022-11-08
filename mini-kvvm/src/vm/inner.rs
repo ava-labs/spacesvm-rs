@@ -2,7 +2,7 @@ use avalanche_types::{ids, subnet};
 use semver::Version;
 use tokio::sync::mpsc;
 
-use crate::{block, genesis::Genesis, mempool};
+use crate::{block::{self, builder::Status}, genesis::Genesis, mempool};
 
 use super::MEMPOOL_SIZE;
 
@@ -16,9 +16,8 @@ pub struct Inner {
     pub version: Version,
     pub genesis: Genesis,
     pub preferred: ids::Id,
-    pub last_accepted: block::Block,
-    pub preferred_block_id: ids::Id,
     pub mempool: mempool::Mempool,
+    pub block_status: Status,
 
     pub builder_stop_rx: crossbeam_channel::Receiver<()>,
     pub builder_stop_tx: crossbeam_channel::Sender<()>,
@@ -62,11 +61,9 @@ impl Inner {
             version: Version::new(0, 0, 0),
             genesis: Genesis::default(),
             preferred: ids::Id::empty(),
-            last_accepted: block::Block::default(),
-            preferred_block_id: ids::Id::empty(),
-
-            // init
             mempool: mempool::Mempool::new(MEMPOOL_SIZE),
+            block_status: Status::MayBuild,
+            
             builder_stop_rx,
             builder_stop_tx,
             done_build_rx,

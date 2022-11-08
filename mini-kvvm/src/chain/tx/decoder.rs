@@ -3,10 +3,9 @@ use std::{
     io::{Error, ErrorKind, Result},
 };
 
-use avalanche_types::{ids, key};
+use avalanche_types::{hash, ids, key};
 use eip_712::Type as ParserType;
 use ethereum_types::H256;
-use keccak_hash::keccak;
 use serde::{de, Deserialize, Serialize};
 use serde_json::to_value;
 
@@ -164,10 +163,6 @@ impl TypedData {
             .get_typed_message_vec(TD_BLOCK_ID.to_owned())
             .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
 
-        log::info!("parse_base_tx block string: {:?}", r_block_id);
-
-        log::info!("id len: {}", r_block_id.len());
-        // let block_id = ids::Id::from_slice(hash::keccak256(&r_block_id).as_bytes());
         let block_id = ids::Id::from_slice(&r_block_id);
 
         Ok(base::Tx { block_id })
@@ -275,7 +270,7 @@ pub fn hash_structured_data(typed_data: &TypedData) -> Result<H256> {
         .map_err(error_handling)?,
     );
     let concat = [&prefix[..], &domain_hash[..], &data_hash[..]].concat();
-    Ok(keccak(concat))
+    Ok(hash::keccak256(concat))
 }
 
 #[tokio::test]

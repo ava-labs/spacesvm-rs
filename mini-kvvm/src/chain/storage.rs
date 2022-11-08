@@ -214,8 +214,8 @@ pub async fn raw_bucket(bucket: &[u8], block_time: u64) -> Result<ids::short::Id
     let mut r: Vec<u8> = Vec::new();
     r.extend_from_slice(bucket);
     r.push(BYTE_DELIMITER);
-    r.resize(bucket.len() + 1 + 8, block_time.try_into().unwrap());
-    BigEndian::write_u64(&mut r[bucket.len() + 1..].to_vec(), 0);
+    r.resize(bucket.len() + 1 + 8, 20);
+    BigEndian::write_u64(&mut r[bucket.len() + 1..].to_vec(), block_time);
     let hash = crypto::compute_hash_160(&r);
 
     Ok(ids::short::Id::from_slice(&hash))
