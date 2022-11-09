@@ -213,7 +213,7 @@ impl State {
     }
 
     /// Attempts to return block on disk state.
-    pub async fn get_block(&mut self, block_id: ids::Id) -> Result<Block> {
+    pub async fn get_block(&self, block_id: ids::Id) -> Result<Block> {
         log::debug!("get block called");
         let inner = self.inner.read().await;
 

@@ -29,7 +29,7 @@ pub const PUBLIC_API_ENDPOINT: &str = "/public";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 // TODO: make configurable
-const MEMPOOL_SIZE: usize = 1024;
+const MEMPOOL_SIZE: u64 = 1024;
 const BUILD_INTERVAL: Duration = Duration::from_millis(500);
 
 pub struct ChainVm {
@@ -74,11 +74,11 @@ impl crate::chain::vm::Vm for ChainVm {
             .await
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
+        let mempool = &mut vm.mempool;
         log::info!("vm::submit add to mempool");
         for tx in txs.iter_mut() {
-            let mempool = &mut vm.mempool;
             let _ = mempool
-                .add(tx.to_owned())
+                .add(tx)
                 .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
         }
         log::info!("vm::submit complete");
@@ -394,17 +394,19 @@ impl subnet::rpc::snowman::block::Getter for ChainVm {
         &self,
         id: ids::Id,
     ) -> Result<Box<dyn subnet::rpc::concensus::snowman::Block + Send + Sync>> {
-        log::info!("vm::get_block called");
+        log::info!("vm::get_block called: {:?}", id);
 
-        let mut vm = self.inner.write().await;
+        let vm = self.inner.read().await;
 
         // has block been accepted by the vm and cached.
         if let Some(cached) = vm.state.get_accepted_block(id).await {
+            log::info!("vm::get_block found cached accepted block: {:?}", id);
             return Ok(Box::new(cached.to_owned()));
         }
 
         // has block been verified, but not yet accepted
         if let Some(block) = vm.state.get_verified_block(id).await {
+            log::info!("vm::get_block found accepted block: {:?}", id);
             return Ok(Box::new(block));
         }
 
@@ -433,9 +435,9 @@ impl subnet::rpc::snowman::block::Parser for ChainVm {
         &self,
         bytes: &[u8],
     ) -> Result<Box<dyn subnet::rpc::concensus::snowman::Block + Send + Sync>> {
-        log::info!("vm::get_block called");
+        log::info!("vm::parse_block called: {:?}", bytes);
 
-        let mut vm = self.inner.write().await;
+        let vm = self.inner.read().await;
         let new_block = vm
             .state
             .parse_block(None, bytes.to_vec(), Status::Processing)
@@ -460,14 +462,16 @@ impl subnet::rpc::snowman::block::ChainVm for ChainVm {
     async fn build_block(
         &self,
     ) -> Result<Box<dyn subnet::rpc::concensus::snowman::Block + Send + Sync>> {
-        log::info!("vm::build_block called");
+        log::info!("vm::build_block called!");
 
-        let mut vm = self.inner.write().await;
+        let vm = self.inner.read().await;
         if vm.mempool.is_empty() {
             return Err(Error::new(ErrorKind::Other, "no pending blocks"));
         }
 
+        log::info!("vm::build_block block call");
         self.notify_block_ready().await;
+        log::info!("vm::build_block block ready");
 
         let preferred = vm.preferred;
         let parent = vm
@@ -510,9 +514,6 @@ impl subnet::rpc::snowman::block::ChainVm for ChainVm {
             .verify()
             .await
             .map_err(|e| Error::new(ErrorKind::Other, format!("failed to verify block: {}", e)))?;
-
-        // ok to build new block
-        vm.block_status = block::builder::Status::MayBuild;
 
         Ok(Box::new(block))
     }

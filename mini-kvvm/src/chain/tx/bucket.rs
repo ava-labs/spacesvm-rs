@@ -70,7 +70,10 @@ impl unsigned::Transaction for Tx {
         // ensure bucket does not exist for now update requires an explicit delete tx
         if has_bucket(&db, self.bucket.as_bytes()).await? {
             log::info!("bucket exists: {}", self.bucket);
-            return Ok(());
+            return Err(Error::new(
+                ErrorKind::AlreadyExists,
+                format!("bucket exists: {}", self.bucket),
+            ));
         }
         log::info!("bucket exec sender: {}", &txn_ctx.sender);
         let new_info = Info {

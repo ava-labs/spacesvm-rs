@@ -9,6 +9,7 @@ use crate::{
     vm::inner::Inner,
 };
 
+use avalanche_types::subnet;
 use tokio::sync::RwLock;
 pub struct Service {
     pub vm_inner: Arc<RwLock<Inner>>,
@@ -55,9 +56,9 @@ impl crate::api::Service for Service {
                 ))
             })?;
 
+            let mempool = &mut inner.mempool;
             for tx in txs.iter().cloned() {
-                let mempool = &mut inner.mempool;
-                let out = mempool.add(tx).map_err(|e| {
+                let out = mempool.add(&tx).map_err(|e| {
                     create_jsonrpc_error(std::io::Error::new(
                         std::io::ErrorKind::Other,
                         e.to_string(),

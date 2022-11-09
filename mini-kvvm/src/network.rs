@@ -5,7 +5,10 @@ use std::{
     time::Duration,
 };
 
-use avalanche_types::ids::{self, Id};
+use avalanche_types::{
+    ids::{self, Id},
+    subnet,
+};
 use crossbeam_channel::TryRecvError;
 use lru::LruCache;
 use tokio::{sync::RwLock, time::sleep};
@@ -15,8 +18,9 @@ use crate::{chain, vm};
 const GOSSIPED_TXS_LRU_SIZE: usize = 512;
 
 // TODO: make configurable
-const GOSSIP_INTERVAL: Duration = Duration::from_secs(20);
+const GOSSIP_INTERVAL: Duration = Duration::from_secs(60);
 const REGOSSIP_INTERVAL: Duration = Duration::from_secs(30);
+const TARGET_BLOCK_SIZE: u64 = 225;
 
 pub struct Push {
     gossiped_tx: LruCache<Id, ()>,
@@ -59,10 +63,10 @@ impl Push {
         Ok(())
     }
 
-    pub async fn get_new_txs(&mut self) -> Result<Vec<chain::tx::tx::Transaction>> {
+    pub async fn get_new_txs(&self) -> Result<Vec<chain::tx::tx::Transaction>> {
         let mut inner = self.vm_inner.write().await;
-        log::info!("gossip_new_txs: mempool len: {}", inner.mempool.len());
-        inner.mempool.new_txs().map_err(|e| {
+        log::info!("get_new_txs: mempool len: {}", inner.mempool.len());
+        inner.mempool.new_txs(TARGET_BLOCK_SIZE).map_err(|e| {
             Error::new(
                 ErrorKind::Other,
                 format!("failed to get net tx from mempool: {}", e),
@@ -70,20 +74,20 @@ impl Push {
         })
     }
 
-    pub async fn gossip_new_txs(&mut self) -> Result<()> {
+    pub async fn gossip_new_txs(&self, max_units: u64) -> Result<()> {
         log::info!("gossip_new_txs: called");
 
         let new_txs = self.get_new_txs().await?;
         let mut txs: Vec<chain::tx::tx::Transaction> = Vec::with_capacity(new_txs.len());
-
         log::info!("gossip_new_txs: len: {}", new_txs.len());
+
         for tx in new_txs.iter().cloned() {
             if self.gossiped_tx.contains(&tx.id) {
                 log::info!("already gossiped skipping id: {}", tx.id);
                 continue;
             }
 
-            self.gossiped_tx.put(tx.id, ());
+            // self.gossiped_tx.put(tx.id, ());
 
             txs.push(tx);
         }
@@ -112,7 +116,7 @@ impl Push {
     }
 
     pub async fn app_gossip(&mut self, node_id: ids::node::Id, message: &[u8]) -> Result<()> {
-        log::debug!(
+        log::info!(
             "appgossip message handler, sender: {} bytes: {:?}",
             node_id,
             message
@@ -121,7 +125,7 @@ impl Push {
         let mut txs: Vec<chain::tx::tx::Transaction> = serde_json::from_slice(message).unwrap();
 
         // submit incoming gossip
-        log::debug!(
+        log::info!(
             "appgossip transactions are being submitted txs: {}",
             txs.len()
         );
@@ -137,7 +141,7 @@ impl Push {
             })?;
 
         for tx in txs.iter_mut() {
-            vm.mempool.add(tx.to_owned()).map_err(|e| {
+            vm.mempool.add(tx).map_err(|e| {
                 Error::new(
                     ErrorKind::Other,
                     format!("failed to add tx to mempool: {}", e),
@@ -149,7 +153,7 @@ impl Push {
     }
 
     pub async fn regossip(&mut self) {
-        log::debug!("starting regossip loop");
+        log::info!("starting regossip loop");
 
         let inner = self.vm_inner.read().await;
         let stop_ch = inner.stop_rx.clone();
@@ -162,7 +166,7 @@ impl Push {
             let _ = self.regossip_txs().await;
         }
 
-        log::debug!("shutdown regossip loop");
+        log::info!("shutdown regossip loop");
     }
 
     // Helper function initialize builder
@@ -177,9 +181,9 @@ impl Push {
 
         while stop_ch.try_recv() == Err(TryRecvError::Empty) {
             sleep(GOSSIP_INTERVAL).await;
-            log::debug!("tick gossip");
+            log::info!("tick gossip");
 
-            let _ = self.gossip_new_txs().await;
+            let _ = self.gossip_new_txs(TARGET_BLOCK_SIZE).await;
         }
     }
 }

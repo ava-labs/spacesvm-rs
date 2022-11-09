@@ -15,7 +15,8 @@ path = "src/bin/mini-kvvm/main.rs"
 
 [dependencies]
 avalanche-proto = { version = "0.19.0" }
-avalanche-types = { version = "0.0.132", features = ["rpcchainvm"] }
+# avalanche-types = { version = "0.0.132", features = ["rpcchainvm"] }
+avalanche-types = { path = "../../../avalanche-rust/avalanche-rust/crates/avalanche-types", features = ["rpcchainvm"] }
 byteorder = "1.4.3"
 chrono = "0.4.19"
 crossbeam-channel = "0.5.6"

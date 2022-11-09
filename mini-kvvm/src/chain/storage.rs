@@ -164,13 +164,15 @@ pub async fn put_bucket_key(
     }
 
     let k = bucket_value_key(resp.unwrap().raw_bucket, key);
-    log::debug!("put_value key: {:?}", k);
+    log::info!("put_value key: {:?}", k);
     let rv_meta = serde_json::to_vec(&vmeta)
         .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
 
     return db.put(&k, &rv_meta).await;
 }
 
+/// Attempts to store the bucket info by using a key 'bucket_info_key' with the value
+/// being serialized bucket info.
 pub async fn put_bucket_info(
     db: &mut Box<dyn subnet::rpc::database::Database + Send + Sync>,
     bucket: &[u8],
@@ -179,16 +181,21 @@ pub async fn put_bucket_info(
 ) -> Result<()> {
     // If [raw_bucket] is empty, this is a new bucket.
     if info.raw_bucket.is_empty() {
+        log::info!("put_bucket_info: new bucket found");
         let r_bucket = raw_bucket(bucket, info.created)
             .await
             .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
-
+        log::info!("put_bucket_info: raw_becket: {:?}", r_bucket);
         info.raw_bucket = r_bucket;
     }
     let value =
         serde_json::to_vec(&info).map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
 
-    db.put(&bucket_info_key(bucket), &value).await
+    let key = &bucket_info_key(bucket);
+    log::info!("put_bucket_info key: {:?}", key);
+    log::info!("put_bucket_info value: {:?}", value);
+
+    db.put(key, &value).await
 }
 
 // Attempts to get info from a bucket.
@@ -206,10 +213,14 @@ pub async fn get_bucket_info(
         Ok(value) => {
             let info: bucket::Info = serde_json::from_slice(&value)
                 .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
+
+            log::info!("get_bucket_info info: {:?}", info);
             Ok(Some(info))
         }
     }
 }
+
+
 pub async fn raw_bucket(bucket: &[u8], block_time: u64) -> Result<ids::short::Id> {
     let mut r: Vec<u8> = Vec::new();
     r.extend_from_slice(bucket);
@@ -340,6 +351,10 @@ async fn test_bucket_info_rt() {
     use super::tx::bucket::Info;
     use ethereum_types::H160;
 
+    env_logger::init_from_env(
+        env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "debug"),
+    );
+
     let bucket = "kvs".as_bytes();
     let new_info = Info {
         created: 0,
@@ -360,8 +375,9 @@ async fn test_bucket_info_rt() {
     assert_eq!(
         info.raw_bucket,
         ids::short::Id::from_slice(&[
-            28, 196, 105, 174, 208, 254, 253, 229, 213, 10, 32, 26, 54, 105, 74, 64, 119, 12, 91,
-            61
+            230, 185, 125, 2, 27, 125, 127, 228, 212, 79, 188, 214, 107, 248, 146, 237, 254, 112,
+            153, 17
         ])
     );
+    assert_eq!(info.updated, 1);
 }
