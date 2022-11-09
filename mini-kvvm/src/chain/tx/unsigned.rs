@@ -1,10 +1,9 @@
 use std::{
-    any::Any,
     fmt::Debug,
     io::{Error, ErrorKind, Result},
 };
 
-use avalanche_types::{ids::Id, rpcchainvm};
+use avalanche_types::{ids::Id, subnet};
 use dyn_clone::DynClone;
 use serde::{Deserialize, Serialize};
 
@@ -12,25 +11,26 @@ use crate::chain::tx::decoder::TypedData;
 
 use super::{base, bucket, delete, set, tx::TransactionType};
 
-#[typetag::serde]
+#[typetag::serde(tag = "type")]
 #[tonic::async_trait]
 pub trait Transaction: Debug + DynClone + Send + Sync {
     async fn get_block_id(&self) -> Id;
     async fn set_block_id(&mut self, id: Id);
+    async fn get_value(&self) -> Option<Vec<u8>>;
+    async fn set_value(&mut self, value: Vec<u8>) -> Result<()>;
     async fn execute(&self, txn_ctx: TransactionContext) -> Result<()>;
     async fn typed_data(&self) -> TypedData;
     async fn typ(&self) -> TransactionType;
-    async fn as_any(&self) -> &(dyn Any + Send + Sync);
-    async fn as_any_mut(&mut self) -> &mut (dyn Any + Send + Sync);
 }
 
 // ref. https://docs.rs/dyn-clone/latest/dyn_clone/macro.clone_trait_object.html
 dyn_clone::clone_trait_object!(Transaction);
 
 pub struct TransactionContext {
-    pub db: Box<dyn rpcchainvm::database::Database + Send + Sync>,
+    pub db: Box<dyn subnet::rpc::database::Database + Send + Sync>,
     pub block_time: u64,
     pub tx_id: Id,
+    pub sender: ethereum_types::Address,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

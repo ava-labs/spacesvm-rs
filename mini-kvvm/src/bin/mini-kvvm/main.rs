@@ -1,10 +1,10 @@
 use std::io::Result;
 
-use avalanche_types::rpcchainvm;
+use avalanche_types::subnet;
 use clap::{crate_version, Arg, Command};
 use log::info;
+
 use mini_kvvm::{genesis, vm};
-use tokio::sync::broadcast::{Receiver, Sender};
 
 pub const APP_NAME: &str = "mini-kvvm-rs";
 
@@ -13,51 +13,48 @@ async fn main() -> Result<()> {
     let matches = Command::new(APP_NAME)
         .version(crate_version!())
         .about("Mini key-value VM for Avalanche in Rust")
-        .arg(
-            Arg::new("LOG_LEVEL")
-                .long("log-level")
-                .short('l')
-                .help("Sets the log level")
-                .required(false)
-                .takes_value(true)
-                .possible_value("debug")
-                .possible_value("info")
-                .allow_invalid_utf8(false)
-                .default_value("info"),
-        )
         .subcommands(vec![command_genesis()])
         .get_matches();
 
-    let log_level = matches.value_of("LOG_LEVEL").unwrap_or("info").to_string();
-
     // ref. https://github.com/env-logger-rs/env_logger/issues/47
     env_logger::init_from_env(
-        env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, log_level),
+        env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info"),
     );
 
     if let Some(("genesis", sub_matches)) = matches.subcommand() {
-        let author = sub_matches.value_of("AUTHOR").unwrap_or("");
-        let msg = sub_matches.value_of("WELCOME_MESSAGE").unwrap_or("");
-        let p = sub_matches.value_of("GENESIS_FILE_PATH").unwrap_or("");
+        let author = sub_matches
+            .get_one::<String>("AUTHOR")
+            .map(String::as_str)
+            .unwrap_or("");
+        let msg = sub_matches
+            .get_one::<String>("WELCOME_MESSAGE")
+            .map(String::as_str)
+            .unwrap_or("");
+        let p = sub_matches
+            .get_one::<String>("GENESIS_FILE_PATH")
+            .map(String::as_str)
+            .unwrap_or("");
         execute_genesis(author, msg, p).unwrap();
         return Ok(());
     }
 
     // Initialize broadcast stop channel used to terminate gRPC servers during shutdown.
-    let (stop_ch_tx, stop_ch_rx): (Sender<()>, Receiver<()>) = tokio::sync::broadcast::channel(1);
+    let (stop_ch_tx, stop_ch_rx): (
+        tokio::sync::broadcast::Sender<()>,
+        tokio::sync::broadcast::Receiver<()>,
+    ) = tokio::sync::broadcast::channel(1);
 
     info!("starting mini-kvvm-rs");
-    let vm_server =
-        avalanche_types::rpcchainvm::vm::server::Server::new(vm::ChainVm::new(), stop_ch_tx);
+    let vm_server = subnet::rpc::vm::server::Server::new(Box::new(vm::ChainVm::new()), stop_ch_tx);
 
-    rpcchainvm::plugin::serve(vm_server, stop_ch_rx)
+    subnet::rpc::plugin::serve(vm_server, stop_ch_rx)
         .await
         .expect("failed to start gRPC server");
 
     Ok(())
 }
 
-pub fn command_genesis() -> Command<'static> {
+pub fn command_genesis() -> Command {
     Command::new("genesis")
         .about("Generates the genesis file")
         .arg(
@@ -66,8 +63,6 @@ pub fn command_genesis() -> Command<'static> {
                 .short('a')
                 .help("author of the genesis")
                 .required(true)
-                .takes_value(true)
-                .allow_invalid_utf8(false)
                 .default_value("subnet creator"),
         )
         .arg(
@@ -76,8 +71,6 @@ pub fn command_genesis() -> Command<'static> {
                 .short('m')
                 .help("message field in genesis")
                 .required(true)
-                .takes_value(true)
-                .allow_invalid_utf8(false)
                 .default_value("hi"),
         )
         .arg(
@@ -85,9 +78,7 @@ pub fn command_genesis() -> Command<'static> {
                 .long("genesis-file-path")
                 .short('p')
                 .help("file path to save genesis file")
-                .required(true)
-                .takes_value(true)
-                .allow_invalid_utf8(false),
+                .required(true),
         )
 }
 

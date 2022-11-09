@@ -11,7 +11,7 @@ pub struct Context {
 }
 
 #[tonic::async_trait]
-pub trait Vm: avalanche_types::rpcchainvm::vm::Vm {
+pub trait Vm: avalanche_types::subnet::rpc::vm::Vm {
     async fn is_bootstrapped(&self) -> bool;
     async fn submit(&self, txs: Vec<Transaction>) -> Result<()>;
     async fn notify_block_ready(&self);

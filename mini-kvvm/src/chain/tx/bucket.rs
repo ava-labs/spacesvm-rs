@@ -1,4 +1,7 @@
-use std::{any::Any, collections::HashMap, io::Result};
+use std::{
+    collections::HashMap,
+    io::{Error, ErrorKind, Result},
+};
 
 use avalanche_types::ids;
 use serde::{Deserialize, Serialize};
@@ -22,6 +25,8 @@ pub struct Info {
 
     #[serde(deserialize_with = "ids::short::must_deserialize_id")]
     pub raw_bucket: ids::short::Id,
+
+    pub owner: ethereum_types::H160,
 }
 
 /// Creates a bucket, which acts as a logical keyspace root.
@@ -31,8 +36,9 @@ pub struct Tx {
     pub bucket: String,
 }
 
+// important to define an unique name of the trait implementation
+#[typetag::serde(name = "bucket")]
 #[tonic::async_trait]
-#[typetag::serde]
 impl unsigned::Transaction for Tx {
     async fn get_block_id(&self) -> avalanche_types::ids::Id {
         self.base_tx.block_id
@@ -42,16 +48,15 @@ impl unsigned::Transaction for Tx {
         self.base_tx.block_id = id;
     }
 
-    /// Provides downcast support for the trait object.
-    /// ref. https://doc.rust-lang.org/std/any/index.html
-    async fn as_any(&self) -> &(dyn Any + Send + Sync) {
-        self
+    async fn get_value(&self) -> Option<Vec<u8>> {
+        None
     }
 
-    /// Provides downcast support for the trait object.
-    /// ref. https://doc.rust-lang.org/std/any/index.html
-    async fn as_any_mut(&mut self) -> &mut (dyn Any + Send + Sync) {
-        self
+    async fn set_value(&mut self, _value: Vec<u8>) -> std::io::Result<()> {
+        Err(Error::new(
+            ErrorKind::Unsupported,
+            "value is not supported for delete tx",
+        ))
     }
 
     async fn typ(&self) -> TransactionType {
@@ -64,13 +69,18 @@ impl unsigned::Transaction for Tx {
 
         // ensure bucket does not exist for now update requires an explicit delete tx
         if has_bucket(&db, self.bucket.as_bytes()).await? {
-            log::info!("bucket exists: {}", self.bucket);
-            return Ok(());
+            log::debug!("execute: bucket exists: {}", self.bucket);
+            return Err(Error::new(
+                ErrorKind::AlreadyExists,
+                format!("bucket exists: {}", self.bucket),
+            ));
         }
+        log::debug!("execute: bucket exec sender: {}", &txn_ctx.sender);
         let new_info = Info {
             created: txn_ctx.block_time,
             updated: txn_ctx.block_time,
-            raw_bucket: ids::short::Id::empty(), // is that right?
+            owner: txn_ctx.sender,
+            raw_bucket: ids::short::Id::empty(),
         };
 
         return put_bucket_info(&mut db, self.bucket.as_bytes(), new_info, 0).await;
@@ -80,11 +90,11 @@ impl unsigned::Transaction for Tx {
         let mut tx_fields: Vec<Type> = Vec::new();
         tx_fields.push(Type {
             name: TD_BUCKET.to_owned(),
-            typ: TD_STRING.to_owned(),
+            type_: TD_STRING.to_owned(),
         });
         tx_fields.push(Type {
             name: TD_BLOCK_ID.to_owned(),
-            typ: TD_STRING.to_owned(),
+            type_: TD_STRING.to_owned(),
         });
 
         let mut message: HashMap<String, MessageValue> = HashMap::with_capacity(1);
@@ -92,6 +102,10 @@ impl unsigned::Transaction for Tx {
             TD_BUCKET.to_owned(),
             MessageValue::Vec(self.bucket.as_bytes().to_vec()),
         );
+        let value = MessageValue::Vec(self.base_tx.block_id.to_vec());
+        log::debug!("typed_data: message value: {:?}", value);
+        log::debug!("typed_data: id vec: {:?}", self.base_tx.block_id.to_vec());
+        log::debug!("typed_data: id: {}", self.base_tx.block_id);
         message.insert(
             TD_BLOCK_ID.to_owned(),
             MessageValue::Vec(self.base_tx.block_id.to_vec()),

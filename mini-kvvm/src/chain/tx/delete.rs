@@ -1,5 +1,4 @@
 use std::{
-    any::Any,
     collections::HashMap,
     io::{Error, ErrorKind, Result},
 };
@@ -21,13 +20,15 @@ use super::{
 /// Removes a key and value from the underlying bucket. No error will return
 /// if the key is not found.
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct Tx {
     pub base_tx: base::Tx,
     pub bucket: String,
     pub key: String,
 }
 
-#[typetag::serde]
+// important to define an unique name of the trait implementation
+#[typetag::serde(name = "delete")]
 #[tonic::async_trait]
 impl unsigned::Transaction for Tx {
     async fn get_block_id(&self) -> avalanche_types::ids::Id {
@@ -35,19 +36,18 @@ impl unsigned::Transaction for Tx {
     }
 
     async fn set_block_id(&mut self, id: avalanche_types::ids::Id) {
-        self.base_tx.block_id = id;
+        self.base_tx.block_id = id
     }
 
-    /// Provides downcast support for the trait object.
-    /// ref. https://doc.rust-lang.org/std/any/index.html
-    async fn as_any(&self) -> &(dyn Any + Send + Sync) {
-        self
+    async fn get_value(&self) -> Option<Vec<u8>> {
+        None
     }
 
-    /// Provides downcast support for the trait object.
-    /// ref. https://doc.rust-lang.org/std/any/index.html
-    async fn as_any_mut(&mut self) -> &mut (dyn Any + Send + Sync) {
-        self
+    async fn set_value(&mut self, _value: Vec<u8>) -> std::io::Result<()> {
+        Err(Error::new(
+            ErrorKind::Unsupported,
+            "value is not supported for delete tx",
+        ))
     }
 
     async fn typ(&self) -> TransactionType {
@@ -57,11 +57,32 @@ impl unsigned::Transaction for Tx {
     async fn execute(&self, mut txn_ctx: unsigned::TransactionContext) -> Result<()> {
         let db = txn_ctx.db.clone();
 
+        let info = storage::get_bucket_info(&db, self.bucket.as_bytes())
+            .await
+            .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+        if info.is_none() {
+            return Err(Error::new(
+                ErrorKind::NotFound,
+                format!("bucket not found: {}", self.bucket),
+            ));
+        }
+        let info = info.unwrap();
+        if info.owner != txn_ctx.sender {
+            return Err(Error::new(
+                ErrorKind::PermissionDenied,
+                format!("sets only allowed for bucket owner: {}", self.bucket),
+            ));
+        }
+
         // while we do not use value meta currently we verify it exists.
-        let v = storage::get_value_meta(&db, self.bucket.as_bytes(), self.key.as_bytes()).await?;
+        let v = storage::get_value_meta(&db, self.bucket.as_bytes(), self.key.as_bytes())
+            .await
+            .map_err(|e| {
+                Error::new(ErrorKind::Other, format!("failed to get value meta: {}", e))
+            })?;
+
         if v.is_none() {
-            log::info!("value meta key not found: {}", self.key);
-            return Ok(());
+            return Err(Error::new(ErrorKind::Other, "key is missing"));
         }
 
         storage::delete_bucket_key(&mut txn_ctx.db, self.bucket.as_bytes(), self.key.as_bytes())
@@ -75,15 +96,15 @@ impl unsigned::Transaction for Tx {
         let mut tx_fields: Vec<Type> = Vec::new();
         tx_fields.push(Type {
             name: TD_BUCKET.to_owned(),
-            typ: TD_STRING.to_owned(),
+            type_: TD_STRING.to_owned(),
         });
         tx_fields.push(Type {
             name: TD_BLOCK_ID.to_owned(),
-            typ: TD_STRING.to_owned(),
+            type_: TD_STRING.to_owned(),
         });
         tx_fields.push(Type {
             name: TD_KEY.to_owned(),
-            typ: TD_STRING.to_owned(),
+            type_: TD_STRING.to_owned(),
         });
 
         let mut message: HashMap<String, MessageValue> = HashMap::with_capacity(1);

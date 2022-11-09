@@ -2,19 +2,20 @@ pub mod builder;
 pub mod state;
 
 use std::io::{Error, ErrorKind, Result};
+use std::vec;
 
-use avalanche_types::rpcchainvm::concensus::snowman::StatusWriter;
 use avalanche_types::{
     choices::{self, status::Status},
-    ids,
+    hash, ids,
+    subnet::rpc::concensus::snowman::StatusWriter,
 };
 use derivative::{self, Derivative};
 use serde::{Deserialize, Serialize};
-use sha3::{Digest, Sha3_256};
 
-use crate::chain::tx::tx::Transaction;
+use crate::chain::{self, tx::Transaction};
 
 pub const DATA_LEN: usize = 32;
+pub const BLOCKS_LRU_SIZE: usize = 8192;
 
 #[derive(Serialize, Deserialize, Clone, Derivative)]
 #[derivative(Debug, Default)]
@@ -42,7 +43,7 @@ pub struct Block {
     pub state: state::State,
 
     #[serde(skip)]
-    pub txs: Vec<Transaction>,
+    pub txs: Vec<chain::tx::tx::Transaction>,
 
     #[serde(skip)]
     pub children: Vec<Block>,
@@ -73,15 +74,15 @@ impl Block {
     }
 
     /// Used for validating new txs and some tests
-    pub fn new_dummy(timestamp: u64, tx: Transaction) -> Self {
-        let mut txs: Vec<Transaction> = Vec::with_capacity(0);
+    pub fn new_dummy(timestamp: u64, tx: chain::tx::tx::Transaction, state: state::State) -> Self {
+        let mut txs: Vec<chain::tx::tx::Transaction> = Vec::with_capacity(0);
         txs.push(tx);
         Self {
             parent: ids::Id::empty(),
             height: 0,
             data: vec![],
             timestamp,
-            state: state::State::default(),
+            state,
             id: ids::Id::empty(),
             st: choices::status::Status::Unknown("dummy".to_string()),
             bytes: vec![],
@@ -92,7 +93,7 @@ impl Block {
 }
 
 #[tonic::async_trait]
-impl avalanche_types::rpcchainvm::concensus::snowman::Block for Block {
+impl avalanche_types::subnet::rpc::concensus::snowman::Block for Block {
     /// Implements "snowman.Block"
     async fn bytes(&self) -> &[u8] {
         return self.bytes.as_ref();
@@ -159,27 +160,21 @@ impl avalanche_types::rpcchainvm::concensus::snowman::Block for Block {
         }
 
         let state = self.state.clone();
-        state
-            .set_last_accepted(self.to_owned())
-            .await
-            .map_err(|e| {
-                Error::new(
-                    ErrorKind::Other,
-                    format!("set last accepteted failed: {}", e.to_string()),
-                )
-            })?;
+        state.set_last_accepted(&mut self).await.map_err(|e| {
+            Error::new(
+                ErrorKind::Other,
+                format!("set last accepted failed: {}", e.to_string()),
+            )
+        })?;
 
         parent_block.children.push(self.to_owned());
-
-        let mut verified_blocks = state.verified_blocks.write().await;
-        verified_blocks.insert(self.id, self.to_owned());
 
         return Ok(());
     }
 }
 
 #[tonic::async_trait]
-impl avalanche_types::rpcchainvm::concensus::snowman::Decidable for Block {
+impl avalanche_types::subnet::rpc::concensus::snowman::Decidable for Block {
     /// Implements "snowman.Block.choices.Decidable"
     async fn status(&self) -> Status {
         return self.st.clone();
@@ -192,27 +187,36 @@ impl avalanche_types::rpcchainvm::concensus::snowman::Decidable for Block {
 
     /// Implements "snowman.Block.choices.Decidable"
     async fn accept(&mut self) -> Result<()> {
+        log::debug!("block_accept called!");
         self.set_status(Status::Accepted).await;
 
         let block_id = self.id().await;
-        let block = self.clone();
-        self.state.put_block(&block).await.map_err(|e| {
-            Error::new(
-                ErrorKind::Other,
-                format!("accept block failed: {}", e.to_string()),
-            )
-        })?;
+        let mut block = self.clone();
+        let db = self.state.get_db().await;
+
+        for tx in self.txs.iter_mut() {
+            tx.init().await?;
+            tx.execute(&db, &block).await?;
+        }
+
+        // add block to cache
+        self.state
+            .set_accepted_block(block_id, &block)
+            .await
+            .map_err(|e| {
+                Error::new(
+                    ErrorKind::Other,
+                    format!("failed to add block to cache: {}", e.to_string()),
+                )
+            })?;
 
         self.state
-            .set_last_accepted(block)
+            .set_last_accepted(&mut block)
             .await
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
-        let mut verified_blocks = self.state.verified_blocks.write().await;
         // remove this block from verified blocks as it's accepted.
-        verified_blocks.remove(&block_id);
-
-        // TODO: add support for versiondb
+        let _ = self.state.remove_verified_block(block_id).await;
 
         Ok(())
     }
@@ -221,35 +225,27 @@ impl avalanche_types::rpcchainvm::concensus::snowman::Decidable for Block {
     async fn reject(&mut self) -> Result<()> {
         self.set_status(Status::Rejected).await;
 
-        let block = self.clone();
-        self.state.put_block(&block).await.map_err(|e| {
-            Error::new(
-                ErrorKind::Other,
-                format!("accept block failed: {}", e.to_string()),
-            )
-        })?;
-
-        let mut verified_blocks = self.state.verified_blocks.write().await;
-        // remove this block from verified blocks as it's accepted.
-        verified_blocks.remove(&block.id);
+        // remove this block from verified blocks as it's rejected.
+        let _ = self.state.remove_verified_block(self.id).await;
 
         Ok(())
     }
 }
 
 #[tonic::async_trait]
-impl avalanche_types::rpcchainvm::concensus::snowman::Initializer for Block {
+impl avalanche_types::subnet::rpc::concensus::snowman::Initializer for Block {
     /// Initializes a block.
     async fn init(&mut self, bytes: &[u8], status: Status) -> Result<()> {
         self.bytes = bytes.to_vec();
-        self.id = ids::Id::from_slice_with_sha256(&Sha3_256::digest(&self.bytes));
+        // this is equal to ids.ToID(crypto.Keccak256(b.bytes))
+        self.id = ids::Id::from_slice(hash::keccak256(&self.bytes).as_bytes());
         self.st = status;
         Ok(())
     }
 }
 
 #[tonic::async_trait]
-impl avalanche_types::rpcchainvm::concensus::snowman::StatusWriter for Block {
+impl avalanche_types::subnet::rpc::concensus::snowman::StatusWriter for Block {
     /// Sets the blocks status.
     async fn set_status(&mut self, status: Status) {
         self.st = status;

@@ -1,10 +1,8 @@
 use std::{
-    any::Any,
     collections::HashMap,
     io::{Error, ErrorKind},
 };
 
-use hex::ToHex;
 use serde::{Deserialize, Serialize};
 use sha3::Digest;
 
@@ -27,6 +25,7 @@ const HASH_LEN: usize = 66;
 /// the value will be overwritten. The root bucket must be created
 /// in advance.
 #[derive(Serialize, Deserialize, Clone, Debug)]
+
 pub struct Tx {
     pub base_tx: base::Tx,
 
@@ -41,8 +40,9 @@ pub struct Tx {
     pub value: Vec<u8>,
 }
 
+// important to define an unique name of the trait implementation
+#[typetag::serde(name = "set")]
 #[tonic::async_trait]
-#[typetag::serde]
 impl unsigned::Transaction for Tx {
     async fn get_block_id(&self) -> avalanche_types::ids::Id {
         self.base_tx.block_id
@@ -52,16 +52,13 @@ impl unsigned::Transaction for Tx {
         self.base_tx.block_id = id;
     }
 
-    /// Provides downcast support for the trait object.
-    /// ref. https://doc.rust-lang.org/std/any/index.html
-    async fn as_any(&self) -> &(dyn Any + Send + Sync) {
-        self
+    async fn get_value(&self) -> Option<Vec<u8>> {
+        Some(self.value.clone())
     }
 
-    /// Provides downcast support for the trait object.
-    /// ref. https://doc.rust-lang.org/std/any/index.html
-    async fn as_any_mut(&mut self) -> &mut (dyn Any + Send + Sync) {
-        self
+    async fn set_value(&mut self, value: Vec<u8>) -> std::io::Result<()> {
+        self.value = value;
+        Ok(())
     }
 
     async fn typ(&self) -> TransactionType {
@@ -94,12 +91,36 @@ impl unsigned::Transaction for Tx {
         let v = storage::get_value_meta(&db, self.bucket.as_bytes(), self.key.as_bytes()).await?;
         if v.is_none() {
             new_vmeta.created = txn_ctx.block_time;
-        } else {
-            new_vmeta.created = v.unwrap().created;
         }
 
+        let info = get_bucket_info(&db, self.bucket.as_bytes())
+            .await
+            .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+        if info.is_none() {
+            return Err(Error::new(
+                ErrorKind::NotFound,
+                format!("bucket not found: {}", self.bucket),
+            ));
+        }
+        let info = info.unwrap();
+        if info.owner != txn_ctx.sender {
+            log::debug!(
+                "execute: owner: {}\n sender: {}",
+                &info.owner,
+                &txn_ctx.sender
+            );
+            return Err(Error::new(
+                ErrorKind::PermissionDenied,
+                format!("sets only allowed for bucket owner: {}", self.bucket),
+            ));
+        }
+
+        put_bucket_info(&mut db, self.bucket.as_bytes(), info, 0)
+            .await
+            .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+
         log::debug!(
-            "set_tx execute put_bucket_key: bucket: {} key: {} value_meta: {:?}\n",
+            "execute: put_bucket_key: bucket: {} key: {} value_meta: {:?}\n",
             self.bucket,
             self.key,
             new_vmeta
@@ -114,36 +135,26 @@ impl unsigned::Transaction for Tx {
         .await
         .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
-        let info = get_bucket_info(&db, self.bucket.as_bytes())
-            .await
-            .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
-        if info.is_none() {
-            return Err(Error::new(
-                ErrorKind::NotFound,
-                format!("bucket not found: {}", self.bucket),
-            ));
-        }
-
-        put_bucket_info(&mut db, self.bucket.as_bytes(), info.unwrap(), 0)
-            .await
-            .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
-
         Ok(())
     }
 
     async fn typed_data(&self) -> TypedData {
-        let mut tx_fields: Vec<Type> = Vec::with_capacity(2);
+        let mut tx_fields: Vec<Type> = vec![];
         tx_fields.push(Type {
             name: TD_BUCKET.to_owned(),
-            typ: TD_STRING.to_owned(),
+            type_: TD_STRING.to_owned(),
         });
         tx_fields.push(Type {
-            name: TD_BLOCK_ID.to_owned(),
-            typ: TD_STRING.to_owned(),
+            name: TD_KEY.to_owned(),
+            type_: TD_STRING.to_owned(),
         });
         tx_fields.push(Type {
             name: TD_VALUE.to_owned(),
-            typ: TD_BYTES.to_owned(),
+            type_: TD_BYTES.to_owned(),
+        });
+        tx_fields.push(Type {
+            name: TD_BLOCK_ID.to_owned(),
+            type_: TD_STRING.to_owned(),
         });
 
         let mut message = HashMap::with_capacity(3);
@@ -157,7 +168,7 @@ impl unsigned::Transaction for Tx {
         );
         message.insert(
             TD_VALUE.to_owned(),
-            MessageValue::Vec(self.value.encode_hex::<String>().as_bytes().to_vec()),
+            MessageValue::Bytes(self.value.to_vec()),
         );
         message.insert(
             TD_BLOCK_ID.to_owned(),
@@ -176,15 +187,17 @@ fn value_hash(value: &[u8]) -> String {
 }
 
 #[tokio::test]
-async fn service_test() {
+async fn set_tx_test() {
     use super::unsigned::Transaction;
+    use std::str::FromStr;
 
     // set tx bucket not found
-    let db = avalanche_types::rpcchainvm::database::memdb::Database::new();
+    let db = avalanche_types::subnet::rpc::database::memdb::Database::new();
     let ut_ctx = unsigned::TransactionContext {
         db,
         block_time: 0,
         tx_id: avalanche_types::ids::Id::empty(),
+        sender: ethereum_types::Address::zero(),
     };
     let tx = Tx {
         base_tx: base::Tx::default(),
@@ -193,14 +206,15 @@ async fn service_test() {
         value: "bar".as_bytes().to_vec(),
     };
     let resp = tx.execute(ut_ctx).await;
-    assert!(resp.unwrap_err().to_string().contains("bucket not found"));
+    assert!(resp.unwrap_err().kind() == ErrorKind::NotFound);
 
-    // update key value
-    let db = avalanche_types::rpcchainvm::database::memdb::Database::new();
+    // create bucket
+    let db = avalanche_types::subnet::rpc::database::memdb::Database::new();
     let ut_ctx = unsigned::TransactionContext {
         db: db.clone(),
         block_time: 0,
         tx_id: avalanche_types::ids::Id::empty(),
+        sender: ethereum_types::Address::zero(),
     };
     let tx = crate::chain::tx::bucket::Tx {
         base_tx: base::Tx::default(),
@@ -209,10 +223,30 @@ async fn service_test() {
     let resp = tx.execute(ut_ctx).await;
     assert!(resp.is_ok());
 
+    // try to update key from a different sender
+    let other_account =
+        ethereum_types::Address::from_str("0000000000000000000000000000000000000001").unwrap();
     let ut_ctx = unsigned::TransactionContext {
         db: db.clone(),
         block_time: 0,
         tx_id: avalanche_types::ids::Id::empty(),
+        sender: other_account,
+    };
+    let tx = Tx {
+        base_tx: base::Tx::default(),
+        bucket: "kvs".to_string(),
+        key: "foo".to_string(),
+        value: "bar".as_bytes().to_vec(),
+    };
+    let resp = tx.execute(ut_ctx).await;
+    assert_eq!(resp.unwrap_err().kind(), ErrorKind::PermissionDenied);
+
+    // try to update key from original sender
+    let ut_ctx = unsigned::TransactionContext {
+        db: db.clone(),
+        block_time: 0,
+        tx_id: avalanche_types::ids::Id::empty(),
+        sender: ethereum_types::Address::zero(),
     };
     let tx = Tx {
         base_tx: base::Tx::default(),
@@ -227,6 +261,7 @@ async fn service_test() {
         db: db.clone(),
         block_time: 0,
         tx_id: avalanche_types::ids::Id::empty(),
+        sender: ethereum_types::Address::zero(),
     };
     let tx = Tx {
         base_tx: base::Tx::default(),
