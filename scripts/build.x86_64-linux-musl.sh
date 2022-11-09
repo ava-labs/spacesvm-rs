@@ -15,4 +15,4 @@ cargo build \
 --target x86_64-unknown-linux-musl
 
 BIN_PATH=./target/x86_64-unknown-linux-musl/release
-${BIN_PATH}/mini-kvvm-rs --help || true
+${BIN_PATH}/spacesvm --help || true
