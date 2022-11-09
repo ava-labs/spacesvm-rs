@@ -31,13 +31,7 @@ async fn e2e() {
     assert!(exists);
     assert!(Path::new(&vm_plugin_path).exists());
 
-    let vm_id = Path::new(&vm_plugin_path)
-        .file_stem()
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_string();
-    let vm_id = subnet::vm_name_to_id(&vm_id).unwrap();
+    let vm_id = subnet::vm_name_to_id("minikvvm").unwrap();
 
     let (mut avalanchego_exec_path, _) = crate::get_avalanchego_path();
     let plugins_dir = if !avalanchego_exec_path.is_empty() {
@@ -183,14 +177,6 @@ async fn e2e() {
     for (node_name, iv) in cluster_info.node_infos.into_iter() {
         log::info!("{}: {}", node_name, iv.uri);
         rpc_eps.push(iv.uri.clone());
-    }
-    let mut blockchain_id = ids::Id::empty();
-    for (k, v) in cluster_info.custom_chains.iter() {
-        log::info!("custom chain info: {}={:?}", k, v);
-        if v.chain_name == "minikvvm" {
-            blockchain_id = ids::Id::from_str(&v.chain_id).unwrap();
-            break;
-        }
     }
 
     if crate::get_network_runner_enable_shutdown() {
