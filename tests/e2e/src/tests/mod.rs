@@ -76,7 +76,7 @@ async fn e2e() {
     // write some random genesis file
     let genesis = mini_kvvm::genesis::Genesis {
         author: random_manager::string(5),
-        welcome_message:  random_manager::string(10)
+        welcome_message: random_manager::string(10),
     };
     let genesis_file_path = random_manager::tmp_path(10, None).unwrap();
     genesis.sync(&genesis_file_path).unwrap();
