@@ -110,8 +110,13 @@ jobs:
         uses: arduino/setup-protoc@v1
         with:
           version: '3.x'
+      - name: Build plugin
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --bin mini-kvvm
       - name: Run e2e tests
-        run: scripts/tests.e2e.sh 1.8.6
+        run: VM_PLUGIN_PATH=/home/runner/work/mini-kvvm-rs/mini-kvvm-rs/target/release/mini-kvvm scripts/tests.e2e.sh
 
   release:
     name: Release ${{ matrix.job.target }} (${{ matrix.job.os }})

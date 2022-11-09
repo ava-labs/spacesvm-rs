@@ -1,10 +1,14 @@
 use std::{
+    fs,
+    path::Path,
+    str::FromStr,
     thread,
     time::{Duration, Instant},
 };
 
 use avalanche_network_runner_sdk::{BlockchainSpec, Client, GlobalConfig, StartRequest};
-use log::{info, warn};
+use avalanche_types::{ids, subnet};
+use mini_kvvm;
 
 #[tokio::test]
 async fn e2e() {
@@ -18,45 +22,92 @@ async fn e2e() {
 
     let cli = Client::new(&ep).await;
 
-    // Allow server time to become ready.
-    thread::sleep(Duration::from_millis(2000));
-
-    info!("ping...");
+    log::info!("ping...");
     let resp = cli.ping().await.expect("failed ping");
-    info!("network-runner is running (ping response {:?})", resp);
+    log::info!("network-runner is running (ping response {:?})", resp);
 
-    let (exec_path, is_set) = crate::get_network_runner_avalanchego_path();
-    assert!(is_set);
-    info!("exec_path {:?})", exec_path);
+    let (vm_plugin_path, exists) = crate::get_vm_plugin_path();
+    log::info!("Vm Plugin path: {vm_plugin_path}");
+    assert!(exists);
+    assert!(Path::new(&vm_plugin_path).exists());
 
-    let (whitelisted_subnets, is_set) = crate::get_network_runner_whitelisted_subnets();
-    assert!(is_set);
-    info!("whitelisted_subnets {:?})", whitelisted_subnets);
+    let vm_id = Path::new(&vm_plugin_path)
+        .file_stem()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+    let vm_id = subnet::vm_name_to_id(&vm_id).unwrap();
 
-    let global_config = GlobalConfig {
-        log_level: String::from("info"),
+    let (mut avalanchego_exec_path, _) = crate::get_avalanchego_path();
+    let plugins_dir = if !avalanchego_exec_path.is_empty() {
+        let parent_dir = Path::new(&avalanchego_exec_path)
+            .parent()
+            .expect("unexpected None parent");
+        parent_dir
+            .join("plugins")
+            .as_os_str()
+            .to_str()
+            .unwrap()
+            .to_string()
+    } else {
+        // keep this in sync with "proto" crate
+        // ref. https://github.com/ava-labs/avalanchego/blob/v1.9.2/version/constants.go#L15-L17
+        let (exec_path, plugins_dir) =
+            avalanche_installer::avalanchego::download(None, None, Some("v1.9.2".to_string()))
+                .await
+                .unwrap();
+        avalanchego_exec_path = exec_path;
+        plugins_dir
     };
 
-    let mut blockchain_specs = Vec::new();
-    blockchain_specs.push(BlockchainSpec {
-        vm_name: "minikvvm".to_string(),
-        genesis: "/tmp/minikvvm.genesis.json".to_string(),
-        subnet_id: None,
-        ..Default::default()
-    });
+    log::info!(
+        "copying vm plugin {} to {}/{}",
+        vm_plugin_path,
+        plugins_dir,
+        vm_id
+    );
+    fs::copy(
+        &vm_plugin_path,
+        Path::new(&plugins_dir).join(&vm_id.to_string()),
+    )
+    .unwrap();
 
-    info!("starting...");
+    // write some random genesis file
+    let genesis = mini_kvvm::genesis::Genesis {
+        author: random_manager::string(5),
+        welcome_message:  random_manager::string(10)
+    };
+    let genesis_file_path = random_manager::tmp_path(10, None).unwrap();
+    genesis.sync(&genesis_file_path).unwrap();
+
+    log::info!(
+        "starting {} with avalanchego {}, genesis file path {}",
+        vm_id,
+        avalanchego_exec_path,
+        genesis_file_path,
+    );
     let resp = cli
         .start(StartRequest {
-            exec_path: exec_path,
-            whitelisted_subnets: Some(whitelisted_subnets),
-            global_node_config: Some(serde_json::to_string(&global_config).unwrap()),
-            blockchain_specs,
+            exec_path: avalanchego_exec_path,
+            num_nodes: Some(5),
+            plugin_dir: Some(plugins_dir),
+            global_node_config: Some(
+                serde_json::to_string(&GlobalConfig {
+                    log_level: String::from("info"),
+                })
+                .unwrap(),
+            ),
+            blockchain_specs: vec![BlockchainSpec {
+                vm_name: String::from("minikvvm"),
+                genesis: genesis_file_path.to_string(),
+                ..Default::default()
+            }],
             ..Default::default()
         })
         .await
         .expect("failed start");
-    info!(
+    log::info!(
         "started avalanchego cluster with network-runner: {:?}",
         resp
     );
@@ -64,8 +115,9 @@ async fn e2e() {
     // enough time for network-runner to get ready
     thread::sleep(Duration::from_secs(20));
 
-    info!("checking custom vm healthiness...");
+    log::info!("checking cluster healthiness...");
     let mut ready = false;
+
     let timeout = Duration::from_secs(300);
     let interval = Duration::from_secs(15);
     let start = Instant::now();
@@ -86,46 +138,66 @@ async fn e2e() {
         };
         thread::sleep(itv);
 
-        cnt += 1;
         ready = {
-            match cli.status().await {
-                Ok(status) => {
-                    if status.cluster_info.is_some() {
-                        warn!("client resp: {:?}", resp);
-                        continue;
-                    }
-                    warn!("custom vms healthy");
+            match cli.health().await {
+                Ok(_) => {
+                    log::info!("healthy now!");
                     true
                 }
-
                 Err(e) => {
-                    warn!("not healthy yet {}", e);
+                    log::warn!("not healthy yet {}", e);
                     false
                 }
             }
         };
-
         if ready {
             break;
         }
-    }
 
+        cnt += 1;
+    }
     assert!(ready);
 
-    info!("checking status...");
-    let status = cli.status().await.expect("failed status");
+    log::info!("checking status...");
+    let mut status = cli.status().await.expect("failed status");
+    loop {
+        let elapsed = start.elapsed();
+        if elapsed.gt(&timeout) {
+            break;
+        }
+
+        if let Some(ci) = &status.cluster_info {
+            if ci.custom_chains.len() > 0 {
+                break;
+            }
+        }
+
+        log::info!("retrying checking status...");
+        thread::sleep(interval);
+        status = cli.status().await.expect("failed status");
+    }
+
     assert!(status.cluster_info.is_some());
     let cluster_info = status.cluster_info.unwrap();
     let mut rpc_eps: Vec<String> = Vec::new();
     for (node_name, iv) in cluster_info.node_infos.into_iter() {
-        info!("{}: {}", node_name, iv.uri);
+        log::info!("{}: {}", node_name, iv.uri);
         rpc_eps.push(iv.uri.clone());
     }
-    info!("avalanchego RPC endpoints: {:?}", rpc_eps);
+    let mut blockchain_id = ids::Id::empty();
+    for (k, v) in cluster_info.custom_chains.iter() {
+        log::info!("custom chain info: {}={:?}", k, v);
+        if v.chain_name == "minikvvm" {
+            blockchain_id = ids::Id::from_str(&v.chain_id).unwrap();
+            break;
+        }
+    }
 
-    // TODO: do some tests...
-
-    info!("stopping...");
-    let _resp = cli.stop().await.expect("failed stop");
-    info!("successfully stopped network");
+    if crate::get_network_runner_enable_shutdown() {
+        log::info!("shutdown is enabled... stopping...");
+        let _resp = cli.stop().await.expect("failed stop");
+        log::info!("successfully stopped network");
+    } else {
+        log::info!("skipped network shutdown...");
+    }
 }
