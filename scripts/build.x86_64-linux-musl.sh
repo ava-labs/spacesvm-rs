@@ -11,8 +11,8 @@ docker pull clux/muslrust
 docker run -v $PWD:/volume --rm -t clux/muslrust \
 cargo build \
 --release \
---bin mini-kvvm \
+--bin spacesvm \
 --target x86_64-unknown-linux-musl
 
 BIN_PATH=./target/x86_64-unknown-linux-musl/release
-${BIN_PATH}/mini-kvvm-rs --help || true
+${BIN_PATH}/spacesvm --help || true

@@ -260,8 +260,8 @@ async fn test_mempool() {
 
     // create tx_1
     let tx_data_1 = unsigned::TransactionData {
-        typ: TransactionType::Bucket,
-        bucket: "foo".to_string(),
+        typ: TransactionType::Claim,
+        space: "foo".to_string(),
         key: "".to_string(),
         value: vec![],
     };
@@ -286,8 +286,8 @@ async fn test_mempool() {
 
     // create tx_2
     let tx_data_2 = unsigned::TransactionData {
-        typ: TransactionType::Bucket,
-        bucket: "bar".to_string(),
+        typ: TransactionType::Claim,
+        space: "bar".to_string(),
         key: "".to_string(),
         value: vec![],
     };

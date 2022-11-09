@@ -12,7 +12,7 @@ use crate::chain::{
 
 use super::{
     base,
-    decoder::{TD_BLOCK_ID, TD_BUCKET, TD_KEY, TD_STRING},
+    decoder::{TD_BLOCK_ID, TD_KEY, TD_SPACE, TD_STRING},
     tx::TransactionType,
     unsigned,
 };
@@ -23,7 +23,7 @@ use super::{
 #[serde(rename_all = "camelCase")]
 pub struct Tx {
     pub base_tx: base::Tx,
-    pub bucket: String,
+    pub space: String,
     pub key: String,
 }
 
@@ -57,25 +57,25 @@ impl unsigned::Transaction for Tx {
     async fn execute(&self, mut txn_ctx: unsigned::TransactionContext) -> Result<()> {
         let db = txn_ctx.db.clone();
 
-        let info = storage::get_bucket_info(&db, self.bucket.as_bytes())
+        let info = storage::get_space_info(&db, self.space.as_bytes())
             .await
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
         if info.is_none() {
             return Err(Error::new(
                 ErrorKind::NotFound,
-                format!("bucket not found: {}", self.bucket),
+                format!("bucket not found: {}", self.space),
             ));
         }
         let info = info.unwrap();
         if info.owner != txn_ctx.sender {
             return Err(Error::new(
                 ErrorKind::PermissionDenied,
-                format!("sets only allowed for bucket owner: {}", self.bucket),
+                format!("sets only allowed for bucket owner: {}", self.space),
             ));
         }
 
         // while we do not use value meta currently we verify it exists.
-        let v = storage::get_value_meta(&db, self.bucket.as_bytes(), self.key.as_bytes())
+        let v = storage::get_value_meta(&db, self.space.as_bytes(), self.key.as_bytes())
             .await
             .map_err(|e| {
                 Error::new(ErrorKind::Other, format!("failed to get value meta: {}", e))
@@ -85,7 +85,7 @@ impl unsigned::Transaction for Tx {
             return Err(Error::new(ErrorKind::Other, "key is missing"));
         }
 
-        storage::delete_bucket_key(&mut txn_ctx.db, self.bucket.as_bytes(), self.key.as_bytes())
+        storage::delete_space_key(&mut txn_ctx.db, self.space.as_bytes(), self.key.as_bytes())
             .await
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
@@ -95,7 +95,7 @@ impl unsigned::Transaction for Tx {
     async fn typed_data(&self) -> TypedData {
         let mut tx_fields: Vec<Type> = Vec::new();
         tx_fields.push(Type {
-            name: TD_BUCKET.to_owned(),
+            name: TD_SPACE.to_owned(),
             type_: TD_STRING.to_owned(),
         });
         tx_fields.push(Type {
@@ -109,8 +109,8 @@ impl unsigned::Transaction for Tx {
 
         let mut message: HashMap<String, MessageValue> = HashMap::with_capacity(1);
         message.insert(
-            TD_BUCKET.to_owned(),
-            MessageValue::Vec(self.bucket.as_bytes().to_vec()),
+            TD_SPACE.to_owned(),
+            MessageValue::Vec(self.space.as_bytes().to_vec()),
         );
         message.insert(
             TD_KEY.to_owned(),

@@ -99,14 +99,14 @@ impl crate::api::Service for Service {
         Box::pin(async move {
             let inner = vm.read().await;
             let db = inner.state.get_db().await;
-            let value = chain::storage::get_value(&db, &params.bucket, &params.key)
+            let value = chain::storage::get_value(&db, &params.space, &params.key)
                 .await
                 .map_err(create_jsonrpc_error)?;
             if value.is_none() {
                 return Ok(ResolveResponse::default());
             }
 
-            let meta = chain::storage::get_value_meta(&db, &params.bucket, &params.key)
+            let meta = chain::storage::get_value_meta(&db, &params.space, &params.key)
                 .await
                 .map_err(create_jsonrpc_error)?;
             if meta.is_none() {

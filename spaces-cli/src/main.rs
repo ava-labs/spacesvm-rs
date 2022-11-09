@@ -1,14 +1,16 @@
-use avalanche_types::key;
-use clap::{Parser, Subcommand};
-use jsonrpc_client_transports::{transports, RpcError};
-use jsonrpc_core::futures;
-use mini_kvvm::api::ServiceClient as Client;
-use mini_kvvm::api::{DecodeTxArgs, IssueTxArgs, ResolveArgs};
-use mini_kvvm::chain::tx::{decoder, tx::TransactionType, unsigned::TransactionData};
 use std::error;
 use std::fs::File;
 use std::io::{Result, Write};
 use std::path::Path;
+
+use avalanche_types::key;
+use clap::{Parser, Subcommand};
+use jsonrpc_client_transports::{transports, RpcError};
+use jsonrpc_core::futures;
+use spacesvm::{
+    api::{DecodeTxArgs, IssueTxArgs, ResolveArgs, ServiceClient as Client},
+    chain::tx::{decoder, tx::TransactionType, unsigned::TransactionData},
+};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -18,7 +20,7 @@ struct Cli {
     endpoint: String,
 
     /// Private key file.
-    #[clap(long, default_value = ".mini-kvvm-cli-pk")]
+    #[clap(long, default_value = ".spacesvm-cli-pk")]
     private_key_file: String,
 
     /// Which subcommand to call.
@@ -28,20 +30,20 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Command {
-    Bucket {
-        bucket: String,
+    Claim {
+        space: String,
     },
     Set {
-        bucket: String,
+        space: String,
         key: String,
         value: String,
     },
     Delete {
-        bucket: String,
+        space: String,
         key: String,
     },
     Get {
-        bucket: String,
+        space: String,
         key: String,
     },
 }
@@ -55,9 +57,9 @@ async fn main() -> std::result::Result<(), Box<dyn error::Error>> {
     let client = futures::executor::block_on(connection)?;
     ping(&client).await?;
 
-    if let Command::Get { bucket, key } = &cli.command {
+    if let Command::Get { space, key } = &cli.command {
         futures::executor::block_on(client.resolve(ResolveArgs {
-            bucket: bucket.as_bytes().to_vec(),
+            space: space.as_bytes().to_vec(),
             key: key.as_bytes().to_vec(),
         }))
         .map_err(|e| e.to_string())?;
@@ -71,9 +73,9 @@ async fn main() -> std::result::Result<(), Box<dyn error::Error>> {
 
 fn command_to_tx(command: Command) -> Result<TransactionData> {
     match command {
-        Command::Bucket { bucket } => Ok(bucket_tx(bucket)),
-        Command::Set { bucket, key, value } => Ok(set_tx(bucket, key, value.as_bytes().to_vec())),
-        Command::Delete { bucket, key } => Ok(delete_tx(bucket, key)),
+        Command::Claim { space } => Ok(claim_tx(space)),
+        Command::Set { space, key, value } => Ok(set_tx(space, key, value.as_bytes().to_vec())),
+        Command::Delete { space, key } => Ok(delete_tx(space, key)),
         _ => Err(std::io::Error::new(
             std::io::ErrorKind::Other,
             "not a supported tx",
@@ -96,28 +98,28 @@ fn get_or_create_pk(path: &str) -> Result<key::secp256k1::private_key::Key> {
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
 }
 
-fn bucket_tx(bucket: String) -> TransactionData {
+fn claim_tx(space: String) -> TransactionData {
     TransactionData {
-        typ: TransactionType::Bucket,
-        bucket,
+        typ: TransactionType::Claim,
+        space,
         key: "".to_string(),
         value: vec![],
     }
 }
 
-fn set_tx(bucket: String, key: String, value: Vec<u8>) -> TransactionData {
+fn set_tx(space: String, key: String, value: Vec<u8>) -> TransactionData {
     TransactionData {
         typ: TransactionType::Set,
-        bucket,
+        space,
         key,
         value,
     }
 }
 
-fn delete_tx(bucket: String, key: String) -> TransactionData {
+fn delete_tx(space: String, key: String) -> TransactionData {
     TransactionData {
         typ: TransactionType::Delete,
-        bucket,
+        space,
         key,
         value: vec![],
     }

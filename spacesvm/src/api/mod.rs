@@ -66,7 +66,7 @@ pub struct DecodeTxResponse {
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct ResolveArgs {
-    pub bucket: Vec<u8>,
+    pub space: Vec<u8>,
     pub key: Vec<u8>,
 }
 

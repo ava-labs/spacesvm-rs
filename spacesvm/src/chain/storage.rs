@@ -17,7 +17,7 @@ use crate::{
     chain::crypto,
 };
 
-use super::tx::{self, bucket, Transaction};
+use super::tx::{self, claim, Transaction};
 
 const SHORT_ID_LEN: usize = 20;
 const BLOCK_PREFIX: u8 = 0x0;
@@ -36,18 +36,18 @@ pub async fn set_transaction(
     return db.put(&k, &vec![]).await;
 }
 
-pub async fn delete_bucket_key(
+pub async fn delete_space_key(
     db: &mut Box<dyn avalanche_types::subnet::rpc::database::Database + Send + Sync>,
-    bucket: &[u8],
+    space: &[u8],
     key: &[u8],
 ) -> Result<()> {
-    match get_bucket_info(db, bucket).await? {
+    match get_space_info(db, space).await? {
         None => Err(Error::new(
             ErrorKind::InvalidData,
-            format!("bucket not found"),
+            format!("space not found"),
         )),
         Some(info) => {
-            db.delete(&bucket_value_key(info.raw_bucket, key))
+            db.delete(&space_value_key(info.raw_space, key))
                 .await
                 .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
             Ok(())
@@ -88,10 +88,10 @@ pub async fn submit(state: &state::State, txs: &mut Vec<tx::tx::Transaction>) ->
 
 pub async fn get_value(
     db: &Box<dyn avalanche_types::subnet::rpc::database::Database + Send + Sync>,
-    bucket: &[u8],
+    space: &[u8],
     key: &[u8],
 ) -> Result<Option<Vec<u8>>> {
-    let info: Option<tx::bucket::Info> = match get_bucket_info(db, bucket).await {
+    let info: Option<tx::claim::Info> = match get_space_info(db, space).await {
         Ok(info) => info,
         Err(e) => {
             if is_not_found(&e) {
@@ -105,7 +105,7 @@ pub async fn get_value(
     }
 
     let value = db
-        .get(&bucket_value_key(info.unwrap().raw_bucket, key))
+        .get(&space_value_key(info.unwrap().raw_space, key))
         .await
         .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
@@ -128,12 +128,12 @@ pub async fn get_value(
 
 pub async fn get_value_meta(
     db: &Box<dyn avalanche_types::subnet::rpc::database::Database + Send + Sync>,
-    bucket: &[u8],
+    space: &[u8],
     key: &[u8],
 ) -> Result<Option<ValueMeta>> {
-    match get_bucket_info(&db, bucket).await? {
+    match get_space_info(&db, space).await? {
         None => Ok(None),
-        Some(info) => match db.get(&bucket_value_key(info.raw_bucket, key)).await {
+        Some(info) => match db.get(&space_value_key(info.raw_space, key)).await {
             Err(e) => {
                 if is_not_found(&e) {
                     return Ok(None);
@@ -150,20 +150,20 @@ pub async fn get_value_meta(
 }
 
 // Attempts to write the value
-pub async fn put_bucket_key(
+pub async fn put_space_key(
     db: &mut Box<dyn subnet::rpc::database::Database + Send + Sync>,
-    bucket: &[u8],
+    space: &[u8],
     key: &[u8],
     vmeta: ValueMeta,
 ) -> Result<()> {
-    let resp = get_bucket_info(db, bucket)
+    let resp = get_space_info(db, space)
         .await
         .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
     if resp.is_none() {
-        return Err(Error::new(ErrorKind::NotFound, format!("bucket not found")));
+        return Err(Error::new(ErrorKind::NotFound, format!("space not found")));
     }
 
-    let k = bucket_value_key(resp.unwrap().raw_bucket, key);
+    let k = space_value_key(resp.unwrap().raw_space, key);
     log::info!("put_value key: {:?}", k);
     let rv_meta = serde_json::to_vec(&vmeta)
         .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
@@ -171,39 +171,39 @@ pub async fn put_bucket_key(
     return db.put(&k, &rv_meta).await;
 }
 
-/// Attempts to store the bucket info by using a key 'bucket_info_key' with the value
-/// being serialized bucket info.
-pub async fn put_bucket_info(
+/// Attempts to store the space info by using a key 'space_info_key' with the value
+/// being serialized space info.
+pub async fn put_space_info(
     db: &mut Box<dyn subnet::rpc::database::Database + Send + Sync>,
-    bucket: &[u8],
-    mut info: bucket::Info,
+    space: &[u8],
+    mut info: claim::Info,
     _last_expiry: u64,
 ) -> Result<()> {
-    // If [raw_bucket] is empty, this is a new bucket.
-    if info.raw_bucket.is_empty() {
-        log::info!("put_bucket_info: new bucket found");
-        let r_bucket = raw_bucket(bucket, info.created)
+    // If [raw_space] is empty, this is a new space.
+    if info.raw_space.is_empty() {
+        log::info!("put_space_info: new space found");
+        let r_space = raw_space(space, info.created)
             .await
             .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
-        log::info!("put_bucket_info: raw_becket: {:?}", r_bucket);
-        info.raw_bucket = r_bucket;
+        log::info!("put_space_info: raw_space: {:?}", r_space);
+        info.raw_space = r_space;
     }
     let value =
         serde_json::to_vec(&info).map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
 
-    let key = &bucket_info_key(bucket);
-    log::info!("put_bucket_info key: {:?}", key);
-    log::info!("put_bucket_info value: {:?}", value);
+    let key = &space_info_key(space);
+    log::info!("put_space_info key: {:?}", key);
+    log::info!("put_space_info value: {:?}", value);
 
     db.put(key, &value).await
 }
 
-// Attempts to get info from a bucket.
-pub async fn get_bucket_info(
+// Attempts to get info from a space.
+pub async fn get_space_info(
     db: &Box<dyn subnet::rpc::database::Database + Send + Sync>,
-    bucket: &[u8],
-) -> Result<Option<bucket::Info>> {
-    match db.get(&bucket_info_key(bucket)).await {
+    space: &[u8],
+) -> Result<Option<claim::Info>> {
+    match db.get(&space_info_key(space)).await {
         Err(e) => {
             if is_not_found(&e) {
                 return Ok(None);
@@ -211,36 +211,36 @@ pub async fn get_bucket_info(
             Err(e)
         }
         Ok(value) => {
-            let info: bucket::Info = serde_json::from_slice(&value)
+            let info: claim::Info = serde_json::from_slice(&value)
                 .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
 
-            log::info!("get_bucket_info info: {:?}", info);
+            log::info!("get_space_info info: {:?}", info);
             Ok(Some(info))
         }
     }
 }
 
-pub async fn raw_bucket(bucket: &[u8], block_time: u64) -> Result<ids::short::Id> {
+pub async fn raw_space(space: &[u8], block_time: u64) -> Result<ids::short::Id> {
     let mut r: Vec<u8> = Vec::new();
-    r.extend_from_slice(bucket);
+    r.extend_from_slice(space);
     r.push(BYTE_DELIMITER);
-    r.resize(bucket.len() + 1 + 8, 20);
-    BigEndian::write_u64(&mut r[bucket.len() + 1..].to_vec(), block_time);
+    r.resize(space.len() + 1 + 8, 20);
+    BigEndian::write_u64(&mut r[space.len() + 1..].to_vec(), block_time);
     let hash = crypto::compute_hash_160(&r);
 
     Ok(ids::short::Id::from_slice(&hash))
 }
 
-/// Returns true if a bucket with the same name already exists.
-pub async fn has_bucket(
+/// Returns true if a space with the same name already exists.
+pub async fn has_space(
     db: &Box<dyn subnet::rpc::database::Database + Send + Sync>,
-    bucket: &[u8],
+    space: &[u8],
 ) -> Result<bool> {
-    db.has(&bucket_info_key(bucket)).await
+    db.has(&space_info_key(space)).await
 }
 
 /// 'KEY_PREFIX' + 'BYTE_DELIMITER' + [r_bucket] + 'BYTE_DELIMITER' + [key]
-pub fn bucket_value_key(r_bucket: ids::short::Id, key: &[u8]) -> Vec<u8> {
+pub fn space_value_key(r_bucket: ids::short::Id, key: &[u8]) -> Vec<u8> {
     let mut k: Vec<u8> = Vec::with_capacity(2 + SHORT_ID_LEN + 1 + key.len());
     k.push(KEY_PREFIX);
     k.push(BYTE_DELIMITER);
@@ -251,11 +251,11 @@ pub fn bucket_value_key(r_bucket: ids::short::Id, key: &[u8]) -> Vec<u8> {
 }
 
 /// 'INFO_PREFIX' + 'BYTE_DELIMITER' + [bucket]
-pub fn bucket_info_key(bucket: &[u8]) -> Vec<u8> {
-    let mut k: Vec<u8> = Vec::with_capacity(bucket.len() + 2);
+pub fn space_info_key(space: &[u8]) -> Vec<u8> {
+    let mut k: Vec<u8> = Vec::with_capacity(space.len() + 2);
     k.push(INFO_PREFIX);
     k.push(BYTE_DELIMITER);
-    k.extend_from_slice(bucket);
+    k.extend_from_slice(space);
     k
 }
 
@@ -296,14 +296,14 @@ pub fn is_not_found(error: &Error) -> bool {
 
 #[test]
 fn test_prefix() {
-    // 'KEY_PREFIX' [4] + 'BYTE_DELIMITER' [47] + [raw_bucket] 0 x 20 + 'BYTE_DELIMITER' [4] + [key] [102, 111, 111]
+    // 'KEY_PREFIX' [4] + 'BYTE_DELIMITER' [47] + [raw_space] 0 x 20 + 'BYTE_DELIMITER' [4] + [key] [102, 111, 111]
     assert_eq!(
-        bucket_value_key(ids::short::Id::empty(), "foo".as_bytes().to_vec().as_ref()),
+        space_value_key(ids::short::Id::empty(), "foo".as_bytes().to_vec().as_ref()),
         [4, 47, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 47, 102, 111, 111]
     );
-    // 'INFO_PREFIX' [3] + 'BYTE_DELIMITER' [47] + 'bucket' [102, 111, 111]
+    // 'INFO_PREFIX' [3] + 'BYTE_DELIMITER' [47] + 'space' [102, 111, 111]
     assert_eq!(
-        bucket_info_key("foo".as_bytes().to_vec().as_ref()),
+        space_info_key("foo".as_bytes().to_vec().as_ref()),
         [3, 47, 102, 111, 111]
     );
     // 'BLOCK_PREFIX' [0] + 'BYTE_DELIMITER' [47] + 'block_id' 0 x 32
@@ -333,8 +333,8 @@ fn test_prefix() {
 }
 
 #[tokio::test]
-async fn test_raw_bucket() {
-    let resp = raw_bucket("kvs".as_bytes(), 0).await;
+async fn test_raw_space() {
+    let resp = raw_space("kvs".as_bytes(), 0).await;
     assert!(resp.is_ok());
     assert_eq!(
         resp.unwrap(),
@@ -346,33 +346,33 @@ async fn test_raw_bucket() {
 }
 
 #[tokio::test]
-async fn test_bucket_info_rt() {
-    use super::tx::bucket::Info;
+async fn test_space_info_rt() {
+    use super::tx::claim::Info;
     use ethereum_types::H160;
 
     env_logger::init_from_env(
         env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "debug"),
     );
 
-    let bucket = "kvs".as_bytes();
+    let space = "kvs".as_bytes();
     let new_info = Info {
         created: 0,
         updated: 1,
         owner: H160::default(),
-        raw_bucket: ids::short::Id::empty(),
+        raw_space: ids::short::Id::empty(),
     };
     let mut db = subnet::rpc::database::memdb::Database::new();
     // put
-    let resp = put_bucket_info(&mut db, &bucket, new_info, 2).await;
+    let resp = put_space_info(&mut db, &space, new_info, 2).await;
     assert!(resp.is_ok());
 
     // get
-    let resp = get_bucket_info(&mut db, &bucket).await;
+    let resp = get_space_info(&mut db, &space).await;
     assert!(resp.as_ref().is_ok());
     assert!(resp.as_ref().unwrap().is_some());
     let info = resp.unwrap().unwrap();
     assert_eq!(
-        info.raw_bucket,
+        info.raw_space,
         ids::short::Id::from_slice(&[
             230, 185, 125, 2, 27, 125, 127, 228, 212, 79, 188, 214, 107, 248, 146, 237, 254, 112,
             153, 17

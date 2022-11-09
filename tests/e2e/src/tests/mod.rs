@@ -1,14 +1,13 @@
 use std::{
     fs,
     path::Path,
-    str::FromStr,
     thread,
     time::{Duration, Instant},
 };
 
 use avalanche_network_runner_sdk::{BlockchainSpec, Client, GlobalConfig, StartRequest};
-use avalanche_types::{ids, subnet};
-use mini_kvvm;
+use avalanche_types::subnet;
+use spacesvm;
 
 #[tokio::test]
 async fn e2e() {
@@ -68,7 +67,7 @@ async fn e2e() {
     .unwrap();
 
     // write some random genesis file
-    let genesis = mini_kvvm::genesis::Genesis {
+    let genesis = spacesvm::genesis::Genesis {
         author: random_manager::string(5),
         welcome_message: random_manager::string(10),
     };

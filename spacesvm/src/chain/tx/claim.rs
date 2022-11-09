@@ -7,13 +7,13 @@ use avalanche_types::ids;
 use serde::{Deserialize, Serialize};
 
 use crate::chain::{
-    storage::{has_bucket, put_bucket_info},
+    storage::{has_space, put_space_info},
     tx::decoder::{create_typed_data, MessageValue, Type, TypedData},
 };
 
 use super::{
     base,
-    decoder::{TD_BLOCK_ID, TD_BUCKET, TD_STRING},
+    decoder::{TD_BLOCK_ID, TD_SPACE, TD_STRING},
     tx::TransactionType,
     unsigned,
 };
@@ -24,20 +24,20 @@ pub struct Info {
     pub updated: u64,
 
     #[serde(deserialize_with = "ids::short::must_deserialize_id")]
-    pub raw_bucket: ids::short::Id,
+    pub raw_space: ids::short::Id,
 
     pub owner: ethereum_types::H160,
 }
 
-/// Creates a bucket, which acts as a logical keyspace root.
+/// Creates a space, which acts as a logical key-space root.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Tx {
     pub base_tx: base::Tx,
-    pub bucket: String,
+    pub space: String,
 }
 
 // important to define an unique name of the trait implementation
-#[typetag::serde(name = "bucket")]
+#[typetag::serde(name = "claim")]
 #[tonic::async_trait]
 impl unsigned::Transaction for Tx {
     async fn get_block_id(&self) -> avalanche_types::ids::Id {
@@ -65,31 +65,31 @@ impl unsigned::Transaction for Tx {
 
     async fn execute(&self, txn_ctx: unsigned::TransactionContext) -> Result<()> {
         let mut db = txn_ctx.db;
-        // TODO: ensure expected format of bucket
+        // TODO: ensure expected format of space
 
-        // ensure bucket does not exist for now update requires an explicit delete tx
-        if has_bucket(&db, self.bucket.as_bytes()).await? {
-            log::debug!("execute: bucket exists: {}", self.bucket);
+        // ensure space does not exist for now update requires an explicit delete tx
+        if has_space(&db, self.space.as_bytes()).await? {
+            log::debug!("execute: space exists: {}", self.space);
             return Err(Error::new(
                 ErrorKind::AlreadyExists,
-                format!("bucket exists: {}", self.bucket),
+                format!("space exists: {}", self.space),
             ));
         }
-        log::debug!("execute: bucket exec sender: {}", &txn_ctx.sender);
+        log::debug!("execute: space exec sender: {}", &txn_ctx.sender);
         let new_info = Info {
             created: txn_ctx.block_time,
             updated: txn_ctx.block_time,
             owner: txn_ctx.sender,
-            raw_bucket: ids::short::Id::empty(),
+            raw_space: ids::short::Id::empty(),
         };
 
-        return put_bucket_info(&mut db, self.bucket.as_bytes(), new_info, 0).await;
+        return put_space_info(&mut db, self.space.as_bytes(), new_info, 0).await;
     }
 
     async fn typed_data(&self) -> TypedData {
         let mut tx_fields: Vec<Type> = Vec::new();
         tx_fields.push(Type {
-            name: TD_BUCKET.to_owned(),
+            name: TD_SPACE.to_owned(),
             type_: TD_STRING.to_owned(),
         });
         tx_fields.push(Type {
@@ -99,8 +99,8 @@ impl unsigned::Transaction for Tx {
 
         let mut message: HashMap<String, MessageValue> = HashMap::with_capacity(1);
         message.insert(
-            TD_BUCKET.to_owned(),
-            MessageValue::Vec(self.bucket.as_bytes().to_vec()),
+            TD_SPACE.to_owned(),
+            MessageValue::Vec(self.space.as_bytes().to_vec()),
         );
         let value = MessageValue::Vec(self.base_tx.block_id.to_vec());
         log::debug!("typed_data: message value: {:?}", value);
@@ -111,6 +111,6 @@ impl unsigned::Transaction for Tx {
             MessageValue::Vec(self.base_tx.block_id.to_vec()),
         );
 
-        return create_typed_data(super::tx::TransactionType::Bucket, tx_fields, message);
+        return create_typed_data(super::tx::TransactionType::Claim, tx_fields, message);
     }
 }

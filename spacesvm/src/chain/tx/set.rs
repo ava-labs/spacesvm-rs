@@ -7,13 +7,13 @@ use serde::{Deserialize, Serialize};
 use sha3::Digest;
 
 use crate::chain::{
-    storage::{self, get_bucket_info, put_bucket_info, put_bucket_key, ValueMeta},
+    storage::{self, get_space_info, put_space_info, put_space_key, ValueMeta},
     tx::decoder::{create_typed_data, MessageValue, Type, TypedData},
 };
 
 use super::{
     base,
-    decoder::{TD_BLOCK_ID, TD_BUCKET, TD_BYTES, TD_KEY, TD_STRING, TD_VALUE},
+    decoder::{TD_BLOCK_ID, TD_BYTES, TD_KEY, TD_SPACE, TD_STRING, TD_VALUE},
     tx::TransactionType,
     unsigned::{self},
 };
@@ -30,9 +30,9 @@ pub struct Tx {
     pub base_tx: base::Tx,
 
     /// Base namespace for the key value pair.
-    pub bucket: String,
+    pub space: String,
 
-    /// Parsed from the given input, with its bucket removed.
+    /// Parsed from the given input, with its space removed.
     pub key: String,
 
     /// Written as the key-value pair to the storage. If a previous value
@@ -67,7 +67,7 @@ impl unsigned::Transaction for Tx {
 
     async fn execute(&self, txn_ctx: unsigned::TransactionContext) -> std::io::Result<()> {
         let mut db = txn_ctx.db;
-        // TODO: ensure expected format of bucket, key and value
+        // TODO: ensure expected format of space, key and value
 
         if self.key.len() == HASH_LEN {
             let hash = value_hash(&self.value);
@@ -88,18 +88,18 @@ impl unsigned::Transaction for Tx {
             updated: txn_ctx.block_time,
         };
 
-        let v = storage::get_value_meta(&db, self.bucket.as_bytes(), self.key.as_bytes()).await?;
+        let v = storage::get_value_meta(&db, self.space.as_bytes(), self.key.as_bytes()).await?;
         if v.is_none() {
             new_vmeta.created = txn_ctx.block_time;
         }
 
-        let info = get_bucket_info(&db, self.bucket.as_bytes())
+        let info = get_space_info(&db, self.space.as_bytes())
             .await
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
         if info.is_none() {
             return Err(Error::new(
                 ErrorKind::NotFound,
-                format!("bucket not found: {}", self.bucket),
+                format!("space not found: {}", self.space),
             ));
         }
         let info = info.unwrap();
@@ -111,24 +111,24 @@ impl unsigned::Transaction for Tx {
             );
             return Err(Error::new(
                 ErrorKind::PermissionDenied,
-                format!("sets only allowed for bucket owner: {}", self.bucket),
+                format!("sets only allowed for spaced owner: {}", self.space),
             ));
         }
 
-        put_bucket_info(&mut db, self.bucket.as_bytes(), info, 0)
+        put_space_info(&mut db, self.space.as_bytes(), info, 0)
             .await
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
         log::debug!(
-            "execute: put_bucket_key: bucket: {} key: {} value_meta: {:?}\n",
-            self.bucket,
+            "execute: put_space_key: space: {} key: {} value_meta: {:?}\n",
+            self.space,
             self.key,
             new_vmeta
         );
 
-        put_bucket_key(
+        put_space_key(
             &mut db,
-            self.bucket.as_bytes(),
+            self.space.as_bytes(),
             self.key.as_bytes(),
             new_vmeta,
         )
@@ -141,7 +141,7 @@ impl unsigned::Transaction for Tx {
     async fn typed_data(&self) -> TypedData {
         let mut tx_fields: Vec<Type> = vec![];
         tx_fields.push(Type {
-            name: TD_BUCKET.to_owned(),
+            name: TD_SPACE.to_owned(),
             type_: TD_STRING.to_owned(),
         });
         tx_fields.push(Type {
@@ -159,8 +159,8 @@ impl unsigned::Transaction for Tx {
 
         let mut message = HashMap::with_capacity(3);
         message.insert(
-            TD_BUCKET.to_owned(),
-            MessageValue::Vec(self.bucket.as_bytes().to_vec()),
+            TD_SPACE.to_owned(),
+            MessageValue::Vec(self.space.as_bytes().to_vec()),
         );
         message.insert(
             TD_KEY.to_owned(),
@@ -191,7 +191,7 @@ async fn set_tx_test() {
     use super::unsigned::Transaction;
     use std::str::FromStr;
 
-    // set tx bucket not found
+    // set tx space not found
     let db = avalanche_types::subnet::rpc::database::memdb::Database::new();
     let ut_ctx = unsigned::TransactionContext {
         db,
@@ -201,14 +201,14 @@ async fn set_tx_test() {
     };
     let tx = Tx {
         base_tx: base::Tx::default(),
-        bucket: "kvs".to_string(),
+        space: "kvs".to_string(),
         key: "foo".to_string(),
         value: "bar".as_bytes().to_vec(),
     };
     let resp = tx.execute(ut_ctx).await;
     assert!(resp.unwrap_err().kind() == ErrorKind::NotFound);
 
-    // create bucket
+    // create space
     let db = avalanche_types::subnet::rpc::database::memdb::Database::new();
     let ut_ctx = unsigned::TransactionContext {
         db: db.clone(),
@@ -216,9 +216,9 @@ async fn set_tx_test() {
         tx_id: avalanche_types::ids::Id::empty(),
         sender: ethereum_types::Address::zero(),
     };
-    let tx = crate::chain::tx::bucket::Tx {
+    let tx = crate::chain::tx::claim::Tx {
         base_tx: base::Tx::default(),
-        bucket: "kvs".to_string(),
+        space: "kvs".to_string(),
     };
     let resp = tx.execute(ut_ctx).await;
     assert!(resp.is_ok());
@@ -234,7 +234,7 @@ async fn set_tx_test() {
     };
     let tx = Tx {
         base_tx: base::Tx::default(),
-        bucket: "kvs".to_string(),
+        space: "kvs".to_string(),
         key: "foo".to_string(),
         value: "bar".as_bytes().to_vec(),
     };
@@ -250,7 +250,7 @@ async fn set_tx_test() {
     };
     let tx = Tx {
         base_tx: base::Tx::default(),
-        bucket: "kvs".to_string(),
+        space: "kvs".to_string(),
         key: "foo".to_string(),
         value: "bar".as_bytes().to_vec(),
     };
@@ -265,7 +265,7 @@ async fn set_tx_test() {
     };
     let tx = Tx {
         base_tx: base::Tx::default(),
-        bucket: "kvs".to_string(),
+        space: "kvs".to_string(),
         key: "bar".to_string(),
         value: "bar".as_bytes().to_vec(),
     };
