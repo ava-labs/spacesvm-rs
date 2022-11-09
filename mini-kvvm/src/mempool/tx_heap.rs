@@ -78,7 +78,7 @@ impl TxHeap {
     }
 
     pub fn has(&self, id: &ids::Id) -> bool {
-        if let Some(entry) = self.get(id) {
+        if let Some(_) = self.get(id) {
             return true;
         }
         false

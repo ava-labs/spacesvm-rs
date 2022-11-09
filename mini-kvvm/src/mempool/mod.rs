@@ -7,13 +7,12 @@ use std::{
 };
 
 use avalanche_types::ids;
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::broadcast;
 
 use crate::chain::tx::tx::Transaction;
 
 use self::tx_heap::{Entry, TxHeap};
 
-// #[derive(Clone)]
 pub struct Mempool {
     inner: Arc<RwLock<MempoolInner>>,
     max_size: u64,
@@ -21,7 +20,6 @@ pub struct Mempool {
     /// Channel of length one, which the mempool ensures has an item on
     /// it as long as there is an unissued transaction remaining in [txs].
     pending_tx: broadcast::Sender<()>,
-    pending_rx: broadcast::Receiver<()>,
 }
 
 pub struct MempoolInner {
@@ -33,7 +31,7 @@ pub struct MempoolInner {
 impl Mempool {
     pub fn new(max_size: u64) -> Self {
         // initialize channel
-        let (pending_tx, pending_rx): (broadcast::Sender<()>, broadcast::Receiver<()>) =
+        let (pending_tx, _): (broadcast::Sender<()>, broadcast::Receiver<()>) =
             broadcast::channel(16);
         Self {
             inner: Arc::new(RwLock::new(MempoolInner {
@@ -43,7 +41,6 @@ impl Mempool {
             })),
             max_size,
             pending_tx,
-            pending_rx,
         }
     }
 

@@ -3,7 +3,7 @@ use std::{
     io::{Error, ErrorKind, Result},
 };
 
-use avalanche_types::{hash, ids, key};
+use avalanche_types::{hash, ids};
 use eip_712::Type as ParserType;
 use ethereum_types::H256;
 use serde::{de, Deserialize, Serialize};
@@ -275,6 +275,8 @@ pub fn hash_structured_data(typed_data: &TypedData) -> Result<H256> {
 
 #[tokio::test]
 async fn signature_recovers() {
+    use avalanche_types::key;
+    
     let secret_key = key::secp256k1::private_key::Key::generate().unwrap();
     let public_key = secret_key.to_public_key();
 

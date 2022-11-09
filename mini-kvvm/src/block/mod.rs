@@ -7,13 +7,12 @@ use std::vec;
 use avalanche_types::{
     choices::{self, status::Status},
     hash, ids,
-    subnet::{self, rpc::concensus::snowman::StatusWriter},
+    subnet::rpc::concensus::snowman::StatusWriter,
 };
 use derivative::{self, Derivative};
 use serde::{Deserialize, Serialize};
 
-use crate::chain;
-use crate::chain::tx::Transaction;
+use crate::chain::{self, tx::Transaction};
 
 pub const DATA_LEN: usize = 32;
 pub const BLOCKS_LRU_SIZE: usize = 8192;

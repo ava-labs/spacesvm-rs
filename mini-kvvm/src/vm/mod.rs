@@ -4,7 +4,6 @@ use std::{
     collections::HashMap,
     io::{Error, ErrorKind, Result},
     sync::Arc,
-    time::Duration,
 };
 
 use avalanche_types::{
@@ -20,7 +19,7 @@ use tokio::sync::{mpsc, RwLock};
 
 use crate::{
     api, block,
-    chain::{self, storage, tx::Transaction, vm::Vm},
+    chain::{self, storage, vm::Vm},
     genesis::Genesis,
     network,
 };
@@ -30,7 +29,6 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 // TODO: make configurable
 const MEMPOOL_SIZE: u64 = 1024;
-const BUILD_INTERVAL: Duration = Duration::from_millis(500);
 
 pub struct ChainVm {
     pub inner: Arc<RwLock<inner::Inner>>,

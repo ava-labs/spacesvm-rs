@@ -70,7 +70,7 @@ impl Push {
         })
     }
 
-    pub async fn gossip_new_txs(&mut self, max_units: u64) -> Result<()> {
+    pub async fn gossip_new_txs(&mut self) -> Result<()> {
         log::debug!("gossip_new_txs: called");
 
         let new_txs = self.get_new_txs().await?;
@@ -179,7 +179,7 @@ impl Push {
             sleep(GOSSIP_INTERVAL).await;
             log::debug!("tick gossip");
 
-            let _ = self.gossip_new_txs(TARGET_BLOCK_SIZE).await;
+            let _ = self.gossip_new_txs().await;
         }
     }
 }
