@@ -7,13 +7,13 @@ use avalanche_types::ids;
 use serde::{Deserialize, Serialize};
 
 use crate::chain::{
-    storage::{has_bucket, put_bucket_info},
+    storage::{has_space, put_space_info},
     tx::decoder::{create_typed_data, MessageValue, Type, TypedData},
 };
 
 use super::{
     base,
-    decoder::{TD_BLOCK_ID, TD_BUCKET, TD_STRING},
+    decoder::{TD_SPACE_ID, TD_BUCKET, TD_STRING},
     tx::TransactionType,
     unsigned,
 };

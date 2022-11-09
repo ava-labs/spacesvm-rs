@@ -4,7 +4,7 @@ use avalanche_types::subnet;
 use clap::{crate_version, Arg, Command};
 use log::info;
 
-use mini_kvvm::{genesis, vm};
+use spacesvm::{genesis, vm};
 
 pub const APP_NAME: &str = "mini-kvvm-rs";
 

@@ -36,18 +36,18 @@ pub async fn set_transaction(
     return db.put(&k, &vec![]).await;
 }
 
-pub async fn delete_bucket_key(
+pub async fn delete_space_key(
     db: &mut Box<dyn avalanche_types::subnet::rpc::database::Database + Send + Sync>,
-    bucket: &[u8],
+    space: &[u8],
     key: &[u8],
 ) -> Result<()> {
-    match get_bucket_info(db, bucket).await? {
+    match get_space_info(db, bucket).await? {
         None => Err(Error::new(
             ErrorKind::InvalidData,
-            format!("bucket not found"),
+            format!("space not found"),
         )),
         Some(info) => {
-            db.delete(&bucket_value_key(info.raw_bucket, key))
+            db.delete(&space_value_key(info.raw_bucket, key))
                 .await
                 .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
             Ok(())
@@ -88,10 +88,10 @@ pub async fn submit(state: &state::State, txs: &mut Vec<tx::tx::Transaction>) ->
 
 pub async fn get_value(
     db: &Box<dyn avalanche_types::subnet::rpc::database::Database + Send + Sync>,
-    bucket: &[u8],
+    space: &[u8],
     key: &[u8],
 ) -> Result<Option<Vec<u8>>> {
-    let info: Option<tx::bucket::Info> = match get_bucket_info(db, bucket).await {
+    let info: Option<tx::space::Info> = match get_space_info(db, bucket).await {
         Ok(info) => info,
         Err(e) => {
             if is_not_found(&e) {
@@ -105,7 +105,7 @@ pub async fn get_value(
     }
 
     let value = db
-        .get(&bucket_value_key(info.unwrap().raw_bucket, key))
+        .get(&space_value_key(info.unwrap().raw_space, key))
         .await
         .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
@@ -128,12 +128,12 @@ pub async fn get_value(
 
 pub async fn get_value_meta(
     db: &Box<dyn avalanche_types::subnet::rpc::database::Database + Send + Sync>,
-    bucket: &[u8],
+    space: &[u8],
     key: &[u8],
 ) -> Result<Option<ValueMeta>> {
-    match get_bucket_info(&db, bucket).await? {
+    match get_space_info(&db, space).await? {
         None => Ok(None),
-        Some(info) => match db.get(&bucket_value_key(info.raw_bucket, key)).await {
+        Some(info) => match db.get(&bucket_value_key(info.raw_space, key)).await {
             Err(e) => {
                 if is_not_found(&e) {
                     return Ok(None);

@@ -1,5 +1,5 @@
 pub mod base;
-pub mod bucket;
+pub mod claim;
 pub mod decoder;
 pub mod delete;
 pub mod set;
