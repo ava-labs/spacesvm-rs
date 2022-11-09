@@ -61,6 +61,7 @@ jobs:
         uses: arduino/setup-protoc@v1
         with:
           version: '3.x'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Check unused Cargo dependencies
         shell: bash
         run: scripts/tests.unused.sh
@@ -86,6 +87,7 @@ jobs:
         uses: arduino/setup-protoc@v1
         with:
           version: '3.x'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Run unit tests
         run: scripts/tests.unit.sh
 
@@ -110,6 +112,7 @@ jobs:
         uses: arduino/setup-protoc@v1
         with:
           version: '3.x'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build plugin
         uses: actions-rs/cargo@v1
         with:
@@ -160,6 +163,7 @@ jobs:
         uses: arduino/setup-protoc@v1
         with:
           version: '3.x'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       # ref. https://github.com/gakonst/foundry/blob/master/.github/workflows/cross-platform.yml
       - name: Apple M1 setup
