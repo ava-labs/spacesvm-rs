@@ -9,6 +9,6 @@ fi
 # "--bin" can be specified multiple times for each directory in "bin/*" or workspaces
 cargo build \
 --release \
---bin mini-kvvm
+--bin spacesvm
 
-./target/release/mini-kvvm -V
+./target/release/spacesvm -V
