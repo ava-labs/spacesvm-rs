@@ -2,7 +2,7 @@ pub mod tx_heap;
 
 use std::{
     io::Result,
-    sync::{Arc, RwLock},
+    sync::{Arc, RwLock}, collections::VecDeque,
 };
 
 use avalanche_types::ids;
@@ -71,6 +71,7 @@ impl Mempool {
 
         // don't add duplicates
         if inner.max_heap.has(tx_id) {
+            log::info!("add: found duplicate");
             return Ok(false);
         }
         let old_len = inner.max_heap.len();
@@ -89,6 +90,7 @@ impl Mempool {
         while inner.max_heap.len() > self.max_size as usize {
             if let Some(tx) = inner.min_heap.pop_front() {
                 if tx.id == *tx_id {
+                    log::info!("add: tx id weird");
                     return Ok(false);
                 }
             }
@@ -134,6 +136,14 @@ impl Mempool {
     pub fn is_empty(&self) -> bool {
         let inner = self.inner.read().unwrap();
         inner.max_heap.is_empty()
+    }
+
+    // TODO: remove when batch and iterator support is added for version db.
+    /// Returns a copy of mempool txs.
+    pub fn get_txs(&self) -> VecDeque<Entry> {
+        let inner = self.inner.read().unwrap();
+        let txs = inner.max_heap.items.clone();
+        txs
     }
 
     /// Returns the vec of transactions ready to gossip and replaces it with an empty vec.

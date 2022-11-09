@@ -18,7 +18,7 @@ use crate::{chain, vm};
 const GOSSIPED_TXS_LRU_SIZE: usize = 512;
 
 // TODO: make configurable
-const GOSSIP_INTERVAL: Duration = Duration::from_secs(60);
+const GOSSIP_INTERVAL: Duration = Duration::from_secs(10);
 const REGOSSIP_INTERVAL: Duration = Duration::from_secs(30);
 const TARGET_BLOCK_SIZE: u64 = 225;
 
@@ -74,7 +74,7 @@ impl Push {
         })
     }
 
-    pub async fn gossip_new_txs(&self, max_units: u64) -> Result<()> {
+    pub async fn gossip_new_txs(&mut self, max_units: u64) -> Result<()> {
         log::info!("gossip_new_txs: called");
 
         let new_txs = self.get_new_txs().await?;
@@ -87,7 +87,7 @@ impl Push {
                 continue;
             }
 
-            // self.gossiped_tx.put(tx.id, ());
+            self.gossiped_tx.put(tx.id, ());
 
             txs.push(tx);
         }
@@ -130,7 +130,7 @@ impl Push {
             txs.len()
         );
 
-        let mut vm = self.vm_inner.write().await;
+        let vm = self.vm_inner.read().await;
         chain::storage::submit(&vm.state, &mut txs)
             .await
             .map_err(|e| {

@@ -58,13 +58,13 @@ impl crate::api::Service for Service {
 
             let mempool = &mut inner.mempool;
             for tx in txs.iter().cloned() {
-                let out = mempool.add(&tx).map_err(|e| {
+                let _ = mempool.add(&tx).map_err(|e| {
                     create_jsonrpc_error(std::io::Error::new(
                         std::io::ErrorKind::Other,
                         e.to_string(),
                     ))
                 })?;
-                log::info!("issue_tx add to mempool: {}", out);
+                log::info!("issue_tx add to mempool");
             }
 
             Ok(IssueTxResponse { tx_id })

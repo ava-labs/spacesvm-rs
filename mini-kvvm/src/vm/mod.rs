@@ -69,10 +69,10 @@ impl crate::chain::vm::Vm for ChainVm {
 
         let mut vm = self.inner.write().await;
 
-        log::info!("vm::submit store called");
-        storage::submit(&vm.state.clone(), &mut txs)
-            .await
-            .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+        // log::info!("vm::submit store called");
+        // storage::submit(&vm.state.clone(), &mut txs)
+        //     .await
+        //     .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
         let mempool = &mut vm.mempool;
         log::info!("vm::submit add to mempool");
@@ -444,7 +444,7 @@ impl subnet::rpc::snowman::block::Parser for ChainVm {
             .await
             .map_err(|e| Error::new(ErrorKind::Other, format!("failed to parse block: {}", e)))?;
 
-        log::info!("parsed block id: {}", new_block.id);
+        log::info!("parsed block id: {:?}", new_block.id.to_vec());
 
         match vm.state.get_block(new_block.id).await {
             Ok(old_block) => {
@@ -464,14 +464,7 @@ impl subnet::rpc::snowman::block::ChainVm for ChainVm {
     ) -> Result<Box<dyn subnet::rpc::concensus::snowman::Block + Send + Sync>> {
         log::info!("vm::build_block called!");
 
-        let vm = self.inner.read().await;
-        if vm.mempool.is_empty() {
-            return Err(Error::new(ErrorKind::Other, "no pending blocks"));
-        }
-
-        log::info!("vm::build_block block call");
-        self.notify_block_ready().await;
-        log::info!("vm::build_block block ready");
+        let vm = self.inner.read().await; 
 
         let preferred = vm.preferred;
         let parent = vm
@@ -480,6 +473,7 @@ impl subnet::rpc::snowman::block::ChainVm for ChainVm {
             .await
             .map_err(|e| Error::new(ErrorKind::Other, format!("failed to get block: {}", e)))?;
 
+        log::info!("vm::build_block parent found!");
         let next_time = Utc::now().timestamp() as u64;
 
         // new block
@@ -491,16 +485,18 @@ impl subnet::rpc::snowman::block::ChainVm for ChainVm {
             vm.state.clone(),
         );
 
-        let txs = Vec::new();
-        while let Some(tx) = vm.mempool.pop_back() {
-            log::info!("attempting to execute tx:{}", tx.id);
-            let db = vm.state.get_db().await;
-            tx.execute(&db, &block).await.map_err(|e| {
-                Error::new(ErrorKind::Other, format!("failed to execute tx: {}", e))
-            })?;
-        }
+        log::info!("vm::build_block mempool len: {}", vm.mempool.len());
 
-        block.txs = txs;
+        let mut mtxs = vm.mempool.get_txs();
+        let mut txs = Vec::new();
+        while let Some(entry) = mtxs.pop_back() {
+            if let Some(tx) = entry.tx {
+                txs.push(tx)
+            }
+        }
+        log::info!("vm::build_block mempool len: {}", vm.mempool.len());
+
+        // block.txs = txs;
 
         // compute block hash and marshaled representation
         let bytes = block.to_bytes().await;
@@ -509,11 +505,14 @@ impl subnet::rpc::snowman::block::ChainVm for ChainVm {
             .await
             .map_err(|e| Error::new(ErrorKind::Other, format!("failed to init block: {}", e)))?;
 
+        log::info!("vm::build_block parent init!");
         // verify block to ensure it is formed correctly
         block
             .verify()
             .await
             .map_err(|e| Error::new(ErrorKind::Other, format!("failed to verify block: {}", e)))?;
+        
+        log::info!("vm::build_block: success: {:?}", block.id.to_vec());
 
         Ok(Box::new(block))
     }

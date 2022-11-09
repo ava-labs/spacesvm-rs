@@ -138,7 +138,7 @@ impl State {
         // persist last_accepted Id to database with fixed key
         let mut inner = self.inner.write().await;
 
-        log::info!("set_last_accepted key value: {}", block_id);
+        log::info!("set_last_accepted key value: {:?}", block_id.to_vec());
         inner
             .db
             .put(LAST_ACCEPTED_BLOCK_KEY, &block_id.to_vec())
@@ -215,10 +215,10 @@ impl State {
     /// Attempts to return block on disk state.
     pub async fn get_block(&self, block_id: ids::Id) -> Result<Block> {
         log::debug!("get block called");
-        let inner = self.inner.read().await;
+        let mut inner = self.inner.write().await;
 
-        if let Some(b) = inner.verified_blocks.get(&block_id) {
-            log::info!("found verified block");
+        if let Some(b) = inner.accepted_blocks.get(&block_id) {
+            log::info!("found accepted block");
             return Ok(b.clone());
         }
 

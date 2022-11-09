@@ -12,7 +12,8 @@ use avalanche_types::{
 use derivative::{self, Derivative};
 use serde::{Deserialize, Serialize};
 
-use crate::chain::tx::tx::Transaction;
+use crate::chain;
+use crate::chain::tx::Transaction;
 
 pub const DATA_LEN: usize = 32;
 pub const BLOCKS_LRU_SIZE: usize = 8192;
@@ -43,7 +44,7 @@ pub struct Block {
     pub state: state::State,
 
     #[serde(skip)]
-    pub txs: Vec<Transaction>,
+    pub txs: Vec<chain::tx::tx::Transaction>,
 
     #[serde(skip)]
     pub children: Vec<Block>,
@@ -74,8 +75,8 @@ impl Block {
     }
 
     /// Used for validating new txs and some tests
-    pub fn new_dummy(timestamp: u64, tx: Transaction, state: state::State) -> Self {
-        let mut txs: Vec<Transaction> = Vec::with_capacity(0);
+    pub fn new_dummy(timestamp: u64, tx: chain::tx::tx::Transaction, state: state::State) -> Self {
+        let mut txs: Vec<chain::tx::tx::Transaction> = Vec::with_capacity(0);
         txs.push(tx);
         Self {
             parent: ids::Id::empty(),
@@ -168,15 +169,7 @@ impl avalanche_types::subnet::rpc::concensus::snowman::Block for Block {
         })?;
 
         parent_block.children.push(self.to_owned());
-        state
-            .set_verified_block(self.to_owned())
-            .await
-            .map_err(|e| {
-                Error::new(
-                    ErrorKind::Other,
-                    format!("set verified block failed: {}", e.to_string()),
-                )
-            })?;
+
         return Ok(());
     }
 }
@@ -195,10 +188,18 @@ impl avalanche_types::subnet::rpc::concensus::snowman::Decidable for Block {
 
     /// Implements "snowman.Block.choices.Decidable"
     async fn accept(&mut self) -> Result<()> {
+        log::info!("block_accept called!");
         self.set_status(Status::Accepted).await;
 
         let block_id = self.id().await;
         let mut block = self.clone();
+        let db = self.state.get_db().await;
+
+        for tx in self.txs.iter_mut() {
+            tx.init().await?;
+            tx.execute(&db, &block).await?;
+        }
+
         // add block to cache
         self.state
             .set_accepted_block(block_id, &block)

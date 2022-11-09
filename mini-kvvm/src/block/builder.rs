@@ -9,7 +9,7 @@ use crate::vm;
 // #[derive(Clone)]
 pub struct Builder {
     vm_inner: Arc<RwLock<vm::inner::Inner>>,
-    status: Status,
+    status: Arc<RwLock<Status>>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -26,19 +26,21 @@ impl Builder {
     pub fn new(vm_inner: Arc<RwLock<vm::inner::Inner>>) -> Self {
         Self {
             vm_inner,
-            status: Status::MayBuild,
+            status: Arc::new(RwLock::new(Status::MayBuild)),
         }
     }
 
     /// Signal the consensus engine to build a block from pending transactions.
     async fn signal_txs_ready(&self) {
         log::info!("sending pending txs to consensus engine");
-        let inner = self.vm_inner.read().await;
-        // if inner.block_status == Status::Building {
+
+        // let status = self.status.read().await;
+        // if *status == Status::Building {
         //     log::info!("block status is already building");
         //     return;
         // }
 
+        let inner = self.vm_inner.read().await;
         if let Some(engine) = &inner.to_engine {
             engine
                 .send(subnet::rpc::common::message::Message::PendingTxs)
