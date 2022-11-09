@@ -119,7 +119,7 @@ impl crate::chain::tx::Transaction for Transaction {
         db: &'life1 Box<dyn subnet::rpc::database::Database + Send + Sync>,
         block: &Block,
     ) -> Result<()> {
-        log::info!("execute: sender: {}", self.sender);
+        log::debug!("execute: sender: {}", self.sender);
         let txn_ctx = TransactionContext {
             db: db.clone(),
             tx_id: self.id,
@@ -132,12 +132,12 @@ impl crate::chain::tx::Transaction for Transaction {
             .await
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
-        log::info!("execute: set tx");
+        log::debug!("execute: set tx");
         set_transaction(db.clone(), self.to_owned())
             .await
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
-        log::info!("execute complete");
+        log::debug!("execute complete");
         Ok(())
     }
 }

@@ -9,7 +9,6 @@ use crate::vm;
 // #[derive(Clone)]
 pub struct Builder {
     vm_inner: Arc<RwLock<vm::inner::Inner>>,
-    status: Arc<RwLock<Status>>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -24,21 +23,12 @@ pub enum Status {
 /// Directs the engine when to build blocks and gossip transactions.
 impl Builder {
     pub fn new(vm_inner: Arc<RwLock<vm::inner::Inner>>) -> Self {
-        Self {
-            vm_inner,
-            status: Arc::new(RwLock::new(Status::MayBuild)),
-        }
+        Self { vm_inner }
     }
 
     /// Signal the consensus engine to build a block from pending transactions.
     async fn signal_txs_ready(&self) {
-        log::info!("sending pending txs to consensus engine");
-
-        // let status = self.status.read().await;
-        // if *status == Status::Building {
-        //     log::info!("block status is already building");
-        //     return;
-        // }
+        log::debug!("signal_txs_ready: sending pending txs to consensus engine");
 
         let inner = self.vm_inner.read().await;
         if let Some(engine) = &inner.to_engine {
@@ -46,7 +36,7 @@ impl Builder {
                 .send(subnet::rpc::common::message::Message::PendingTxs)
                 .await
                 .unwrap();
-            log::info!("sent to engine!!!!!");
+            log::debug!("signal_txs_ready: sent to engine");
         }
     }
 
@@ -64,13 +54,12 @@ impl Builder {
     /// Ensures that new transactions passed to mempool are
     /// considered for the next block.
     pub async fn build(&self) {
-        log::info!("starting build loops");
-
+        log::debug!("starting build loops");
         let (stop_ch, mut mempool_pending_ch) = self.init().await;
 
         while stop_ch.try_recv() == Err(TryRecvError::Empty) {
             let _ = mempool_pending_ch.recv().await;
-            log::info!("build: pending mempool signal received");
+            log::debug!("build: pending mempool signal received");
             self.signal_txs_ready().await;
         }
     }

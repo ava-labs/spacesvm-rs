@@ -138,7 +138,7 @@ impl State {
         // persist last_accepted Id to database with fixed key
         let mut inner = self.inner.write().await;
 
-        log::info!("set_last_accepted key value: {:?}", block_id.to_vec());
+        log::debug!("set_last_accepted: key value: {:?}", block_id.to_vec());
         inner
             .db
             .put(LAST_ACCEPTED_BLOCK_KEY, &block_id.to_vec())
@@ -157,17 +157,15 @@ impl State {
                     continue;
                 }
                 let value = maybe_value.as_ref().unwrap();
-                log::info!(
-                    "set_last_accepted put prefix_tx_value_key: {:?}\n",
+                log::debug!(
+                    "set_last_accepted: put prefix_tx_value_key: {:?}\n",
                     prefix_tx_value_key(&tx.id)
                 );
-                log::info!(
-                    "set_last_accepted put prefix_tx_value_key value: {:?}\n",
+                log::debug!(
+                    "set_last_accepted: put prefix_tx_value_key value: {:?}\n",
                     value
                 );
 
-                log::error!("writing value to disk");
-                // write the value of the tx to disk
                 inner
                     .db
                     .put(&prefix_tx_value_key(&tx.id), &value)
@@ -214,11 +212,11 @@ impl State {
 
     /// Attempts to return block on disk state.
     pub async fn get_block(&self, block_id: ids::Id) -> Result<Block> {
-        log::debug!("get block called");
+        log::debug!("get_block: called");
         let mut inner = self.inner.write().await;
 
         if let Some(b) = inner.accepted_blocks.get(&block_id) {
-            log::info!("found accepted block");
+            log::debug!("get_block: found accepted block");
             return Ok(b.clone());
         }
 
@@ -259,7 +257,7 @@ impl State {
             tx.init().await?;
         }
 
-        log::info!("get block found: {:?}", block);
+        log::debug!("get_block: {:?}", block);
         Ok(block)
     }
 

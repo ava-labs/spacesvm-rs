@@ -15,8 +15,7 @@ path = "src/bin/mini-kvvm/main.rs"
 
 [dependencies]
 avalanche-proto = { version = "0.19.0" }
-# avalanche-types = { version = "0.0.132", features = ["rpcchainvm"] }
-avalanche-types = { path = "../../../avalanche-rust/avalanche-rust/crates/avalanche-types", features = ["rpcchainvm"] }
+avalanche-types = { version = "0.0.132", features = ["rpcchainvm"] }
 byteorder = "1.4.3"
 chrono = "0.4.19"
 crossbeam-channel = "0.5.6"
@@ -45,10 +44,6 @@ tokio-stream = { version = "0.1.11", features = ["net"] }
 tonic = { version = "0.8.2", features = ["gzip"] }
 tonic-health = "0.7"
 typetag = "0.2"
-
-[[test]]
-name = "integration"
-path = "tests/integration_tests.rs"
 
 [dev-dependencies] 
 jsonrpc-tcp-server = "18.0.0"

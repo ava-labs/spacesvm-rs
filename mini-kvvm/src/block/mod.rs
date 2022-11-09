@@ -188,7 +188,7 @@ impl avalanche_types::subnet::rpc::concensus::snowman::Decidable for Block {
 
     /// Implements "snowman.Block.choices.Decidable"
     async fn accept(&mut self) -> Result<()> {
-        log::info!("block_accept called!");
+        log::debug!("block_accept called!");
         self.set_status(Status::Accepted).await;
 
         let block_id = self.id().await;

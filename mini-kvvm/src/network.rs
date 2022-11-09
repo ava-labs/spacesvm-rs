@@ -5,10 +5,7 @@ use std::{
     time::Duration,
 };
 
-use avalanche_types::{
-    ids::{self, Id},
-    subnet,
-};
+use avalanche_types::ids::{self, Id};
 use crossbeam_channel::TryRecvError;
 use lru::LruCache;
 use tokio::{sync::RwLock, time::sleep};
@@ -24,7 +21,6 @@ const TARGET_BLOCK_SIZE: u64 = 225;
 
 pub struct Push {
     gossiped_tx: LruCache<Id, ()>,
-
     vm_inner: Arc<RwLock<vm::inner::Inner>>,
 }
 
@@ -39,16 +35,16 @@ impl Push {
     }
 
     pub async fn send_txs(&self, txs: Vec<chain::tx::tx::Transaction>) -> Result<()> {
-        log::info!("send_txs: called");
+        log::debug!("send_txs: called");
         if txs.is_empty() {
-            log::info!("send_txs: empty");
+            log::debug!("send_txs: empty");
             return Ok(());
         }
 
         let b = serde_json::to_vec(&txs)
             .map_err(|e| Error::new(ErrorKind::Other, format!("failed to marshal txs: {}", e)))?;
 
-        log::info!("sending app gossip txs: {} size: {}", txs.len(), b.len());
+        log::debug!("sending app gossip txs: {} size: {}", txs.len(), b.len());
         let vm = self.vm_inner.read().await;
         let appsender = vm
             .app_sender
@@ -59,13 +55,13 @@ impl Push {
             .send_app_gossip(b)
             .await
             .map_err(|e| Error::new(ErrorKind::Other, format!("gossip txs failed: {}", e)))?;
-        log::info!("sending app gossip sent");
+        log::debug!("sending app gossip sent");
         Ok(())
     }
 
     pub async fn get_new_txs(&self) -> Result<Vec<chain::tx::tx::Transaction>> {
         let mut inner = self.vm_inner.write().await;
-        log::info!("get_new_txs: mempool len: {}", inner.mempool.len());
+        log::debug!("get_new_txs: mempool len: {}", inner.mempool.len());
         inner.mempool.new_txs(TARGET_BLOCK_SIZE).map_err(|e| {
             Error::new(
                 ErrorKind::Other,
@@ -75,15 +71,15 @@ impl Push {
     }
 
     pub async fn gossip_new_txs(&mut self, max_units: u64) -> Result<()> {
-        log::info!("gossip_new_txs: called");
+        log::debug!("gossip_new_txs: called");
 
         let new_txs = self.get_new_txs().await?;
         let mut txs: Vec<chain::tx::tx::Transaction> = Vec::with_capacity(new_txs.len());
-        log::info!("gossip_new_txs: len: {}", new_txs.len());
+        log::debug!("gossip_new_txs: len: {}", new_txs.len());
 
         for tx in new_txs.iter().cloned() {
             if self.gossiped_tx.contains(&tx.id) {
-                log::info!("already gossiped skipping id: {}", tx.id);
+                log::debug!("already gossiped skipping id: {}", tx.id);
                 continue;
             }
 
@@ -116,7 +112,7 @@ impl Push {
     }
 
     pub async fn app_gossip(&mut self, node_id: ids::node::Id, message: &[u8]) -> Result<()> {
-        log::info!(
+        log::debug!(
             "appgossip message handler, sender: {} bytes: {:?}",
             node_id,
             message
@@ -125,7 +121,7 @@ impl Push {
         let mut txs: Vec<chain::tx::tx::Transaction> = serde_json::from_slice(message).unwrap();
 
         // submit incoming gossip
-        log::info!(
+        log::debug!(
             "appgossip transactions are being submitted txs: {}",
             txs.len()
         );
@@ -153,7 +149,7 @@ impl Push {
     }
 
     pub async fn regossip(&mut self) {
-        log::info!("starting regossip loop");
+        log::debug!("starting regossip loop");
 
         let inner = self.vm_inner.read().await;
         let stop_ch = inner.stop_rx.clone();
@@ -161,12 +157,12 @@ impl Push {
 
         while stop_ch.try_recv() == Err(TryRecvError::Empty) {
             sleep(REGOSSIP_INTERVAL).await;
-            log::info!("tick regossip");
+            log::debug!("tick regossip");
 
             let _ = self.regossip_txs().await;
         }
 
-        log::info!("shutdown regossip loop");
+        log::debug!("shutdown regossip loop");
     }
 
     // Helper function initialize builder
@@ -176,12 +172,12 @@ impl Push {
     }
 
     pub async fn gossip(&mut self) {
-        log::info!("starting gossip loops");
+        log::debug!("starting gossip loops");
         let stop_ch = self.init().await;
 
         while stop_ch.try_recv() == Err(TryRecvError::Empty) {
             sleep(GOSSIP_INTERVAL).await;
-            log::info!("tick gossip");
+            log::debug!("tick gossip");
 
             let _ = self.gossip_new_txs(TARGET_BLOCK_SIZE).await;
         }

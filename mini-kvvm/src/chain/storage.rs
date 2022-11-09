@@ -220,7 +220,6 @@ pub async fn get_bucket_info(
     }
 }
 
-
 pub async fn raw_bucket(bucket: &[u8], block_time: u64) -> Result<ids::short::Id> {
     let mut r: Vec<u8> = Vec::new();
     r.extend_from_slice(bucket);

@@ -58,30 +58,30 @@ impl avalanche_types::subnet::rpc::vm::Vm for ChainVm {}
 #[tonic::async_trait]
 impl crate::chain::vm::Vm for ChainVm {
     async fn is_bootstrapped(&self) -> bool {
-        log::info!("vm::is_bootstrapped called");
+        log::debug!("vm::is_bootstrapped called");
 
         let vm = self.inner.read().await;
         vm.bootstrapped
     }
 
     async fn submit(&self, mut txs: Vec<chain::tx::tx::Transaction>) -> Result<()> {
-        log::info!("vm::submit called");
+        log::debug!("vm::submit called");
 
         let mut vm = self.inner.write().await;
 
-        // log::info!("vm::submit store called");
-        // storage::submit(&vm.state.clone(), &mut txs)
-        //     .await
-        //     .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+        log::debug!("vm::submit store called");
+        storage::submit(&vm.state.clone(), &mut txs)
+            .await
+            .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
         let mempool = &mut vm.mempool;
-        log::info!("vm::submit add to mempool");
+        log::debug!("vm::submit add to mempool");
         for tx in txs.iter_mut() {
             let _ = mempool
                 .add(tx)
                 .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
         }
-        log::info!("vm::submit complete");
+        log::debug!("vm::submit complete");
 
         Ok(())
     }
@@ -89,7 +89,7 @@ impl crate::chain::vm::Vm for ChainVm {
     /// Sends a signal to the consensus engine that a new block
     /// is ready to be created.
     async fn notify_block_ready(&self) {
-        log::info!("vm::notify_block_ready called");
+        log::debug!("vm::notify_block_ready called");
 
         let vm = self.inner.read().await;
 
@@ -113,14 +113,14 @@ impl subnet::rpc::common::apphandler::AppHandler for ChainVm {
         _deadline: DateTime<Utc>,
         _request: &[u8],
     ) -> Result<()> {
-        log::info!("vm::app_request called");
+        log::debug!("vm::app_request called");
 
         // currently no app-specific messages
         Ok(())
     }
 
     async fn app_request_failed(&self, _node_id: &ids::node::Id, _request_id: u32) -> Result<()> {
-        log::info!("vm::app_request_failed called");
+        log::debug!("vm::app_request_failed called");
 
         // currently no app-specific messages
         Ok(())
@@ -132,16 +132,16 @@ impl subnet::rpc::common::apphandler::AppHandler for ChainVm {
         _request_id: u32,
         _response: &[u8],
     ) -> Result<()> {
-        log::info!("vm::app_response called");
+        log::debug!("vm::app_response called");
 
         // currently no app-specific messages
         Ok(())
     }
 
     async fn app_gossip(&self, node_id: &ids::node::Id, msg: &[u8]) -> Result<()> {
-        log::info!("vm::app_gossip called");
+        log::debug!("vm::app_gossip called");
 
-        log::info!(
+        log::debug!(
             "AppGossip message handler sender: {}, receiver: {}, bytes: {}",
             &node_id,
             &self.node_id,
@@ -150,7 +150,7 @@ impl subnet::rpc::common::apphandler::AppHandler for ChainVm {
 
         let txs: Vec<chain::tx::tx::Transaction> = serde_json::from_slice(msg)
             .map_err(|e| {
-                log::info!(
+                log::debug!(
                     "AppGossip provided invalid txs peer_id: {}: {}",
                     &node_id,
                     e.to_string()
@@ -161,7 +161,7 @@ impl subnet::rpc::common::apphandler::AppHandler for ChainVm {
         self.submit(txs)
             .await
             .map_err(|e| {
-                log::info!(
+                log::debug!(
                     "AppGossip failed to submit txs: peer_id: {}: {}",
                     &node_id,
                     e.to_string()
@@ -169,7 +169,7 @@ impl subnet::rpc::common::apphandler::AppHandler for ChainVm {
             })
             .unwrap();
 
-        log::info!("vm::app_gossip success");
+        log::debug!("vm::app_gossip success");
 
         Ok(())
     }
@@ -178,14 +178,14 @@ impl subnet::rpc::common::apphandler::AppHandler for ChainVm {
 #[tonic::async_trait]
 impl subnet::rpc::common::vm::Connector for ChainVm {
     async fn connected(&self, _id: &ids::node::Id) -> Result<()> {
-        log::info!("vm::connected called");
+        log::debug!("vm::connected called");
 
         // no-op
         Ok(())
     }
 
     async fn disconnected(&self, _id: &ids::node::Id) -> Result<()> {
-        log::info!("vm::disconnected called");
+        log::debug!("vm::disconnected called");
 
         // no-op
         Ok(())
@@ -213,7 +213,7 @@ impl subnet::rpc::common::vm::Vm for ChainVm {
         _fxs: &[subnet::rpc::common::vm::Fx],
         app_sender: Box<dyn subnet::rpc::common::appsender::AppSender + Send + Sync>,
     ) -> Result<()> {
-        log::info!("vm::initialize called");
+        log::debug!("vm::initialize called");
 
         let mut vm = self.inner.write().await;
         let current = db_manager.current().await?;
@@ -250,7 +250,7 @@ impl subnet::rpc::common::vm::Vm for ChainVm {
 
             vm.preferred = block_id;
             vm.state.set_last_accepted(&mut block).await?;
-            log::info!("initialized vm from last accepted block id: {:?}", block_id)
+            log::debug!("initialized vm from last accepted block id: {:?}", block_id)
         } else {
             let mut genesis_block =
                 crate::block::Block::new(ids::Id::empty(), 0, genesis_bytes, 0, vm.state.clone());
@@ -275,7 +275,7 @@ impl subnet::rpc::common::vm::Vm for ChainVm {
 
             vm.state.set_last_accepted(&mut genesis_block).await?;
             vm.preferred = genesis_block_id;
-            log::info!("initialized from genesis block: {}", genesis_block_id);
+            log::debug!("initialized from genesis block: {}", genesis_block_id);
         }
 
         // start the gossip loops
@@ -295,15 +295,9 @@ impl subnet::rpc::common::vm::Vm for ChainVm {
 
     /// Called when the node is shutting down.
     async fn shutdown(&self) -> Result<()> {
-        log::info!("vm::shutdown called");
+        log::debug!("vm::shutdown called");
         let vm = self.inner.read().await;
-
         let db = vm.state.get_db().await;
-        // wait for gossiper and builder to be shutdown
-        // self.done_build_rx.recv().unwrap();
-        // self.done_gossip_rx.recv().unwrap();
-
-        // grpc servers are shutdown via broadcast channel
         db.close().await?;
 
         Ok(())
@@ -311,30 +305,30 @@ impl subnet::rpc::common::vm::Vm for ChainVm {
 
     /// Communicates to Vm the next state phase.
     async fn set_state(&self, snow_state: subnet::rpc::snow::State) -> Result<()> {
-        log::info!("vm::set_state called");
+        log::debug!("vm::set_state called");
 
         let mut vm = self.inner.write().await;
 
         match snow_state {
             // Initializing is set by chain manager when it is creating the chain.
             subnet::rpc::snow::State::Initializing => {
-                log::info!("set_state: initializing");
+                log::debug!("set_state: initializing");
                 vm.bootstrapped = false;
                 Ok(())
             }
             subnet::rpc::snow::State::StateSyncing => {
-                log::info!("set_state: state syncing");
+                log::debug!("set_state: state syncing");
                 Err(Error::new(ErrorKind::Other, "state sync is not supported"))
             }
             // Bootstrapping is called by the bootstrapper to signal bootstrapping has started.
             subnet::rpc::snow::State::Bootstrapping => {
-                log::info!("set_state: bootstrapping");
+                log::debug!("set_state: bootstrapping");
                 vm.bootstrapped = false;
                 Ok(())
             }
             // NormalOp os called when consensus has started signalling bootstrap phase is complete.
             subnet::rpc::snow::State::NormalOp => {
-                log::info!("set_state: normal op");
+                log::debug!("set_state: normal op");
                 vm.bootstrapped = true;
                 Ok(())
             }
@@ -343,7 +337,7 @@ impl subnet::rpc::common::vm::Vm for ChainVm {
 
     /// Returns the version of the VM this node is running.
     async fn version(&self) -> Result<String> {
-        log::info!("vm::version called");
+        log::debug!("vm::version called");
 
         Ok(String::from(VERSION))
     }
@@ -355,7 +349,7 @@ impl subnet::rpc::common::vm::Vm for ChainVm {
     ) -> std::io::Result<
         std::collections::HashMap<String, subnet::rpc::common::http_handler::HttpHandler>,
     > {
-        log::info!("vm::create_static_handlers called");
+        log::debug!("vm::create_static_handlers called");
 
         Ok(HashMap::new())
     }
@@ -370,7 +364,7 @@ impl subnet::rpc::common::vm::Vm for ChainVm {
             avalanche_types::subnet::rpc::common::http_handler::HttpHandler,
         >,
     > {
-        log::info!("vm::create_handlers called");
+        log::debug!("vm::create_handlers called");
 
         // Initialize the jsonrpc public service and handler
         let service = api::service::Service::new(self.inner.clone());
@@ -394,19 +388,19 @@ impl subnet::rpc::snowman::block::Getter for ChainVm {
         &self,
         id: ids::Id,
     ) -> Result<Box<dyn subnet::rpc::concensus::snowman::Block + Send + Sync>> {
-        log::info!("vm::get_block called: {:?}", id);
+        log::debug!("vm::get_block called: {:?}", id);
 
         let vm = self.inner.read().await;
 
         // has block been accepted by the vm and cached.
         if let Some(cached) = vm.state.get_accepted_block(id).await {
-            log::info!("vm::get_block found cached accepted block: {:?}", id);
+            log::debug!("vm::get_block found cached accepted block: {:?}", id);
             return Ok(Box::new(cached.to_owned()));
         }
 
         // has block been verified, but not yet accepted
         if let Some(block) = vm.state.get_verified_block(id).await {
-            log::info!("vm::get_block found accepted block: {:?}", id);
+            log::debug!("vm::get_block found accepted block: {:?}", id);
             return Ok(Box::new(block));
         }
 
@@ -435,7 +429,7 @@ impl subnet::rpc::snowman::block::Parser for ChainVm {
         &self,
         bytes: &[u8],
     ) -> Result<Box<dyn subnet::rpc::concensus::snowman::Block + Send + Sync>> {
-        log::info!("vm::parse_block called: {:?}", bytes);
+        log::debug!("vm::parse_block called: {:?}", bytes);
 
         let vm = self.inner.read().await;
         let new_block = vm
@@ -444,11 +438,11 @@ impl subnet::rpc::snowman::block::Parser for ChainVm {
             .await
             .map_err(|e| Error::new(ErrorKind::Other, format!("failed to parse block: {}", e)))?;
 
-        log::info!("parsed block id: {:?}", new_block.id.to_vec());
+        log::debug!("parsed block id: {:?}", new_block.id.to_vec());
 
         match vm.state.get_block(new_block.id).await {
             Ok(old_block) => {
-                log::info!("returning previously parsed block id: {}", old_block.id);
+                log::debug!("returning previously parsed block id: {}", old_block.id);
                 return Ok(Box::new(old_block));
             }
             Err(_) => return Ok(Box::new(new_block)),
@@ -462,9 +456,9 @@ impl subnet::rpc::snowman::block::ChainVm for ChainVm {
     async fn build_block(
         &self,
     ) -> Result<Box<dyn subnet::rpc::concensus::snowman::Block + Send + Sync>> {
-        log::info!("vm::build_block called!");
+        log::debug!("vm::build_block called!");
 
-        let vm = self.inner.read().await; 
+        let vm = self.inner.read().await;
 
         let preferred = vm.preferred;
         let parent = vm
@@ -473,7 +467,7 @@ impl subnet::rpc::snowman::block::ChainVm for ChainVm {
             .await
             .map_err(|e| Error::new(ErrorKind::Other, format!("failed to get block: {}", e)))?;
 
-        log::info!("vm::build_block parent found!");
+        log::debug!("vm::build_block parent found!");
         let next_time = Utc::now().timestamp() as u64;
 
         // new block
@@ -485,7 +479,7 @@ impl subnet::rpc::snowman::block::ChainVm for ChainVm {
             vm.state.clone(),
         );
 
-        log::info!("vm::build_block mempool len: {}", vm.mempool.len());
+        log::debug!("vm::build_block mempool len: {}", vm.mempool.len());
 
         let mut mtxs = vm.mempool.get_txs();
         let mut txs = Vec::new();
@@ -494,9 +488,9 @@ impl subnet::rpc::snowman::block::ChainVm for ChainVm {
                 txs.push(tx)
             }
         }
-        log::info!("vm::build_block mempool len: {}", vm.mempool.len());
+        log::debug!("vm::build_block mempool len: {}", vm.mempool.len());
 
-        // block.txs = txs;
+        block.txs = txs;
 
         // compute block hash and marshaled representation
         let bytes = block.to_bytes().await;
@@ -505,21 +499,21 @@ impl subnet::rpc::snowman::block::ChainVm for ChainVm {
             .await
             .map_err(|e| Error::new(ErrorKind::Other, format!("failed to init block: {}", e)))?;
 
-        log::info!("vm::build_block parent init!");
+        log::debug!("vm::build_block parent init!");
         // verify block to ensure it is formed correctly
         block
             .verify()
             .await
             .map_err(|e| Error::new(ErrorKind::Other, format!("failed to verify block: {}", e)))?;
-        
-        log::info!("vm::build_block: success: {:?}", block.id.to_vec());
+
+        log::debug!("vm::build_block: success: {:?}", block.id.to_vec());
 
         Ok(Box::new(block))
     }
 
     /// Notify the Vm of the currently preferred block.
     async fn set_preference(&self, id: ids::Id) -> Result<()> {
-        log::info!("vm::set_preference called");
+        log::debug!("vm::set_preference called");
 
         let mut vm = self.inner.write().await;
         vm.preferred = id;
@@ -529,7 +523,7 @@ impl subnet::rpc::snowman::block::ChainVm for ChainVm {
 
     // Returns the Id of the last accepted block.
     async fn last_accepted(&self) -> Result<ids::Id> {
-        log::info!("vm::last_accepted called");
+        log::debug!("vm::last_accepted called");
 
         let vm = self.inner.read().await;
         let last = vm.state.get_last_accepted().await?;
@@ -541,7 +535,7 @@ impl subnet::rpc::snowman::block::ChainVm for ChainVm {
     async fn issue_tx(
         &self,
     ) -> Result<Box<dyn subnet::rpc::concensus::snowman::Block + Send + Sync>> {
-        log::info!("vm::issue_tx called");
+        log::debug!("vm::issue_tx called");
 
         Err(Error::new(
             ErrorKind::Unsupported,

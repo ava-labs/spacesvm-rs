@@ -1,8 +1,9 @@
 pub mod tx_heap;
 
 use std::{
+    collections::VecDeque,
     io::Result,
-    sync::{Arc, RwLock}, collections::VecDeque,
+    sync::{Arc, RwLock},
 };
 
 use avalanche_types::ids;
@@ -64,14 +65,14 @@ impl Mempool {
 
     /// Adds a Tx Entry to mempool and writes to the pending channel.
     pub fn add(&self, tx: &Transaction) -> Result<bool> {
-        log::info!("add: called");
+        log::debug!("add: called");
         let tx_id = &tx.id;
 
         let mut inner = self.inner.write().unwrap();
 
         // don't add duplicates
         if inner.max_heap.has(tx_id) {
-            log::info!("add: found duplicate");
+            log::debug!("add: found duplicate");
             return Ok(false);
         }
         let old_len = inner.max_heap.len();
@@ -90,7 +91,7 @@ impl Mempool {
         while inner.max_heap.len() > self.max_size as usize {
             if let Some(tx) = inner.min_heap.pop_front() {
                 if tx.id == *tx_id {
-                    log::info!("add: tx id weird");
+                    log::debug!("add: tx id weird");
                     return Ok(false);
                 }
             }
@@ -98,9 +99,9 @@ impl Mempool {
 
         inner.new_txs.push(tx.to_owned());
 
-        log::info!("mempool: add pending");
+        log::debug!("mempool: add pending");
         self.add_pending();
-        log::info!("mempool: pending complete");
+        log::debug!("mempool: pending complete");
 
         Ok(true)
     }
@@ -149,7 +150,7 @@ impl Mempool {
     /// Returns the vec of transactions ready to gossip and replaces it with an empty vec.
     pub fn new_txs(&mut self, max_units: u64) -> Result<Vec<Transaction>> {
         let mut inner = self.inner.write().unwrap();
-        log::info!("new_txs: found: {}", inner.new_txs.len());
+        log::debug!("new_txs: found: {}", inner.new_txs.len());
 
         let mut selected: Vec<Transaction> = Vec::new();
         let mut units = self.max_size;
@@ -157,9 +158,9 @@ impl Mempool {
         // It is possible that a block may have been accepted that contains some
         // new transactions before [new_txs] is called.
         for (i, tx) in inner.new_txs.iter().cloned().enumerate() {
-            log::info!("new_txs: found a tx");
+            log::debug!("new_txs: found a tx");
             if !inner.max_heap.has(&tx.id) {
-                log::info!("new_txs: already have tx: skipping");
+                log::debug!("new_txs: already have tx: skipping");
                 continue;
             }
 
@@ -169,7 +170,7 @@ impl Mempool {
             }
 
             units += 1;
-            log::info!("pushed selected");
+            log::debug!("pushed selected");
             selected.push(tx);
         }
         // reset
@@ -247,9 +248,8 @@ impl Mempool {
     }
 
     pub fn add_pending(&self) {
-        log::info!("add_pending: send");
         let _ = self.pending_tx.send(()).unwrap();
-        log::info!("add_pending: sent");
+        log::debug!("add_pending: sent");
     }
 }
 

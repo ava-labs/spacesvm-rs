@@ -2,15 +2,12 @@ use std::sync::Arc;
 
 use crate::{
     api::*,
-    chain::{
-        self, storage,
-        tx::{unsigned, Transaction},
-    },
+    chain::{self, storage, tx::Transaction},
     vm::inner::Inner,
 };
 
-use avalanche_types::subnet;
 use tokio::sync::RwLock;
+
 pub struct Service {
     pub vm_inner: Arc<RwLock<Inner>>,
 }
@@ -64,7 +61,7 @@ impl crate::api::Service for Service {
                         e.to_string(),
                     ))
                 })?;
-                log::info!("issue_tx add to mempool");
+                log::debug!("issue_tx add to mempool");
             }
 
             Ok(IssueTxResponse { tx_id })
@@ -89,14 +86,14 @@ impl crate::api::Service for Service {
 
             let string = serde_json::to_string(&typed_data).unwrap();
 
-            log::info!("decode_tx: {}", string);
+            log::debug!("decode_tx: {}", string);
 
             Ok(DecodeTxResponse { typed_data })
         })
     }
 
     fn resolve(&self, params: ResolveArgs) -> BoxFuture<Result<ResolveResponse>> {
-        log::info!("resolve: called");
+        log::debug!("resolve: called");
         let vm = Arc::clone(&self.vm_inner);
 
         Box::pin(async move {

@@ -69,21 +69,19 @@ impl unsigned::Transaction for Tx {
 
         // ensure bucket does not exist for now update requires an explicit delete tx
         if has_bucket(&db, self.bucket.as_bytes()).await? {
-            log::info!("bucket exists: {}", self.bucket);
+            log::debug!("execute: bucket exists: {}", self.bucket);
             return Err(Error::new(
                 ErrorKind::AlreadyExists,
                 format!("bucket exists: {}", self.bucket),
             ));
         }
-        log::info!("bucket exec sender: {}", &txn_ctx.sender);
+        log::debug!("execute: bucket exec sender: {}", &txn_ctx.sender);
         let new_info = Info {
             created: txn_ctx.block_time,
             updated: txn_ctx.block_time,
             owner: txn_ctx.sender,
-            raw_bucket: ids::short::Id::empty(), // is that right?
+            raw_bucket: ids::short::Id::empty(),
         };
-
-        log::info!("bucket info: {}", &txn_ctx.sender);
 
         return put_bucket_info(&mut db, self.bucket.as_bytes(), new_info, 0).await;
     }
@@ -105,9 +103,9 @@ impl unsigned::Transaction for Tx {
             MessageValue::Vec(self.bucket.as_bytes().to_vec()),
         );
         let value = MessageValue::Vec(self.base_tx.block_id.to_vec());
-        log::info!("typed_data message value: {:?}", value);
-        log::info!("typed_data id vec: {:?}", self.base_tx.block_id.to_vec());
-        log::info!("typed_data id: {}", self.base_tx.block_id);
+        log::debug!("typed_data: message value: {:?}", value);
+        log::debug!("typed_data: id vec: {:?}", self.base_tx.block_id.to_vec());
+        log::debug!("typed_data: id: {}", self.base_tx.block_id);
         message.insert(
             TD_BLOCK_ID.to_owned(),
             MessageValue::Vec(self.base_tx.block_id.to_vec()),

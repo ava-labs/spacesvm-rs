@@ -104,7 +104,11 @@ impl unsigned::Transaction for Tx {
         }
         let info = info.unwrap();
         if info.owner != txn_ctx.sender {
-            log::info!("owner: {}\n sender: {}", &info.owner, &txn_ctx.sender);
+            log::debug!(
+                "execute: owner: {}\n sender: {}",
+                &info.owner,
+                &txn_ctx.sender
+            );
             return Err(Error::new(
                 ErrorKind::PermissionDenied,
                 format!("sets only allowed for bucket owner: {}", self.bucket),
@@ -116,7 +120,7 @@ impl unsigned::Transaction for Tx {
             .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
         log::debug!(
-            "set_tx execute put_bucket_key: bucket: {} key: {} value_meta: {:?}\n",
+            "execute: put_bucket_key: bucket: {} key: {} value_meta: {:?}\n",
             self.bucket,
             self.key,
             new_vmeta
