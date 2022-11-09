@@ -182,10 +182,7 @@ impl TypedData {
                 let space = self
                     .get_typed_message(TD_SPACE.to_owned())
                     .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
-                Ok(Box::new(claim::Tx {
-                    base_tx,
-                    space,
-                }))
+                Ok(Box::new(claim::Tx { base_tx, space }))
             }
 
             TransactionType::Set => {

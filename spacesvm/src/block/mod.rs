@@ -4,6 +4,7 @@ pub mod state;
 use std::io::{Error, ErrorKind, Result};
 use std::vec;
 
+use avalanche_types::subnet::rpc::consensus::snowman::StatusWriter;
 use avalanche_types::{
     choices::{self, status::Status},
     hash, ids,

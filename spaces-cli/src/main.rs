@@ -7,7 +7,7 @@ use avalanche_types::key;
 use clap::{Parser, Subcommand};
 use jsonrpc_client_transports::{transports, RpcError};
 use jsonrpc_core::futures;
-use mini_kvvm::{
+use spacesvm::{
     api::{DecodeTxArgs, IssueTxArgs, ResolveArgs, ServiceClient as Client},
     chain::tx::{decoder, tx::TransactionType, unsigned::TransactionData},
 };
@@ -101,25 +101,25 @@ fn get_or_create_pk(path: &str) -> Result<key::secp256k1::private_key::Key> {
 fn claim_tx(space: String) -> TransactionData {
     TransactionData {
         typ: TransactionType::Claim,
-        bucket,
+        space,
         key: "".to_string(),
         value: vec![],
     }
 }
 
-fn set_tx(claim: String, key: String, value: Vec<u8>) -> TransactionData {
+fn set_tx(space: String, key: String, value: Vec<u8>) -> TransactionData {
     TransactionData {
         typ: TransactionType::Set,
-        claim,
+        space,
         key,
         value,
     }
 }
 
-fn delete_tx(bucket: String, key: String) -> TransactionData {
+fn delete_tx(space: String, key: String) -> TransactionData {
     TransactionData {
         typ: TransactionType::Delete,
-        claim,
+        space,
         key,
         value: vec![],
     }

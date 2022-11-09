@@ -161,7 +161,6 @@ pub async fn put_space_key(
         .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
     if resp.is_none() {
         return Err(Error::new(ErrorKind::NotFound, format!("space not found")));
-
     }
 
     let k = space_value_key(resp.unwrap().raw_space, key);

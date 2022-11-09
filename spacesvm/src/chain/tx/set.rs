@@ -13,7 +13,7 @@ use crate::chain::{
 
 use super::{
     base,
-    decoder::{TD_BLOCK_ID, TD_SPACE, TD_BYTES, TD_KEY, TD_STRING, TD_VALUE},
+    decoder::{TD_BLOCK_ID, TD_BYTES, TD_KEY, TD_SPACE, TD_STRING, TD_VALUE},
     tx::TransactionType,
     unsigned::{self},
 };
@@ -68,7 +68,6 @@ impl unsigned::Transaction for Tx {
     async fn execute(&self, txn_ctx: unsigned::TransactionContext) -> std::io::Result<()> {
         let mut db = txn_ctx.db;
         // TODO: ensure expected format of space, key and value
-
 
         if self.key.len() == HASH_LEN {
             let hash = value_hash(&self.value);
@@ -209,7 +208,7 @@ async fn set_tx_test() {
     let resp = tx.execute(ut_ctx).await;
     assert!(resp.unwrap_err().kind() == ErrorKind::NotFound);
 
-    // create space 
+    // create space
     let db = avalanche_types::subnet::rpc::database::memdb::Database::new();
     let ut_ctx = unsigned::TransactionContext {
         db: db.clone(),

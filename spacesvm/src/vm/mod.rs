@@ -11,6 +11,7 @@ use avalanche_types::{
     ids,
     subnet::{
         self,
+        rpc::consensus::snowman::{Block, Initializer},
     },
 };
 use chrono::{DateTime, Utc};
