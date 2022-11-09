@@ -13,7 +13,7 @@ use crate::chain::{
 
 use super::{
     base,
-    decoder::{TD_SPACE_ID, TD_BUCKET, TD_STRING},
+    decoder::{TD_BUCKET, TD_SPACE_ID, TD_STRING},
     tx::TransactionType,
     unsigned,
 };

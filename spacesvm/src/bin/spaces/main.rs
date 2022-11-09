@@ -6,13 +6,13 @@ use log::info;
 
 use spacesvm::{genesis, vm};
 
-pub const APP_NAME: &str = "mini-kvvm-rs";
+pub const APP_NAME: &str = "spaces-vm-rs";
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let matches = Command::new(APP_NAME)
         .version(crate_version!())
-        .about("Mini key-value VM for Avalanche in Rust")
+        .about("key-value VM for Avalanche in Rust")
         .subcommands(vec![command_genesis()])
         .get_matches();
 
@@ -44,7 +44,7 @@ async fn main() -> Result<()> {
         tokio::sync::broadcast::Receiver<()>,
     ) = tokio::sync::broadcast::channel(1);
 
-    info!("starting mini-kvvm-rs");
+    info!("starting spacesvm-rs");
     let vm_server = subnet::rpc::vm::server::Server::new(Box::new(vm::ChainVm::new()), stop_ch_tx);
 
     subnet::rpc::plugin::serve(vm_server, stop_ch_rx)

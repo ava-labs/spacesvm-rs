@@ -10,12 +10,12 @@ homepage = "https://avax.network"
 readme = "README.md"
 
 [[bin]]
-name = "spaces"
+name = "spacesvm"
 path = "src/bin/spaces/main.rs"
 
 [dependencies]
 avalanche-proto = { version = "0.19.0" }
-avalanche-types = { version = "0.0.132", features = ["rpcchainvm"] }
+avalanche-types = { version = "0.0.135", features = ["subnet"] }
 byteorder = "1.4.3"
 chrono = "0.4.19"
 crossbeam-channel = "0.5.6"

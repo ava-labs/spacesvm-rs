@@ -8,12 +8,9 @@ use clap::{Parser, Subcommand};
 use jsonrpc_client_transports::{transports, RpcError};
 use jsonrpc_core::futures;
 use mini_kvvm::{
-    api::{
-        {ServiceClient as Client, DecodeTxArgs, IssueTxArgs, ResolveArgs},
-    },
+    api::{DecodeTxArgs, IssueTxArgs, ResolveArgs, ServiceClient as Client},
     chain::tx::{decoder, tx::TransactionType, unsigned::TransactionData},
-}
-
+};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]

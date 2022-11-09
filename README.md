@@ -6,7 +6,7 @@
 
 ### status: experimental
 
-`spacesvm-rs` is a (EIP-712)[https://eips.ethereum.org/EIPS/eip-712] compatible Rust port of the (SpacesVm)[https://github.com/ava-labs/spacesvm] virtual machine using the Avalanche [Rust SDK](https://github.com/ava-labs/avalanche-types-rs). The goal is to achieve feature parity with its Golang counterpart.
+`spacesvm-rs` is a (EIP-712)[https://eips.ethereum.org/EIPS/eip-712] compatible Rust port of the (SpacesVm)[https://github.com/ava-labs/spacesvm] virtual machine using the Avalanche [Rust SDK](https://github.com/ava-labs/avalanche-types-rs). Although the goal is to achieve feature parity with its Golang counterpart, it is not yet compatible with the existing spaces network.
 
 ## Core features
 ### Authentication
