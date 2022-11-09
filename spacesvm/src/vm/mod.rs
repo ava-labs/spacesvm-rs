@@ -11,7 +11,6 @@ use avalanche_types::{
     ids,
     subnet::{
         self,
-        rpc::concensus::snowman::{Block, Initializer},
     },
 };
 use chrono::{DateTime, Utc};
@@ -385,7 +384,7 @@ impl subnet::rpc::snowman::block::Getter for ChainVm {
     async fn get_block(
         &self,
         id: ids::Id,
-    ) -> Result<Box<dyn subnet::rpc::concensus::snowman::Block + Send + Sync>> {
+    ) -> Result<Box<dyn subnet::rpc::consensus::snowman::Block + Send + Sync>> {
         log::debug!("vm::get_block called: {:?}", id);
 
         let vm = self.inner.read().await;
@@ -426,7 +425,7 @@ impl subnet::rpc::snowman::block::Parser for ChainVm {
     async fn parse_block(
         &self,
         bytes: &[u8],
-    ) -> Result<Box<dyn subnet::rpc::concensus::snowman::Block + Send + Sync>> {
+    ) -> Result<Box<dyn subnet::rpc::consensus::snowman::Block + Send + Sync>> {
         log::debug!("vm::parse_block called: {:?}", bytes);
 
         let vm = self.inner.read().await;
@@ -453,7 +452,7 @@ impl subnet::rpc::snowman::block::ChainVm for ChainVm {
     /// Attempt to create a new block.
     async fn build_block(
         &self,
-    ) -> Result<Box<dyn subnet::rpc::concensus::snowman::Block + Send + Sync>> {
+    ) -> Result<Box<dyn subnet::rpc::consensus::snowman::Block + Send + Sync>> {
         log::debug!("vm::build_block called!");
 
         let vm = self.inner.read().await;
@@ -532,7 +531,7 @@ impl subnet::rpc::snowman::block::ChainVm for ChainVm {
     /// Attempts to issue a transaction into consensus.
     async fn issue_tx(
         &self,
-    ) -> Result<Box<dyn subnet::rpc::concensus::snowman::Block + Send + Sync>> {
+    ) -> Result<Box<dyn subnet::rpc::consensus::snowman::Block + Send + Sync>> {
         log::debug!("vm::issue_tx called");
 
         Err(Error::new(

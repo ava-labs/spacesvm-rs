@@ -15,7 +15,7 @@ use super::{decoder, unsigned::TransactionContext};
 #[serde(tag = "type")]
 pub enum TransactionType {
     /// Root namespace.
-    Bucket,
+    Claim,
     /// Create or update a key/value pair for a bucket.
     Set,
     /// Remove a key.
@@ -33,7 +33,7 @@ impl Default for TransactionType {
 impl fmt::Display for TransactionType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            TransactionType::Bucket => write!(f, "bucket"),
+            TransactionType::Claim => write!(f, "bucket"),
             TransactionType::Set => write!(f, "set"),
             TransactionType::Delete => write!(f, "delete"),
             TransactionType::Unknown => write!(f, "unknown"),

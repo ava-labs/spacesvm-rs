@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::chain::tx::decoder::TypedData;
 
-use super::{base, bucket, delete, set, tx::TransactionType};
+use super::{base, claim, delete, set, tx::TransactionType};
 
 #[typetag::serde(tag = "type")]
 #[tonic::async_trait]
@@ -36,7 +36,7 @@ pub struct TransactionContext {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TransactionData {
     pub typ: TransactionType,
-    pub bucket: String,
+    pub space: String,
     pub key: String,
     pub value: Vec<u8>,
 }
@@ -45,19 +45,19 @@ impl TransactionData {
     pub fn decode(&self) -> Result<Box<dyn Transaction + Send + Sync>> {
         let tx_param = self.clone();
         match tx_param.typ {
-            TransactionType::Bucket => Ok(Box::new(bucket::Tx {
+            TransactionType::Claim => Ok(Box::new(claim::Tx {
                 base_tx: base::Tx::default(),
-                bucket: tx_param.bucket,
+                space: tx_param.space,
             })),
             TransactionType::Set => Ok(Box::new(set::Tx {
                 base_tx: base::Tx::default(),
-                bucket: tx_param.bucket,
+                space: tx_param.space,
                 key: tx_param.key,
                 value: tx_param.value,
             })),
             TransactionType::Delete => Ok(Box::new(delete::Tx {
                 base_tx: base::Tx::default(),
-                bucket: tx_param.bucket,
+                space: tx_param.space,
                 key: tx_param.key,
             })),
             TransactionType::Unknown => Err(Error::new(

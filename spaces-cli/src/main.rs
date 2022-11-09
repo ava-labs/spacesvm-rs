@@ -57,9 +57,9 @@ async fn main() -> std::result::Result<(), Box<dyn error::Error>> {
     let client = futures::executor::block_on(connection)?;
     ping(&client).await?;
 
-    if let Command::Get { bucket, key } = &cli.command {
+    if let Command::Get { space, key } = &cli.command {
         futures::executor::block_on(client.resolve(ResolveArgs {
-            bucket: bucket.as_bytes().to_vec(),
+            space: space.as_bytes().to_vec(),
             key: key.as_bytes().to_vec(),
         }))
         .map_err(|e| e.to_string())?;
@@ -74,7 +74,7 @@ async fn main() -> std::result::Result<(), Box<dyn error::Error>> {
 fn command_to_tx(command: Command) -> Result<TransactionData> {
     match command {
         Command::Claim { space } => Ok(claim_tx(space)),
-        Command::Set { bucket, key, value } => Ok(set_tx(space, key, value.as_bytes().to_vec())),
+        Command::Set { space, key, value } => Ok(set_tx(space, key, value.as_bytes().to_vec())),
         Command::Delete { space, key } => Ok(delete_tx(space, key)),
         _ => Err(std::io::Error::new(
             std::io::ErrorKind::Other,

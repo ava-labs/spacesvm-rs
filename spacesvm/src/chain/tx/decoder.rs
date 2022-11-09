@@ -9,13 +9,13 @@ use ethereum_types::H256;
 use serde::{de, Deserialize, Serialize};
 use serde_json::to_value;
 
-use super::{base, bucket, delete, set, tx::TransactionType, unsigned};
+use super::{base, claim, delete, set, tx::TransactionType, unsigned};
 
 pub const TD_STRING: &str = "string";
 pub const TD_U64: &str = "u64";
 pub const TD_BYTES: &str = "bytes";
 pub const TD_BLOCK_ID: &str = "blockId";
-pub const TD_BUCKET: &str = "bucket";
+pub const TD_SPACE: &str = "bucket";
 pub const TD_KEY: &str = "key";
 pub const TD_VALUE: &str = "value";
 
@@ -178,19 +178,19 @@ impl TypedData {
         })?;
 
         match self.primary_type {
-            TransactionType::Bucket => {
-                let bucket = self
-                    .get_typed_message(TD_BUCKET.to_owned())
+            TransactionType::Claim => {
+                let space = self
+                    .get_typed_message(TD_SPACE.to_owned())
                     .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
-                Ok(Box::new(bucket::Tx {
+                Ok(Box::new(claim::Tx {
                     base_tx,
-                    bucket: bucket,
+                    space,
                 }))
             }
 
             TransactionType::Set => {
-                let bucket = self
-                    .get_typed_message(TD_BUCKET.to_owned())
+                let space = self
+                    .get_typed_message(TD_SPACE.to_owned())
                     .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
                 let key = self
                     .get_typed_message(TD_KEY.to_owned())
@@ -200,22 +200,22 @@ impl TypedData {
                     .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
                 Ok(Box::new(set::Tx {
                     base_tx,
-                    bucket: bucket,
+                    space,
                     key: key,
                     value: value.as_bytes().to_vec(),
                 }))
             }
 
             TransactionType::Delete => {
-                let bucket = self
-                    .get_typed_message(TD_BUCKET.to_owned())
+                let space = self
+                    .get_typed_message(TD_SPACE.to_owned())
                     .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
                 let key = self
                     .get_typed_message(TD_KEY.to_owned())
                     .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
                 Ok(Box::new(delete::Tx {
                     base_tx,
-                    bucket: bucket,
+                    space,
                     key: key,
                 }))
             }
@@ -281,8 +281,8 @@ async fn signature_recovers() {
     let public_key = secret_key.to_public_key();
 
     let tx_data = crate::chain::tx::unsigned::TransactionData {
-        typ: TransactionType::Bucket,
-        bucket: "kvs".to_string(),
+        typ: TransactionType::Claim,
+        space: "kvs".to_string(),
         key: String::new(),
         value: vec![],
     };
@@ -299,7 +299,7 @@ async fn signature_recovers() {
 
     let tx_data = crate::chain::tx::unsigned::TransactionData {
         typ: TransactionType::Set,
-        bucket: "kvs".to_string(),
+        space: "kvs".to_string(),
         key: "foo".to_string(),
         value: "bar".as_bytes().to_vec(),
     };
