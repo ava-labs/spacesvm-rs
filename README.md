@@ -35,6 +35,8 @@ filepath>`.
 #### Getting Started
 The easiest way to test and interact with spacesvm is with the included e2e scripts.
 
+> Note: spacesvm requires protocol buffers to be installed locally to build successfully. [Download](https://github.com/protocolbuffers/protobuf#protocol-compiler-installation) the `protoc` compiler for your system and ensure it's working correctly before continuing.
+
 ```bash
 # build the spacesvm plugin, run e2e tests, and keep the network running
 ./scripts/build.release.sh \
