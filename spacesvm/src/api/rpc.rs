@@ -8,9 +8,3 @@ struct Request {
     params: Option<serde_json::Value>,
     id: serde_json::Value,
 }
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_request() {}
-}

@@ -13,16 +13,16 @@ use crate::chain::{
 
 #[rpc]
 pub trait Service {
-    #[rpc(name = "ping")]
+    #[rpc(name = "ping", alias("spacesvm.ping"))]
     fn ping(&self) -> BoxFuture<Result<PingResponse>>;
 
-    #[rpc(name = "issue_tx")]
+    #[rpc(name = "issueTx", alias("spacesvm.issueTx"))]
     fn issue_tx(&self, params: IssueTxArgs) -> BoxFuture<Result<IssueTxResponse>>;
 
-    #[rpc(name = "decode_tx")]
+    #[rpc(name = "decodeTx", alias("spacesvm.decodeTx"))]
     fn decode_tx(&self, params: DecodeTxArgs) -> BoxFuture<Result<DecodeTxResponse>>;
 
-    #[rpc(name = "resolve")]
+    #[rpc(name = "resolve", alias("spacesvm.resolve"))]
     fn resolve(&self, params: ResolveArgs) -> BoxFuture<Result<ResolveResponse>>;
 }
 
