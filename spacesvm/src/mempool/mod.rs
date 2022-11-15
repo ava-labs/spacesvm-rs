@@ -2,7 +2,7 @@ pub mod tx_heap;
 
 use std::{
     collections::VecDeque,
-    io::Result,
+    io::{Result, Error, ErrorKind},
     sync::{Arc, RwLock},
 };
 
@@ -16,37 +16,40 @@ use self::tx_heap::{Entry, TxHeap};
 pub struct Mempool {
     inner: Arc<RwLock<MempoolInner>>,
     max_size: u64,
-
-    /// Channel of length one, which the mempool ensures has an item on
-    /// it as long as there is an unissued transaction remaining in [txs].
-    pending_tx: broadcast::Sender<()>,
 }
 
 pub struct MempoolInner {
     new_txs: Vec<Transaction>,
     max_heap: TxHeap,
     min_heap: TxHeap,
+
+    /// Channel of length one, which the mempool ensures has an item on
+    /// it as long as there is an unissued transaction remaining in [txs].
+    pending_tx: broadcast::Sender<()>,
+    pub pending_rx: broadcast::Receiver<()>,
 }
 
 impl Mempool {
     pub fn new(max_size: u64) -> Self {
         // initialize channel
-        let (pending_tx, _): (broadcast::Sender<()>, broadcast::Receiver<()>) =
-            broadcast::channel(16);
+        let (pending_tx, pending_rx): (broadcast::Sender<()>, broadcast::Receiver<()>) =
+            broadcast::channel(1);
         Self {
             inner: Arc::new(RwLock::new(MempoolInner {
                 new_txs: Vec::new(),
                 max_heap: TxHeap::new(max_size as usize, false),
                 min_heap: TxHeap::new(max_size as usize, true),
+                pending_tx,
+                pending_rx,
             })),
             max_size,
-            pending_tx,
         }
     }
 
     /// Returns a broadcast receiver for the pending tx channel.
     pub fn subscribe_pending(&self) -> broadcast::Receiver<()> {
-        self.pending_tx.subscribe()
+        let inner = self.inner.read().unwrap();
+        inner.pending_tx.subscribe()
     }
 
     /// Returns Tx from Id if it exists.
@@ -96,9 +99,10 @@ impl Mempool {
 
         inner.new_txs.push(tx.to_owned());
 
-        log::debug!("mempool: add pending");
-        self.add_pending();
-        log::debug!("mempool: pending complete");
+        inner.pending_tx
+            .send(())
+            .map_err(|e| Error::new(ErrorKind::Other, format!("failed to send pending tx: {}", e)))?;
+        log::debug!("add: pending tx sent");
 
         Ok(true)
     }
@@ -127,7 +131,7 @@ impl Mempool {
 
     /// Returns len of mempool data.
     pub fn len(&self) -> usize {
-        let inner = self.inner.write().unwrap();
+        let inner = self.inner.read().unwrap();
         inner.max_heap.len()
     }
 
@@ -244,10 +248,6 @@ impl Mempool {
         }
     }
 
-    pub fn add_pending(&self) {
-        let _ = self.pending_tx.send(()).unwrap();
-        log::debug!("add_pending: sent");
-    }
 }
 
 #[tokio::test]
@@ -319,46 +319,47 @@ async fn test_mempool() {
     assert_eq!(resp.unwrap().unwrap().id, tx_1_id);
 }
 
-// #[tokio::test]
-// async fn test_mempool_threads() {
-//     use crate::chain::tx::{decoder, tx::TransactionType, unsigned};
-//     use tokio::time::sleep;
+#[tokio::test]
+async fn test_mempool_threads() {
+    use crate::chain::tx::{decoder, tx::TransactionType, unsigned};
+    use tokio::time::sleep;
 
-//     env_logger::init_from_env(
-//         env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "debug"),
-//     );
+    env_logger::init_from_env(
+        env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "debug"),
+    );
 
-//     let vm = crate::vm::ChainVm::new();
+    let vm = crate::vm::ChainVm::new();
 
-//     let inner = Arc::clone(&vm.inner);
-//     tokio::spawn(async move {
-//         let mut vm_inner = inner.write().await;
-//         let tx_data_1 = unsigned::TransactionData {
-//             typ: TransactionType::Bucket,
-//             bucket: "foo".to_string(),
-//             key: "".to_string(),
-//             value: vec![],
-//         };
-//         let resp = tx_data_1.decode();
-//         assert!(resp.is_ok());
-//         let utx = resp.unwrap();
-//         let secret_key = avalanche_types::key::secp256k1::private_key::Key::generate().unwrap();
-//         let dh = decoder::hash_structured_data(&utx.typed_data().await).unwrap();
-//         let sig = secret_key.sign_digest(&dh.as_bytes()).unwrap();
-//         let tx = Transaction::new(utx, sig.to_bytes().to_vec());
+    let inner = Arc::clone(&vm.inner);
+    tokio::spawn(async move {
+        let vm_inner = inner.write().await;
+        let tx_data_1 = unsigned::TransactionData {
+            typ: TransactionType::Claim,
+            space: "foo".to_string(),
+            key: "".to_string(),
+            value: vec![],
+        };
+        let resp = tx_data_1.decode();
+        assert!(resp.is_ok());
+        let utx = resp.unwrap();
+        let secret_key = avalanche_types::key::secp256k1::private_key::Key::generate().unwrap();
+        let dh = decoder::hash_structured_data(&utx.typed_data().await).unwrap();
+        let sig = secret_key.sign_digest(&dh.as_bytes()).unwrap();
+        let tx = Transaction::new(utx, sig.to_bytes().to_vec());
 
-//         // add tx to mempool
-//         let resp = vm_inner.mempool.add(tx).await;
-//         assert!(resp.is_ok());
-//     });
+        // add tx to mempool
+        let resp = vm_inner.mempool.add(&tx);
+        assert!(resp.is_ok());
+    });
 
-//     let inner = Arc::clone(&vm.inner);
-//     tokio::spawn(async move {
-//         sleep(std::time::Duration::from_micros(10)).await;
-//         let vm_inner = inner.read().await;
-//         // check that inner mempool has been updated in the other thread
-//         assert_eq!(vm_inner.mempool.len(), 1);
-//     });
+    let inner = Arc::clone(&vm.inner);
+    tokio::spawn(async move {
+        sleep(std::time::Duration::from_micros(10)).await;
+        let vm_inner = inner.read().await;
+        // check that inner mempool has been updated in the other thread
+        assert_eq!(vm_inner.mempool.len(), 1);
+    });
 
-//     sleep(std::time::Duration::from_millis(100)).await;
-// }
+    // wait for threads
+    sleep(std::time::Duration::from_millis(10)).await;
+}
