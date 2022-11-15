@@ -6,7 +6,7 @@ use log::info;
 
 use spacesvm::{genesis, vm};
 
-pub const APP_NAME: &str = "spaces-vm-rs";
+pub const APP_NAME: &str = "spacesvm-rs";
 
 #[tokio::main]
 async fn main() -> Result<()> {

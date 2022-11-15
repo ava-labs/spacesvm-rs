@@ -22,8 +22,8 @@ use super::{
 const HASH_LEN: usize = 66;
 
 /// Performs a write against the logical keyspace. If the key exists
-/// the value will be overwritten. The root bucket must be created
-/// in advance.
+/// the value will be overwritten. The space must be created in
+/// advance.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 
 pub struct Tx {

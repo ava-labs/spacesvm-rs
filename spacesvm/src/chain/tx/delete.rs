@@ -17,7 +17,7 @@ use super::{
     unsigned,
 };
 
-/// Removes a key and value from the underlying bucket. No error will return
+/// Removes a key and value from the underlying space. No error will return
 /// if the key is not found.
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 #[serde(rename_all = "camelCase")]
@@ -63,14 +63,14 @@ impl unsigned::Transaction for Tx {
         if info.is_none() {
             return Err(Error::new(
                 ErrorKind::NotFound,
-                format!("bucket not found: {}", self.space),
+                format!("space not found: {}", self.space),
             ));
         }
         let info = info.unwrap();
         if info.owner != txn_ctx.sender {
             return Err(Error::new(
                 ErrorKind::PermissionDenied,
-                format!("sets only allowed for bucket owner: {}", self.space),
+                format!("sets only allowed for space owner: {}", self.space),
             ));
         }
 

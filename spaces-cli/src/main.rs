@@ -1,14 +1,19 @@
-use std::error;
-use std::fs::File;
-use std::io::{Result, Write};
-use std::path::Path;
+use std::{
+    error,
+    fs::File,
+    io::{Result, Write},
+    path::Path,
+};
 
 use avalanche_types::key;
 use clap::{Parser, Subcommand};
 use jsonrpc_client_transports::{transports, RpcError};
 use jsonrpc_core::futures;
 use spacesvm::{
-    api::{DecodeTxArgs, IssueTxArgs, ResolveArgs, ServiceClient as Client},
+    api::{
+        DecodeTxArgs, IssueTxArgs, IssueTxResponse, PingResponse, ResolveArgs, ResolveResponse,
+        ServiceClient as Client,
+    },
     chain::tx::{decoder, tx::TransactionType, unsigned::TransactionData},
 };
 
@@ -46,6 +51,7 @@ enum Command {
         space: String,
         key: String,
     },
+    Ping {},
 }
 
 #[tokio::main]
@@ -55,22 +61,36 @@ async fn main() -> std::result::Result<(), Box<dyn error::Error>> {
     let secret_key = get_or_create_pk(&cli.private_key_file)?;
     let connection = transports::http::connect::<Client>(&cli.endpoint);
     let client = futures::executor::block_on(connection)?;
-    ping(&client).await?;
 
+    // prints the value returned if available.
     if let Command::Get { space, key } = &cli.command {
-        futures::executor::block_on(client.resolve(ResolveArgs {
-            space: space.as_bytes().to_vec(),
-            key: key.as_bytes().to_vec(),
-        }))
-        .map_err(|e| e.to_string())?;
+        let resp =
+            futures::executor::block_on(get(&client, space, key)).map_err(|e| e.to_string())?;
+        log::debug!("{:?}", resp);
+
+        println!("{}", String::from_utf8_lossy(&resp.value));
+        return Ok(());
+    }
+
+    // returns on success and errors on failure
+    if let Command::Ping {} = &cli.command {
+        let resp = futures::executor::block_on(ping(&client)).map_err(|e| e.to_string())?;
+        log::debug!("{:?}", resp);
+
+        return Ok(());
     }
 
     let tx = command_to_tx(cli.command)?;
 
-    futures::executor::block_on(sign_and_submit(&client, &secret_key, tx))
-        .map_err(|e| e.to_string().into())
+    // prints the id of a successful transaction.
+    let resp = futures::executor::block_on(sign_and_submit(&client, &secret_key, tx))
+        .map_err(|e| e.to_string())?;
+    println!("{}", resp.tx_id);
+
+    Ok(())
 }
 
+/// Takes a TX command and returns transaction data.
 fn command_to_tx(command: Command) -> Result<TransactionData> {
     match command {
         Command::Claim { space } => Ok(claim_tx(space)),
@@ -83,6 +103,7 @@ fn command_to_tx(command: Command) -> Result<TransactionData> {
     }
 }
 
+/// Returns a private key from a given path or creates new.
 fn get_or_create_pk(path: &str) -> Result<key::secp256k1::private_key::Key> {
     if !Path::new(path).try_exists()? {
         let secret_key = key::secp256k1::private_key::Key::generate().unwrap();
@@ -125,20 +146,18 @@ fn delete_tx(space: String, key: String) -> TransactionData {
     }
 }
 
-async fn ping(client: &Client) -> Result<()> {
+async fn ping(client: &Client) -> Result<PingResponse> {
     let error_handling =
         |e: RpcError| std::io::Error::new(std::io::ErrorKind::Other, e.to_string());
-    let resp = client.ping().await.map_err(error_handling);
-    dbg!(resp.is_ok());
-    dbg!(&resp);
-    Ok(())
+    client.ping().await.map_err(error_handling)
 }
 
+/// Decodes transaction signs the typed data ans issues tx returning IssueTxResponse.
 async fn sign_and_submit(
     client: &Client,
     pk: &key::secp256k1::private_key::Key,
     tx_data: TransactionData,
-) -> Result<()> {
+) -> Result<IssueTxResponse> {
     let error_handling =
         |e: RpcError| std::io::Error::new(std::io::ErrorKind::Other, dbg!(e).to_string());
     let resp = client
@@ -151,13 +170,25 @@ async fn sign_and_submit(
     let dh = decoder::hash_structured_data(typed_data)?;
     let sig = pk.sign_digest(&dh.as_bytes())?;
 
-    let resp = client
+    client
         .issue_tx(IssueTxArgs {
             typed_data: resp.typed_data,
             signature: sig.to_bytes().to_vec(),
         })
         .await
-        .map_err(error_handling)?;
-    println!("response: {:?}", resp);
-    Ok(())
+        .map_err(error_handling)
+}
+
+/// Get returns a ResolveResponse.
+async fn get(client: &Client, space: &str, key: &str) -> Result<ResolveResponse> {
+    let error_handling =
+        |e: RpcError| std::io::Error::new(std::io::ErrorKind::Other, dbg!(e).to_string());
+
+    client
+        .resolve(ResolveArgs {
+            space: space.as_bytes().to_vec(),
+            key: key.as_bytes().to_vec(),
+        })
+        .await
+        .map_err(error_handling)
 }
