@@ -239,18 +239,18 @@ pub async fn has_space(
     db.has(&space_info_key(space)).await
 }
 
-/// 'KEY_PREFIX' + 'BYTE_DELIMITER' + [r_bucket] + 'BYTE_DELIMITER' + [key]
-pub fn space_value_key(r_bucket: ids::short::Id, key: &[u8]) -> Vec<u8> {
+/// 'KEY_PREFIX' + 'BYTE_DELIMITER' + [r_space] + 'BYTE_DELIMITER' + [key]
+pub fn space_value_key(r_space: ids::short::Id, key: &[u8]) -> Vec<u8> {
     let mut k: Vec<u8> = Vec::with_capacity(2 + SHORT_ID_LEN + 1 + key.len());
     k.push(KEY_PREFIX);
     k.push(BYTE_DELIMITER);
-    k.extend_from_slice(r_bucket.as_ref());
+    k.extend_from_slice(r_space.as_ref());
     k.push(BYTE_DELIMITER);
     k.extend_from_slice(key);
     k
 }
 
-/// 'INFO_PREFIX' + 'BYTE_DELIMITER' + [bucket]
+/// 'INFO_PREFIX' + 'BYTE_DELIMITER' + [space]
 pub fn space_info_key(space: &[u8]) -> Vec<u8> {
     let mut k: Vec<u8> = Vec::with_capacity(space.len() + 2);
     k.push(INFO_PREFIX);

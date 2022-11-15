@@ -2,7 +2,7 @@ pub mod tx_heap;
 
 use std::{
     collections::VecDeque,
-    io::{Result, Error, ErrorKind},
+    io::{Error, ErrorKind, Result},
     sync::{Arc, RwLock},
 };
 
@@ -99,9 +99,12 @@ impl Mempool {
 
         inner.new_txs.push(tx.to_owned());
 
-        inner.pending_tx
-            .send(())
-            .map_err(|e| Error::new(ErrorKind::Other, format!("failed to send pending tx: {}", e)))?;
+        inner.pending_tx.send(()).map_err(|e| {
+            Error::new(
+                ErrorKind::Other,
+                format!("failed to send pending tx: {}", e),
+            )
+        })?;
         log::debug!("add: pending tx sent");
 
         Ok(true)
@@ -247,7 +250,6 @@ impl Mempool {
             None => return None,
         }
     }
-
 }
 
 #[tokio::test]

@@ -15,7 +15,7 @@ pub const TD_STRING: &str = "string";
 pub const TD_U64: &str = "u64";
 pub const TD_BYTES: &str = "bytes";
 pub const TD_BLOCK_ID: &str = "blockId";
-pub const TD_SPACE: &str = "bucket";
+pub const TD_SPACE: &str = "space";
 pub const TD_KEY: &str = "key";
 pub const TD_VALUE: &str = "value";
 
