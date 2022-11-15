@@ -326,10 +326,6 @@ async fn test_mempool_threads() {
     use crate::chain::tx::{decoder, tx::TransactionType, unsigned};
     use tokio::time::sleep;
 
-    env_logger::init_from_env(
-        env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "debug"),
-    );
-
     let vm = crate::vm::ChainVm::new();
 
     let inner = Arc::clone(&vm.inner);
