@@ -146,30 +146,27 @@ impl subnet::rpc::common::apphandler::AppHandler for ChainVm {
             &msg.len()
         );
 
-        let txs: Vec<chain::tx::tx::Transaction> = serde_json::from_slice(msg)
-            .map_err(|e| {
-                log::debug!(
-                    "AppGossip provided invalid txs peer_id: {}: {}",
-                    &node_id,
-                    e.to_string()
-                )
-            })
-            .unwrap();
+        let txs: Vec<chain::tx::tx::Transaction> = match serde_json::from_slice(msg) {
+            Ok(body) => body,
+            Err(e) => {
+                log::error!("failed to deserialize message peer_id: {}: {}", &node_id, e);
+                return Ok(());
+            }
+        };
 
-        self.submit(txs)
-            .await
-            .map_err(|e| {
-                log::debug!(
-                    "AppGossip failed to submit txs: peer_id: {}: {}",
-                    &node_id,
-                    e.to_string()
-                )
-            })
-            .unwrap();
+        match self.submit(txs).await {
+            Ok(_) => {
+                log::debug!("vm::app_gossip success");
+                return Ok(());
+            }
+            Err(e) => {
+                log::error!("failed to submit tx peer_id: {}: {}", &node_id, e);
+                return Ok(());
+            }
+        }
 
-        log::debug!("vm::app_gossip success");
-
-        Ok(())
+        // only trace error to prevent VMs being shutdown
+        // from "AppGossip" returning an error
     }
 }
 
