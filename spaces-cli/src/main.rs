@@ -62,7 +62,7 @@ async fn main() -> std::result::Result<(), Box<dyn error::Error>> {
     let connection = transports::http::connect::<Client>(&cli.endpoint);
     let client = futures::executor::block_on(connection)?;
 
-    // Prints the value
+    // prints the value returned if available.
     if let Command::Get { space, key } = &cli.command {
         let resp =
             futures::executor::block_on(get(&client, space, key)).map_err(|e| e.to_string())?;
@@ -82,9 +82,10 @@ async fn main() -> std::result::Result<(), Box<dyn error::Error>> {
 
     let tx = command_to_tx(cli.command)?;
 
+    // prints the id of a successful transaction.
     let resp = futures::executor::block_on(sign_and_submit(&client, &secret_key, tx))
         .map_err(|e| e.to_string())?;
-    println!("tx id: {}", resp.tx_id);
+    println!("{}", resp.tx_id);
 
     Ok(())
 }
