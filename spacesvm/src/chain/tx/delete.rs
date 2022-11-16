@@ -88,7 +88,7 @@ impl unsigned::Transaction for Tx {
         Ok(())
     }
 
-    async fn typed_data(&self) -> TypedData {
+    async fn typed_data(&self) -> Result<TypedData> {
         let mut tx_fields: Vec<Type> = Vec::new();
         tx_fields.push(Type {
             name: TD_SPACE.to_owned(),
@@ -117,6 +117,10 @@ impl unsigned::Transaction for Tx {
             serde_json::Value::String(self.base_tx.block_id.to_string()),
         );
 
-        return create_typed_data(super::tx::TransactionType::Delete, tx_fields, message);
+        Ok(create_typed_data(
+            super::tx::TransactionType::Delete,
+            tx_fields,
+            message,
+        ))
     }
 }

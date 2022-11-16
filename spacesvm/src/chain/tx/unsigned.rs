@@ -18,7 +18,7 @@ pub trait Transaction: Debug + DynClone + Send + Sync {
     async fn get_value(&self) -> Option<Vec<u8>>;
     async fn set_value(&mut self, value: Vec<u8>) -> Result<()>;
     async fn execute(&self, txn_ctx: TransactionContext) -> Result<()>;
-    async fn typed_data(&self) -> TypedData;
+    async fn typed_data(&self) -> Result<TypedData>;
     async fn typ(&self) -> TransactionType;
 }
 
@@ -65,4 +65,44 @@ impl TransactionData {
             )),
         }
     }
+}
+
+#[tokio::test]
+async fn test_hash_claim_tx() {
+    use ethers_core::types::transaction::eip712::Eip712;
+
+    let tx_data = crate::chain::tx::unsigned::TransactionData {
+        typ: TransactionType::Claim,
+        space: "kvs".to_string(),
+        key: "foo".to_string(),
+        value: Vec::new(),
+    };
+    let resp = tx_data.decode();
+    assert!(resp.is_ok());
+    let mut utx = resp.unwrap();
+    utx.set_block_id(avalanche_types::ids::Id::from_slice("duuuu".as_bytes()))
+        .await;
+    let typed_data = utx.typed_data().await.unwrap();
+    let resp = typed_data.struct_hash();
+    assert!(resp.is_ok());
+}
+
+#[tokio::test]
+async fn test_hash_set_tx() {
+    use ethers_core::types::transaction::eip712::Eip712;
+
+    let tx_data = crate::chain::tx::unsigned::TransactionData {
+        typ: TransactionType::Set,
+        space: "kvs".to_string(),
+        key: "foo".to_string(),
+        value: "bar".as_bytes().to_vec(),
+    };
+    let resp = tx_data.decode();
+    assert!(resp.is_ok());
+    let mut utx = resp.unwrap();
+    utx.set_block_id(avalanche_types::ids::Id::from_slice("duuuu".as_bytes()))
+        .await;
+    let typed_data = utx.typed_data().await.unwrap();
+    let resp = typed_data.struct_hash();
+    assert!(resp.is_ok());
 }

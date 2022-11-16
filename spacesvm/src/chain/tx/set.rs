@@ -1,4 +1,7 @@
-use std::io::{Error, ErrorKind};
+use std::{
+    io::{Error, ErrorKind, Result},
+    str::from_utf8,
+};
 
 use ethers_core::types::transaction::eip712::{Eip712DomainType as Type, TypedData};
 use serde::{Deserialize, Serialize};
@@ -11,7 +14,7 @@ use crate::chain::{
 
 use super::{
     base,
-    decoder::{TypedDataMessage, TD_BLOCK_ID, TD_BYTES, TD_KEY, TD_SPACE, TD_STRING, TD_VALUE},
+    decoder::{TypedDataMessage, TD_BLOCK_ID, TD_KEY, TD_SPACE, TD_STRING, TD_VALUE},
     tx::TransactionType,
     unsigned::{self},
 };
@@ -136,7 +139,7 @@ impl unsigned::Transaction for Tx {
         Ok(())
     }
 
-    async fn typed_data(&self) -> TypedData {
+    async fn typed_data(&self) -> Result<TypedData> {
         let mut tx_fields: Vec<Type> = vec![];
         tx_fields.push(Type {
             name: TD_SPACE.to_owned(),
@@ -148,7 +151,7 @@ impl unsigned::Transaction for Tx {
         });
         tx_fields.push(Type {
             name: TD_VALUE.to_owned(),
-            r#type: TD_BYTES.to_owned(),
+            r#type: TD_STRING.to_owned(),
         });
         tx_fields.push(Type {
             name: TD_BLOCK_ID.to_owned(),
@@ -164,16 +167,28 @@ impl unsigned::Transaction for Tx {
             TD_KEY.to_owned(),
             serde_json::Value::String(self.key.clone()),
         );
+
+        let value_str = from_utf8(&self.value).map_err(|e| {
+            Error::new(
+                ErrorKind::InvalidData,
+                format!("failed to convert value to string: {}", e),
+            )
+        })?;
+
         message.insert(
             TD_VALUE.to_owned(),
-            serde_json::Value::from(self.value.clone()),
+            serde_json::Value::String(value_str.to_owned()),
         );
         message.insert(
             TD_BLOCK_ID.to_owned(),
             serde_json::Value::String(self.base_tx.block_id.to_string()),
         );
 
-        return create_typed_data(super::tx::TransactionType::Set, tx_fields, message);
+        Ok(create_typed_data(
+            super::tx::TransactionType::Set,
+            tx_fields,
+            message,
+        ))
     }
 }
 

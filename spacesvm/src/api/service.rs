@@ -82,7 +82,7 @@ impl crate::api::Service for Service {
                 .map_err(create_jsonrpc_error)?;
 
             utx.set_block_id(*last_accepted).await;
-            let typed_data = utx.typed_data().await;
+            let typed_data = utx.typed_data().await.map_err(create_jsonrpc_error)?;
 
             let string = serde_json::to_string(&typed_data).unwrap();
 

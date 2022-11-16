@@ -97,7 +97,7 @@ impl crate::chain::tx::Transaction for Transaction {
         let stx =
             serde_json::to_vec(&self).map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
-        let typed_data = &self.unsigned_transaction.typed_data().await;
+        let typed_data = &self.unsigned_transaction.typed_data().await?;
         // let digest_hash = decoder::hash_structured_data(typed_data)?;
         let digest_hash = typed_data.struct_hash().map_err(|e| {
             Error::new(

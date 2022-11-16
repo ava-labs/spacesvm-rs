@@ -163,7 +163,7 @@ async fn signature_recovers() {
     assert!(resp.is_ok());
     let utx = resp.unwrap();
     // let hash = hash_structured_data(&utx.typed_data().await).unwrap();
-    let typed_data = utx.typed_data().await;
+    let typed_data = utx.typed_data().await.unwrap();
     let hash = typed_data.struct_hash().unwrap();
 
     let sig = secret_key.sign_digest(&hash).unwrap();
@@ -182,7 +182,7 @@ async fn signature_recovers() {
     let mut utx = resp.unwrap();
     utx.set_block_id(avalanche_types::ids::Id::from_slice("duuuu".as_bytes()))
         .await;
-    let typed_data = utx.typed_data().await;
+    let typed_data = utx.typed_data().await.unwrap();
     let hash = typed_data.struct_hash().unwrap();
 
     let sig = secret_key.sign_digest(&hash).unwrap();
