@@ -30,6 +30,17 @@ impl Default for TransactionType {
     }
 }
 
+impl TransactionType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            TransactionType::Claim => "claim",
+            TransactionType::Set => "set",
+            TransactionType::Delete => "delete",
+            TransactionType::Unknown => "unknown",
+        }
+    }
+}
+
 impl fmt::Display for TransactionType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {

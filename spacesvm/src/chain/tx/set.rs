@@ -156,9 +156,18 @@ impl unsigned::Transaction for Tx {
         });
 
         let mut message = TypedDataMessage::new();
-        message.insert(TD_SPACE.to_owned(), serde_json::Value::String(self.space));
-        message.insert(TD_KEY.to_owned(), serde_json::Value::String(self.key));
-        message.insert(TD_VALUE.to_owned(), serde_json::Value::from(self.value));
+        message.insert(
+            TD_SPACE.to_owned(),
+            serde_json::Value::String(self.space.clone()),
+        );
+        message.insert(
+            TD_KEY.to_owned(),
+            serde_json::Value::String(self.key.clone()),
+        );
+        message.insert(
+            TD_VALUE.to_owned(),
+            serde_json::Value::from(self.value.clone()),
+        );
         message.insert(
             TD_BLOCK_ID.to_owned(),
             serde_json::Value::String(self.base_tx.block_id.to_string()),

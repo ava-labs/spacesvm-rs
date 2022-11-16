@@ -20,7 +20,7 @@ byteorder = "1.4.3"
 chrono = "0.4.22"
 clap = { version = "4.0.23", features = ["cargo", "derive"] }
 crossbeam-channel = "0.5.6"
-ethers-core = { version = "1" }
+ethers-core = { version = "1.0.0", default-features = false, features = ["eip712", "macros"] }
 derivative = "2.2.0"
 dyn-clone = "1.0.9"
 env_logger = "0.9.3"

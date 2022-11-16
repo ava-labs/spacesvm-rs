@@ -7,6 +7,7 @@ use std::{
 
 use avalanche_types::key;
 use clap::{Parser, Subcommand};
+use ethers_core::types::transaction::eip712::Eip712;
 use jsonrpc_client_transports::{transports, RpcError};
 use jsonrpc_core::futures;
 use spacesvm::{
@@ -14,7 +15,7 @@ use spacesvm::{
         DecodeTxArgs, IssueTxArgs, IssueTxResponse, PingResponse, ResolveArgs, ResolveResponse,
         ServiceClient as Client,
     },
-    chain::tx::{decoder, tx::TransactionType, unsigned::TransactionData},
+    chain::tx::{tx::TransactionType, unsigned::TransactionData},
 };
 
 #[derive(Parser)]
@@ -167,8 +168,8 @@ async fn sign_and_submit(
 
     let typed_data = &resp.typed_data;
 
-    let dh = decoder::hash_structured_data(typed_data)?;
-    let sig = pk.sign_digest(&dh.as_bytes())?;
+    let dh = typed_data.struct_hash().unwrap();
+    let sig = pk.sign_digest(&dh)?;
 
     client
         .issue_tx(IssueTxArgs {

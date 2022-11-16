@@ -2,7 +2,10 @@ use std::sync::Arc;
 
 use crate::{
     api::*,
-    chain::{self, storage, tx::Transaction},
+    chain::{
+        self, storage,
+        tx::{decoder::parse_typed_data, Transaction},
+    },
     vm::inner::Inner,
 };
 
@@ -34,10 +37,7 @@ impl crate::api::Service for Service {
         Box::pin(async move {
             let mut inner = vm.write().await;
 
-            let unsigned_tx = params
-                .typed_data
-                .parse_typed_data()
-                .map_err(create_jsonrpc_error)?;
+            let unsigned_tx = parse_typed_data(&params.typed_data).map_err(create_jsonrpc_error)?;
 
             let mut tx = chain::tx::tx::Transaction::new(unsigned_tx, params.signature);
             tx.init().await.map_err(create_jsonrpc_error)?;

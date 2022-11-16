@@ -1,13 +1,15 @@
 use std::{
     collections::BTreeMap,
-    io::{Error, ErrorKind},
+    io::{Error, ErrorKind, Result},
+    str::FromStr,
 };
 
+use avalanche_types::ids;
 use ethers_core::types::transaction::eip712::{
     EIP712Domain, Eip712DomainType as Type, TypedData, Types,
 };
 
-use super::{tx::TransactionType, unsigned};
+use super::{base, claim, delete, set, tx::TransactionType, unsigned};
 
 pub const TD_STRING: &str = "string";
 pub const TD_U64: &str = "u64";
@@ -17,107 +19,7 @@ pub const TD_SPACE: &str = "space";
 pub const TD_KEY: &str = "key";
 pub const TD_VALUE: &str = "value";
 
-// pub type Type = eip_712::FieldType;
-// replaced by ethers_core
-// pub type Types = HashMap<String, Vec<Type>>;
-
 pub type TypedDataMessage = BTreeMap<String, jsonrpc_core::Value>;
-
-// // TypedDataDomain represents the domain part of an EIP-712 message.
-// #[derive(Deserialize, Serialize, Debug, Clone, Default)]
-// pub struct TypedDataDomain {
-//     pub name: String,
-//     pub magic: String,
-// }
-
-// #[derive(Debug, Clone)]
-// pub enum MessageValue {
-//     // TODO:combine?
-//     Vec(Vec<u8>),
-//     Bytes(Vec<u8>),
-// }
-
-// impl MessageValue {
-//     pub fn to_string(self) -> String {
-//         match self {
-//             MessageValue::Vec(v) => String::from_utf8_lossy(&v).to_string(),
-//             MessageValue::Bytes(v) => String::from_utf8_lossy(&v).to_string(),
-//         }
-//     }
-//     pub fn to_vec(self) -> Vec<u8> {
-//         match self {
-//             MessageValue::Vec(v) => v,
-//             MessageValue::Bytes(v) => v,
-//         }
-//     }
-// }
-
-// impl Serialize for MessageValue {
-//     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-//     where
-//         S: serde::Serializer,
-//     {
-//         match self {
-//             MessageValue::Vec(v) => serializer.serialize_str(&hex::encode(v)),
-//             MessageValue::Bytes(v) => {
-//                 serializer.serialize_str(format!("0x{}", &hex::encode(v)).as_str())
-//             }
-//         }
-//     }
-// }
-
-// impl<'de> Deserialize<'de> for MessageValue {
-//     fn deserialize<D: de::Deserializer<'de>>(
-//         deserializer: D,
-//     ) -> std::result::Result<Self, D::Error> {
-//         struct MessageValueVisitor;
-//         impl<'de> de::Visitor<'de> for MessageValueVisitor {
-//             type Value = MessageValue;
-
-//             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-//                 write!(formatter, "a potential or array of potentials")
-//             }
-
-//             fn visit_string<E: de::Error>(self, v: String) -> std::result::Result<Self::Value, E> {
-//                 if v.starts_with("0x") {
-//                     match hex::decode(&v[2..]) {
-//                         Ok(s) => Ok(MessageValue::Bytes(s)),
-//                         Err(e) => Err(E::custom(e.to_string())),
-//                     }
-//                 } else {
-//                     match hex::decode(v) {
-//                         Ok(s) => Ok(MessageValue::Vec(s)),
-//                         Err(e) => Err(E::custom(e.to_string())),
-//                     }
-//                 }
-//             }
-
-//             fn visit_str<E: de::Error>(self, v: &str) -> std::result::Result<Self::Value, E> {
-//                 if v.starts_with("0x") {
-//                     match hex::decode(&v[2..]) {
-//                         Ok(s) => Ok(MessageValue::Bytes(s)),
-//                         Err(e) => Err(E::custom(e.to_string())),
-//                     }
-//                 } else {
-//                     match hex::decode(v) {
-//                         Ok(s) => Ok(MessageValue::Vec(s)),
-//                         Err(e) => Err(E::custom(e.to_string())),
-//                     }
-//                 }
-//             }
-//         }
-
-//         deserializer.deserialize_any(MessageValueVisitor)
-//     }
-// }
-
-// #[derive(Serialize, Deserialize, Debug, Clone, Default)]
-// pub struct TypedData {
-//     pub types: Types,
-//     pub primary_type: TransactionType,
-//     pub domain: TypedDataDomain,
-//     pub message: TypedDataMessage,
-// }
 
 pub fn create_typed_data(
     tx_type: TransactionType,
@@ -155,121 +57,93 @@ pub fn create_typed_data(
     };
 }
 
-// impl TypedData {
-//     // Attempts to return the base tx from typed data.
-//     pub fn parse_base_tx(&self) -> Result<base::Tx> {
-//         let r_block_id = self
-//             .get_typed_message_vec(TD_BLOCK_ID.to_owned())
-//             .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
+// Attempts to return the base tx from typed data.
+pub fn parse_base_tx(typed_data: &TypedData) -> Result<base::Tx> {
+    if let Some(r_block_id) = typed_data.message.get(TD_BLOCK_ID) {
+        if let Some(id) = r_block_id.as_str() {
+            let block_id = ids::Id::from_str(id).map_err(|e| {
+                Error::new(
+                    ErrorKind::InvalidData,
+                    format!("failed to parse id from string: {}: {}", id, e),
+                )
+            })?;
+            return Ok(base::Tx { block_id });
+        }
+    }
 
-//         let block_id = ids::Id::from_slice(&r_block_id);
-
-//         Ok(base::Tx { block_id })
-//     }
+    Err(Error::new(
+        ErrorKind::InvalidData,
+        format!("invalid typed data: {}", TD_BLOCK_ID),
+    ))
+}
 
 // Attempts to return and unsigned transaction from typed data.
 pub fn parse_typed_data(
     typed_data: &TypedData,
 ) -> Result<Box<dyn unsigned::Transaction + Send + Sync>> {
-    let base_tx = self.parse_base_tx().map_err(|e| {
+    let base_tx = parse_base_tx(&typed_data).map_err(|e| {
         Error::new(
             ErrorKind::InvalidData,
             format!("failed to parse base tx: {:?}", e),
         )
     })?;
 
-    match self.primary_type {
-        TransactionType::Claim => {
-            let space = self
-                .get_typed_message(TD_SPACE.to_owned())
+    // each tx has space and key
+    let space = get_message_value(&typed_data.message, TD_SPACE.to_owned())
+        .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
+
+    let key = get_message_value(&typed_data.message, TD_SPACE.to_owned())
+        .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
+
+    match typed_data.primary_type.as_str() {
+        // claim tx
+        tx if tx == TransactionType::Claim.as_str() => Ok(Box::new(claim::Tx {
+            base_tx,
+            space: space.to_string(),
+        })),
+
+        // set tx
+        tx if tx == TransactionType::Set.as_str() => {
+            let value = get_message_value(&typed_data.message, TD_VALUE.to_owned())
                 .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
-            Ok(Box::new(claim::Tx { base_tx, space }))
+            if let Some(value_str) = value.as_str() {
+                return Ok(Box::new(set::Tx {
+                    base_tx,
+                    space: space.to_string(),
+                    key: key.to_string(),
+                    value: Vec::from(value_str),
+                }));
+            }
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                format!("invalid typed data: {}", TD_VALUE),
+            ));
         }
 
-        TransactionType::Set => {
-            let space = self
-                .get_typed_message(TD_SPACE.to_owned())
-                .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
-            let key = self
-                .get_typed_message(TD_KEY.to_owned())
-                .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
-            let value = self
-                .get_typed_message(TD_VALUE.to_owned())
-                .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
-            Ok(Box::new(set::Tx {
-                base_tx,
-                space,
-                key: key,
-                value: value.as_bytes().to_vec(),
-            }))
-        }
+        // delete tx
+        tx if tx == TransactionType::Delete.as_str() => Ok(Box::new(delete::Tx {
+            base_tx,
+            space: space.to_string(),
+            key: key.to_string(),
+        })),
 
-        TransactionType::Delete => {
-            let space = self
-                .get_typed_message(TD_SPACE.to_owned())
-                .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
-            let key = self
-                .get_typed_message(TD_KEY.to_owned())
-                .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
-            Ok(Box::new(delete::Tx {
-                base_tx,
-                space,
-                key: key,
-            }))
-        }
-        TransactionType::Unknown => Err(Error::new(
+        _ => Err(Error::new(
             ErrorKind::Other,
             "transaction type Unknown is not valid",
         )),
     }
 }
 
-//     pub fn get_typed_message(&self, key: String) -> Result<String> {
-//         match self.message.get(&key) {
-//             Some(value) => Ok(value.to_owned().to_string()),
-//             None => Err(Error::new(
-//                 ErrorKind::NotFound,
-//                 format!("typed data key missing: {:?}", key),
-//             )),
-//         }
-//     }
-
-//     pub fn get_typed_message_vec(&self, key: String) -> Result<Vec<u8>> {
-//         match self.message.get(&key) {
-//             Some(value) => Ok(value.to_owned().to_vec()),
-//             None => Err(Error::new(
-//                 ErrorKind::NotFound,
-//                 format!("typed data key missing: {:?}", key),
-//             )),
-//         }
-//     }
-// }
-
-// pub fn hash_structured_data(typed_data: &TypedData) -> Result<H256> {
-//     // EIP-191 compliant
-//     let error_handling = |e: eip_712::Error| Error::new(ErrorKind::Other, e.to_string());
-//     let prefix = (b"\x19\x01").to_vec();
-//     let domain = to_value(&typed_data.domain).unwrap();
-//     let message = to_value(&typed_data.message).unwrap();
-//     let (domain_hash, data_hash) = (
-//         eip_712::encode_data(
-//             &ParserType::Custom("EIP712Domain".into()),
-//             &typed_data.types,
-//             &domain,
-//             None,
-//         )
-//         .map_err(error_handling)?,
-//         eip_712::encode_data(
-//             &ParserType::Custom(typed_data.primary_type.to_string()),
-//             &typed_data.types,
-//             &message,
-//             None,
-//         )
-//         .map_err(error_handling)?,
-//     );
-//     let concat = [&prefix[..], &domain_hash[..], &data_hash[..]].concat();
-//     Ok(hash::keccak256(concat))
-// }
+/// Attempts to check for a key in the message map. If it exists return the value.
+pub fn get_message_value(message: &TypedDataMessage, key: String) -> Result<serde_json::Value> {
+    match message.get(&key) {
+        Some(value) => Ok(value.to_owned()),
+        None => Err(Error::new(
+            ErrorKind::NotFound,
+            format!("typed data key missing: {:?}", key),
+        )),
+    }
+}
 
 #[tokio::test]
 async fn signature_recovers() {

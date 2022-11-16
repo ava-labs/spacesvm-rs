@@ -5,6 +5,7 @@ use ethers_core::types::{
     transaction::eip712::{Eip712DomainType as Type, TypedData},
     H160,
 };
+
 use serde::{Deserialize, Serialize};
 
 use crate::chain::{
@@ -99,7 +100,10 @@ impl unsigned::Transaction for Tx {
         });
 
         let mut message = TypedDataMessage::new();
-        message.insert(TD_SPACE.to_owned(), serde_json::Value::String(self.space));
+        message.insert(
+            TD_SPACE.to_owned(),
+            serde_json::Value::String(self.space.clone()),
+        );
         message.insert(
             TD_BLOCK_ID.to_owned(),
             serde_json::Value::String(self.base_tx.block_id.to_string()),
