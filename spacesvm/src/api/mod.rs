@@ -1,13 +1,13 @@
 pub mod service;
 
 use avalanche_types::ids;
+use ethers_core::types::transaction::eip712::TypedData;
 use jsonrpc_core::{BoxFuture, Error, ErrorCode, Result};
 use jsonrpc_derive::rpc;
 use serde::{Deserialize, Serialize};
 
 use crate::chain::{
     storage::ValueMeta,
-    tx::decoder::TypedData,
     tx::{self},
 };
 

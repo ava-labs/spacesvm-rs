@@ -5,9 +5,8 @@ use std::{
 
 use avalanche_types::{ids::Id, subnet};
 use dyn_clone::DynClone;
+use ethers_core::types::{transaction::eip712::TypedData, Address};
 use serde::{Deserialize, Serialize};
-
-use crate::chain::tx::decoder::TypedData;
 
 use super::{base, claim, delete, set, tx::TransactionType};
 
@@ -30,7 +29,7 @@ pub struct TransactionContext {
     pub db: Box<dyn subnet::rpc::database::Database + Send + Sync>,
     pub block_time: u64,
     pub tx_id: Id,
-    pub sender: ethereum_types::Address,
+    pub sender: Address,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

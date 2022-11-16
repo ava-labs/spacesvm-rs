@@ -1,18 +1,14 @@
-use std::{
-    collections::HashMap,
-    io::{Error, ErrorKind, Result},
-};
+use std::io::{Error, ErrorKind, Result};
 
 use serde::{Deserialize, Serialize};
 
-use crate::chain::{
-    storage,
-    tx::decoder::{create_typed_data, MessageValue, Type, TypedData},
-};
+use crate::chain::{storage, tx::decoder::create_typed_data};
+
+use ethers_core::types::transaction::eip712::{Eip712DomainType as Type, TypedData};
 
 use super::{
     base,
-    decoder::{TD_BLOCK_ID, TD_KEY, TD_SPACE, TD_STRING},
+    decoder::{TypedDataMessage, TD_BLOCK_ID, TD_KEY, TD_SPACE, TD_STRING},
     tx::TransactionType,
     unsigned,
 };
@@ -96,29 +92,23 @@ impl unsigned::Transaction for Tx {
         let mut tx_fields: Vec<Type> = Vec::new();
         tx_fields.push(Type {
             name: TD_SPACE.to_owned(),
-            type_: TD_STRING.to_owned(),
+            r#type: TD_STRING.to_owned(),
         });
         tx_fields.push(Type {
             name: TD_BLOCK_ID.to_owned(),
-            type_: TD_STRING.to_owned(),
+            r#type: TD_STRING.to_owned(),
         });
         tx_fields.push(Type {
             name: TD_KEY.to_owned(),
-            type_: TD_STRING.to_owned(),
+            r#type: TD_STRING.to_owned(),
         });
 
-        let mut message: HashMap<String, MessageValue> = HashMap::with_capacity(1);
-        message.insert(
-            TD_SPACE.to_owned(),
-            MessageValue::Vec(self.space.as_bytes().to_vec()),
-        );
-        message.insert(
-            TD_KEY.to_owned(),
-            MessageValue::Vec(self.key.as_bytes().to_vec()),
-        );
+        let mut message = TypedDataMessage::new();
+        message.insert(TD_SPACE.to_owned(), serde_json::Value::String(self.space));
+        message.insert(TD_KEY.to_owned(), serde_json::Value::String(self.key));
         message.insert(
             TD_BLOCK_ID.to_owned(),
-            MessageValue::Vec(self.base_tx.block_id.to_vec()),
+            serde_json::Value::String(self.base_tx.block_id.to_string()),
         );
 
         return create_typed_data(super::tx::TransactionType::Delete, tx_fields, message);

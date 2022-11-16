@@ -4,7 +4,3 @@ members = [
     "tests/e2e",
     "spaces-cli",
 ]
-
-[patch.crates-io]
-# TODO: replace
-eip-712 = {git="https://github.com/darioush/EIP-712.git"}
