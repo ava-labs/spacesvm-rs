@@ -68,16 +68,12 @@ impl crate::chain::vm::Vm for ChainVm {
         let mut vm = self.inner.write().await;
 
         log::debug!("vm::submit store called");
-        storage::submit(&vm.state.clone(), &mut txs)
-            .await
-            .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+        storage::submit(&vm.state.clone(), &mut txs).await?;
 
         let mempool = &mut vm.mempool;
         log::debug!("vm::submit add to mempool");
         for tx in txs.iter_mut() {
-            let _ = mempool
-                .add(tx)
-                .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+            let _ = mempool.add(tx)?;
         }
         log::debug!("vm::submit complete");
 
@@ -92,10 +88,10 @@ impl crate::chain::vm::Vm for ChainVm {
         let vm = self.inner.read().await;
 
         if let Some(engine) = &vm.to_engine {
-            let _ = engine
+            engine
                 .send(subnet::rpc::common::message::Message::PendingTxs)
                 .await
-                .map_err(|e| log::warn!("dropping message to consensus engine: {}", e.to_string()));
+                .unwrap_or_else(|e| log::warn!("dropping message to consensus engine: {}", e));
         } else {
             log::error!("consensus engine channel failed to initialized");
         }
