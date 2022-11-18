@@ -68,14 +68,12 @@ impl crate::chain::vm::Vm for ChainVm {
         let mut vm = self.inner.write().await;
 
         log::debug!("vm::submit store called");
-        storage::submit(&vm.state.clone(), &mut txs)
-            .await?;
+        storage::submit(&vm.state.clone(), &mut txs).await?;
 
         let mempool = &mut vm.mempool;
         log::debug!("vm::submit add to mempool");
         for tx in txs.iter_mut() {
-            let _ = mempool
-                .add(tx)?;
+            let _ = mempool.add(tx)?;
         }
         log::debug!("vm::submit complete");
 
