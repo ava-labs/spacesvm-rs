@@ -155,25 +155,6 @@ pub fn delete_tx(space: String, key: String) -> TransactionData {
     }
 }
 
-#[tokio::test]
-async fn test_raw_request() {
-    let _ = env_logger::builder()
-        .filter_level(log::LevelFilter::Info)
-        .is_test(true)
-        .try_init();
-
-    let mut cli = Client::new(Uri::from_static("http://test.url"));
-    let params: Params = serde_json::from_str("{}").unwrap();
-    let (id, _) = cli.raw_request("ping", &params);
-    assert_eq!(id, jsonrpc_core::Id::Num(0));
-    let (id, req) = cli.raw_request("ping", &params);
-    assert_eq!(id, jsonrpc_core::Id::Num(1));
-    assert_eq!(
-        req,
-        r#"{"jsonrpc":"2.0","method":"ping","params":{},"id":1}"#
-    );
-}
-
 /// Returns a private key from a given path or creates new.
 pub fn get_or_create_pk(path: &str) -> Result<key::secp256k1::private_key::Key> {
     if !Path::new(path).try_exists()? {
@@ -189,4 +170,18 @@ pub fn get_or_create_pk(path: &str) -> Result<key::secp256k1::private_key::Key> 
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
     key::secp256k1::private_key::Key::from_bytes(&parsed)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+}
+
+#[tokio::test]
+async fn test_raw_request() {
+    let mut cli = Client::new(Uri::from_static("http://test.url"));
+    let params: Params = serde_json::from_str("{}").unwrap();
+    let (id, _) = cli.raw_request("ping", &params);
+    assert_eq!(id, jsonrpc_core::Id::Num(0));
+    let (id, req) = cli.raw_request("ping", &params);
+    assert_eq!(id, jsonrpc_core::Id::Num(1));
+    assert_eq!(
+        req,
+        r#"{"jsonrpc":"2.0","method":"ping","params":{},"id":1}"#
+    );
 }
