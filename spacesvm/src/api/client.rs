@@ -19,6 +19,7 @@ use serde::de;
 
 pub use http::Uri;
 
+/// HTTP client for interacting with the API, assumes single threaded use.
 pub struct Client<C> {
     id: u64,
     client: HyperClient<C>,
