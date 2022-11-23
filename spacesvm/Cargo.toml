@@ -49,3 +49,7 @@ typetag = "0.2"
 [dev-dependencies] 
 jsonrpc-tcp-server = "18.0.0"
 futures-test = "0.3.24"
+
+[[test]]
+name = "integration"
+path = "tests/integration_tests.rs"

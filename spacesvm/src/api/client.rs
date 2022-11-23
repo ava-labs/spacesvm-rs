@@ -56,8 +56,7 @@ impl Client<HttpConnector> {
 
     /// Returns a PingResponse from client request.
     pub async fn ping(&mut self) -> Result<PingResponse> {
-        let params: Params = serde_json::from_str("{}")?;
-        let (_id, json_request) = self.raw_request("ping", &params);
+        let (_id, json_request) = self.raw_request("ping", &Params::None);
         let resp = self.post_de::<PingResponse>(&json_request).await?;
 
         Ok(resp)
@@ -175,10 +174,9 @@ pub fn get_or_create_pk(path: &str) -> Result<key::secp256k1::private_key::Key> 
 #[tokio::test]
 async fn test_raw_request() {
     let mut cli = Client::new(Uri::from_static("http://test.url"));
-    let params: Params = serde_json::from_str("{}").unwrap();
-    let (id, _) = cli.raw_request("ping", &params);
+    let (id, _) = cli.raw_request("ping", &Params::None);
     assert_eq!(id, jsonrpc_core::Id::Num(0));
-    let (id, req) = cli.raw_request("ping", &params);
+    let (id, req) = cli.raw_request("ping", &Params::None);
     assert_eq!(id, jsonrpc_core::Id::Num(1));
     assert_eq!(
         req,

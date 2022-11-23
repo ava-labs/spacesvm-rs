@@ -34,7 +34,7 @@ pub struct TypedDataDomain {
 
 pub fn mini_kvvm_domain(_m: u64) -> TypedDataDomain {
     TypedDataDomain {
-        name: "MiniKvvm".to_string(),
+        name: "SpacesVm".to_string(),
         magic: "0x00".to_string(), // radix(m, 10).to_string(),
     }
 }
