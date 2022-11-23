@@ -1,3 +1,4 @@
+pub mod client;
 pub mod service;
 
 use avalanche_types::ids;

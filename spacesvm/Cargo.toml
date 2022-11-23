@@ -15,7 +15,7 @@ name = "spacesvm"
 path = "src/bin/spaces/main.rs"
 
 [dependencies]
-avalanche-types = { version = "0.0.138", features = ["subnet"] }
+avalanche-types = { version = "0.0.140", features = ["subnet"] }
 byteorder = "1.4.3"
 chrono = "0.4.22"
 crossbeam-channel = "0.5.6"
@@ -27,6 +27,7 @@ eip-712 = "0.1.0"
 env_logger = "0.9.3"
 hex = "0.4.3"
 http = "0.2.8"
+hyper = "0.14.23"
 jsonrpc-core = "18.0.0"
 jsonrpc-core-client = { version = "18.0.0" }
 jsonrpc-derive = "18.0"
