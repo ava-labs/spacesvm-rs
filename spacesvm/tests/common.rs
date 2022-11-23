@@ -1,6 +1,4 @@
-use std::{
-    io::{Error, ErrorKind},
-};
+use std::io::{Error, ErrorKind};
 
 use avalanche_types::{
     self,

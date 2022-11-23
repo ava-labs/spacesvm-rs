@@ -2,7 +2,10 @@ pub mod client;
 
 use avalanche_types::{ids, subnet::rpc::utils};
 use jsonrpc_core::Params;
-use spacesvm::{vm::{self, PUBLIC_API_ENDPOINT}, api::{DecodeTxArgs, client::claim_tx}};
+use spacesvm::{
+    api::{client::claim_tx, DecodeTxArgs},
+    vm::{self, PUBLIC_API_ENDPOINT},
+};
 use std::io::{Error, ErrorKind};
 use tokio::{
     sync::{
@@ -123,15 +126,12 @@ async fn test_api() {
     // curl or postman.
     log::info!("sending http request over grpc");
     let mut http_client = avalanche_types::subnet::rpc::http::client::Client::new(client_conn);
-    let resp = http_client
-        .serve_http_simple(req)
-        .await
-        .map_err(|e| {
-            Error::new(
-                ErrorKind::Other,
-                format!("failed to initialize vm: {:?}", e),
-            )
-        });
+    let resp = http_client.serve_http_simple(req).await.map_err(|e| {
+        Error::new(
+            ErrorKind::Other,
+            format!("failed to initialize vm: {:?}", e),
+        )
+    });
 
     assert!(resp.is_ok());
     let resp = resp.unwrap();
@@ -139,21 +139,18 @@ async fn test_api() {
     log::info!("ping response {}", body);
 
     let tx_data = claim_tx("test_claim".to_owned());
-    let arg_bytes = serde_json::to_value(&DecodeTxArgs{tx_data}).unwrap();
+    let arg_bytes = serde_json::to_value(&DecodeTxArgs { tx_data }).unwrap();
 
     let (_id, json_str) = client.raw_request("decodeTx", &Params::Array(vec![arg_bytes]));
     let req = http::request::Builder::new()
         .body(json_str.as_bytes().to_vec())
         .unwrap();
-    let resp = http_client
-        .serve_http_simple(req)
-        .await
-        .map_err(|e| {
-            Error::new(
-                ErrorKind::Other,
-                format!("failed to initialize vm: {:?}", e),
-            )
-        });
+    let resp = http_client.serve_http_simple(req).await.map_err(|e| {
+        Error::new(
+            ErrorKind::Other,
+            format!("failed to initialize vm: {:?}", e),
+        )
+    });
     assert!(resp.is_ok());
     let resp = resp.unwrap();
     let body = std::str::from_utf8(&resp.body()).unwrap();
