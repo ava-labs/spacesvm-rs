@@ -15,9 +15,7 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn new(
-        client_conn: Channel,
-    ) -> Box<dyn subnet::rpc::common::vm::Vm + Send + Sync> {
+    pub fn new(client_conn: Channel) -> Box<dyn subnet::rpc::common::vm::Vm + Send + Sync> {
         // Initialize broadcast stop channel used to terminate gRPC servers during shutdown.
         let (stop_ch, _): (
             tokio::sync::broadcast::Sender<()>,
@@ -36,17 +34,13 @@ impl subnet::rpc::common::vm::Vm for Client {
     async fn initialize(
         &mut self,
         _ctx: Option<subnet::rpc::context::Context>,
-        _db_manager: Box<
-            dyn subnet::rpc::database::manager::Manager + Send + Sync,
-        >,
+        _db_manager: Box<dyn subnet::rpc::database::manager::Manager + Send + Sync>,
         genesis_bytes: &[u8],
         _upgrade_bytes: &[u8],
         _config_bytes: &[u8],
         _to_engine: mpsc::Sender<subnet::rpc::common::message::Message>,
         _fxs: &[subnet::rpc::common::vm::Fx],
-        _app_sender: Box<
-            dyn subnet::rpc::common::appsender::AppSender + Send + Sync,
-        >,
+        _app_sender: Box<dyn subnet::rpc::common::appsender::AppSender + Send + Sync>,
     ) -> Result<()> {
         // memdb wrapped in rpcdb
         let db = subnet::rpc::database::rpcdb::server::Server::new(
@@ -111,8 +105,7 @@ impl subnet::rpc::common::vm::Vm for Client {
 
     async fn create_static_handlers(
         &mut self,
-    ) -> Result<HashMap<String, subnet::rpc::common::http_handler::HttpHandler>>
-    {
+    ) -> Result<HashMap<String, subnet::rpc::common::http_handler::HttpHandler>> {
         let resp = self
             .inner
             .create_static_handlers(proto::google::protobuf::Empty {})
@@ -126,17 +119,13 @@ impl subnet::rpc::common::vm::Vm for Client {
 
         let resp = resp.into_inner();
 
-        let mut http_handler: HashMap<
-            String,
-            subnet::rpc::common::http_handler::HttpHandler,
-        > = HashMap::new();
+        let mut http_handler: HashMap<String, subnet::rpc::common::http_handler::HttpHandler> =
+            HashMap::new();
 
         for h in resp.handlers.iter() {
             let lock_option =
-                subnet::rpc::common::http_handler::LockOptions::try_from(
-                    h.lock_options,
-                )
-                .map_err(|_| Error::new(ErrorKind::Other, "invalid lock option"))?;
+                subnet::rpc::common::http_handler::LockOptions::try_from(h.lock_options)
+                    .map_err(|_| Error::new(ErrorKind::Other, "invalid lock option"))?;
             http_handler.insert(
                 h.prefix.clone(),
                 subnet::rpc::common::http_handler::HttpHandler {
@@ -152,8 +141,7 @@ impl subnet::rpc::common::vm::Vm for Client {
 
     async fn create_handlers(
         &mut self,
-    ) -> Result<HashMap<String, subnet::rpc::common::http_handler::HttpHandler>>
-    {
+    ) -> Result<HashMap<String, subnet::rpc::common::http_handler::HttpHandler>> {
         let resp = self
             .inner
             .create_handlers(proto::google::protobuf::Empty {})
@@ -167,17 +155,13 @@ impl subnet::rpc::common::vm::Vm for Client {
 
         let resp = resp.into_inner();
 
-        let mut http_handler: HashMap<
-            String,
-            subnet::rpc::common::http_handler::HttpHandler,
-        > = HashMap::new();
+        let mut http_handler: HashMap<String, subnet::rpc::common::http_handler::HttpHandler> =
+            HashMap::new();
 
         for h in resp.handlers.iter() {
             let lock_option =
-                subnet::rpc::common::http_handler::LockOptions::try_from(
-                    h.lock_options,
-                )
-                .map_err(|_| Error::new(ErrorKind::Other, "invalid lock option"))?;
+                subnet::rpc::common::http_handler::LockOptions::try_from(h.lock_options)
+                    .map_err(|_| Error::new(ErrorKind::Other, "invalid lock option"))?;
             http_handler.insert(
                 h.prefix.clone(),
                 subnet::rpc::common::http_handler::HttpHandler {
