@@ -180,6 +180,6 @@ async fn test_raw_request() {
     assert_eq!(id, jsonrpc_core::Id::Num(1));
     assert_eq!(
         req,
-        r#"{"jsonrpc":"2.0","method":"ping","params":{},"id":1}"#
+        r#"{"jsonrpc":"2.0","method":"ping","params":null,"id":1}"#
     );
 }
