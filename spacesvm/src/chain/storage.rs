@@ -348,7 +348,7 @@ async fn test_raw_space() {
 #[tokio::test]
 async fn test_space_info_rt() {
     use super::tx::claim::Info;
-    use ethereum_types::H160;
+    use ethers_core::types::H160;
 
     env_logger::init_from_env(
         env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "debug"),

@@ -1,19 +1,20 @@
 use std::{
-    collections::HashMap,
-    io::{Error, ErrorKind},
+    io::{Error, ErrorKind, Result},
+    str::from_utf8,
 };
 
+use ethers_core::types::transaction::eip712::{Eip712DomainType as Type, TypedData};
 use serde::{Deserialize, Serialize};
 use sha3::Digest;
 
 use crate::chain::{
     storage::{self, get_space_info, put_space_info, put_space_key, ValueMeta},
-    tx::decoder::{create_typed_data, MessageValue, Type, TypedData},
+    tx::decoder::create_typed_data,
 };
 
 use super::{
     base,
-    decoder::{TD_BLOCK_ID, TD_BYTES, TD_KEY, TD_SPACE, TD_STRING, TD_VALUE},
+    decoder::{TypedDataMessage, TD_BLOCK_ID, TD_KEY, TD_SPACE, TD_STRING, TD_VALUE},
     tx::TransactionType,
     unsigned::{self},
 };
@@ -138,44 +139,56 @@ impl unsigned::Transaction for Tx {
         Ok(())
     }
 
-    async fn typed_data(&self) -> TypedData {
+    async fn typed_data(&self) -> Result<TypedData> {
         let mut tx_fields: Vec<Type> = vec![];
         tx_fields.push(Type {
             name: TD_SPACE.to_owned(),
-            type_: TD_STRING.to_owned(),
+            r#type: TD_STRING.to_owned(),
         });
         tx_fields.push(Type {
             name: TD_KEY.to_owned(),
-            type_: TD_STRING.to_owned(),
+            r#type: TD_STRING.to_owned(),
         });
         tx_fields.push(Type {
             name: TD_VALUE.to_owned(),
-            type_: TD_BYTES.to_owned(),
+            r#type: TD_STRING.to_owned(),
         });
         tx_fields.push(Type {
             name: TD_BLOCK_ID.to_owned(),
-            type_: TD_STRING.to_owned(),
+            r#type: TD_STRING.to_owned(),
         });
 
-        let mut message = HashMap::with_capacity(3);
+        let mut message = TypedDataMessage::new();
         message.insert(
             TD_SPACE.to_owned(),
-            MessageValue::Vec(self.space.as_bytes().to_vec()),
+            serde_json::Value::String(self.space.clone()),
         );
         message.insert(
             TD_KEY.to_owned(),
-            MessageValue::Vec(self.key.as_bytes().to_vec()),
+            serde_json::Value::String(self.key.clone()),
         );
+
+        let value_str = from_utf8(&self.value).map_err(|e| {
+            Error::new(
+                ErrorKind::InvalidData,
+                format!("failed to convert value to string: {}", e),
+            )
+        })?;
+
         message.insert(
             TD_VALUE.to_owned(),
-            MessageValue::Bytes(self.value.to_vec()),
+            serde_json::Value::String(value_str.to_owned()),
         );
         message.insert(
             TD_BLOCK_ID.to_owned(),
-            MessageValue::Vec(self.base_tx.block_id.to_vec()),
+            serde_json::Value::String(self.base_tx.block_id.to_string()),
         );
 
-        return create_typed_data(super::tx::TransactionType::Set, tx_fields, message);
+        Ok(create_typed_data(
+            super::tx::TransactionType::Set,
+            tx_fields,
+            message,
+        ))
     }
 }
 
@@ -189,6 +202,7 @@ fn value_hash(value: &[u8]) -> String {
 #[tokio::test]
 async fn set_tx_test() {
     use super::unsigned::Transaction;
+    use ethers_core::types::Address;
     use std::str::FromStr;
 
     // set tx space not found
@@ -197,7 +211,7 @@ async fn set_tx_test() {
         db,
         block_time: 0,
         tx_id: avalanche_types::ids::Id::empty(),
-        sender: ethereum_types::Address::zero(),
+        sender: Address::zero(),
     };
     let tx = Tx {
         base_tx: base::Tx::default(),
@@ -214,7 +228,7 @@ async fn set_tx_test() {
         db: db.clone(),
         block_time: 0,
         tx_id: avalanche_types::ids::Id::empty(),
-        sender: ethereum_types::Address::zero(),
+        sender: Address::zero(),
     };
     let tx = crate::chain::tx::claim::Tx {
         base_tx: base::Tx::default(),
@@ -224,8 +238,7 @@ async fn set_tx_test() {
     assert!(resp.is_ok());
 
     // try to update key from a different sender
-    let other_account =
-        ethereum_types::Address::from_str("0000000000000000000000000000000000000001").unwrap();
+    let other_account = Address::from_str("0000000000000000000000000000000000000001").unwrap();
     let ut_ctx = unsigned::TransactionContext {
         db: db.clone(),
         block_time: 0,
@@ -246,7 +259,7 @@ async fn set_tx_test() {
         db: db.clone(),
         block_time: 0,
         tx_id: avalanche_types::ids::Id::empty(),
-        sender: ethereum_types::Address::zero(),
+        sender: Address::zero(),
     };
     let tx = Tx {
         base_tx: base::Tx::default(),
@@ -261,7 +274,7 @@ async fn set_tx_test() {
         db: db.clone(),
         block_time: 0,
         tx_id: avalanche_types::ids::Id::empty(),
-        sender: ethereum_types::Address::zero(),
+        sender: Address::zero(),
     };
     let tx = Tx {
         base_tx: base::Tx::default(),

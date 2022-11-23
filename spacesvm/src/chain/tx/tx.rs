@@ -4,12 +4,12 @@ use std::{
 };
 
 use avalanche_types::{hash, ids, key, subnet};
-use ethereum_types::Address;
+use ethers_core::types::{transaction::eip712::Eip712, Address, H160};
 use serde::{Deserialize, Serialize};
 
 use crate::{block::Block, chain::storage::set_transaction};
 
-use super::{decoder, unsigned::TransactionContext};
+use super::unsigned::TransactionContext;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(tag = "type")]
@@ -30,6 +30,17 @@ impl Default for TransactionType {
     }
 }
 
+impl TransactionType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            TransactionType::Claim => "claim",
+            TransactionType::Set => "set",
+            TransactionType::Delete => "delete",
+            TransactionType::Unknown => "unknown",
+        }
+    }
+}
+
 impl fmt::Display for TransactionType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -47,7 +58,7 @@ pub struct Transaction {
     pub signature: Vec<u8>,
 
     #[serde(skip)]
-    pub digest_hash: Vec<u8>,
+    pub digest_hash: [u8; 32],
 
     #[serde(skip)]
     pub bytes: Vec<u8>,
@@ -70,7 +81,7 @@ impl Transaction {
         Self {
             unsigned_transaction,
             signature,
-            digest_hash: vec![],
+            digest_hash: [0; 32],
             bytes: vec![],
             id: ids::Id::empty(),
             size: 0,
@@ -86,18 +97,21 @@ impl crate::chain::tx::Transaction for Transaction {
         let stx =
             serde_json::to_vec(&self).map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
-        let typed_data = &self.unsigned_transaction.typed_data().await;
-        let digest_hash = decoder::hash_structured_data(typed_data)?;
+        let typed_data = &self.unsigned_transaction.typed_data().await?;
+        let digest_hash = typed_data.struct_hash().map_err(|e| {
+            Error::new(
+                ErrorKind::Other,
+                format!("failed to hash typed data: {}", e),
+            )
+        })?;
 
-        let sender = key::secp256k1::public_key::Key::from_signature(
-            digest_hash.as_bytes(),
-            &self.signature,
-        )?;
+        let sender =
+            key::secp256k1::public_key::Key::from_signature(&digest_hash, &self.signature)?;
         self.bytes = stx;
         self.id = ids::Id::from_slice(hash::keccak256(&self.bytes).as_bytes());
         self.size = self.bytes.len() as u64;
-        self.digest_hash = digest_hash.as_bytes().to_vec();
-        self.sender = sender.to_h160();
+        self.digest_hash = digest_hash;
+        self.sender = H160::from(sender.to_h160().as_fixed_bytes());
 
         Ok(())
     }
@@ -151,7 +165,7 @@ pub fn new_tx(
         signature,
 
         // defaults
-        digest_hash: vec![],
+        digest_hash: [0; 32],
         bytes: vec![],
         id: ids::Id::empty(),
         size: 0,

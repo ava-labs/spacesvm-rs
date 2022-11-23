@@ -11,6 +11,7 @@ homepage = "https://avax.network"
 [dependencies]
 avalanche-types = { version = "0.0.138", features = ["subnet"] }
 clap = { version = "4.0", features = ["derive"] }
+ethers-core = { version = "1.0.0", default-features = false, features = ["eip712", "macros"] }
 hex = "0.4.3"
 jsonrpc-core = "18.0.0"
 jsonrpc-core-client = { version = "18.0.0" }

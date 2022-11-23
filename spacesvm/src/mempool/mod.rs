@@ -254,7 +254,8 @@ impl Mempool {
 
 #[tokio::test]
 async fn test_mempool() {
-    use crate::chain::tx::{decoder, tx::TransactionType, unsigned};
+    use crate::chain::tx::{tx::TransactionType, unsigned};
+    use ethers_core::types::transaction::eip712::Eip712;
 
     // init mempool
     let mempool = Mempool::new(10);
@@ -271,8 +272,9 @@ async fn test_mempool() {
     assert!(resp.is_ok());
     let utx_1 = resp.unwrap();
     let secret_key = avalanche_types::key::secp256k1::private_key::Key::generate().unwrap();
-    let dh_1 = decoder::hash_structured_data(&utx_1.typed_data().await).unwrap();
-    let sig_1 = secret_key.sign_digest(dh_1.as_bytes()).unwrap();
+    let typed_data = utx_1.typed_data().await.unwrap();
+    let dh_1 = typed_data.struct_hash().unwrap();
+    let sig_1 = secret_key.sign_digest(&dh_1).unwrap();
     let tx_1 = Transaction::new(utx_1, sig_1.to_bytes().to_vec());
 
     // add tx_1 to mempool
@@ -296,8 +298,9 @@ async fn test_mempool() {
     let resp = tx_data_2.decode();
     assert!(resp.is_ok());
     let utx_2 = resp.unwrap();
-    let dh_2 = decoder::hash_structured_data(&utx_2.typed_data().await).unwrap();
-    let sig_2 = secret_key.sign_digest(dh_2.as_bytes()).unwrap();
+    let typed_data = utx_2.typed_data().await.unwrap();
+    let dh_2 = typed_data.struct_hash().unwrap();
+    let sig_2 = secret_key.sign_digest(&dh_2).unwrap();
     let mut tx_2 = Transaction::new(utx_2, sig_2.to_bytes().to_vec());
     tx_2.id = ids::Id::from_slice("sup".as_bytes());
 
@@ -323,7 +326,8 @@ async fn test_mempool() {
 
 #[tokio::test]
 async fn test_mempool_threads() {
-    use crate::chain::tx::{decoder, tx::TransactionType, unsigned};
+    use crate::chain::tx::{tx::TransactionType, unsigned};
+    use ethers_core::types::transaction::eip712::Eip712;
     use tokio::time::sleep;
 
     let vm = crate::vm::ChainVm::new();
@@ -341,8 +345,9 @@ async fn test_mempool_threads() {
         assert!(resp.is_ok());
         let utx = resp.unwrap();
         let secret_key = avalanche_types::key::secp256k1::private_key::Key::generate().unwrap();
-        let dh = decoder::hash_structured_data(&utx.typed_data().await).unwrap();
-        let sig = secret_key.sign_digest(&dh.as_bytes()).unwrap();
+        let typed_data = utx.typed_data().await.unwrap();
+        let dh = typed_data.struct_hash().unwrap();
+        let sig = secret_key.sign_digest(&dh).unwrap();
         let tx = Transaction::new(utx, sig.to_bytes().to_vec());
 
         // add tx to mempool
