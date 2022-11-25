@@ -139,9 +139,10 @@ async fn test_api() {
     log::info!("ping response {}", body);
 
     let tx_data = claim_tx("test_claim".to_owned());
-    let arg_bytes = serde_json::to_value(&DecodeTxArgs { tx_data }).unwrap();
+    let arg_value = serde_json::to_value(&DecodeTxArgs { tx_data }).unwrap();
 
-    let (_id, json_str) = client.raw_request("decodeTx", &Params::Array(vec![arg_bytes]));
+    let (_id, json_str) = client.raw_request("decodeTx", &Params::Array(vec![arg_value]));
+    log::info!("decodeTx request: {}", json_str);
     let req = http::request::Builder::new()
         .body(json_str.as_bytes().to_vec())
         .unwrap();

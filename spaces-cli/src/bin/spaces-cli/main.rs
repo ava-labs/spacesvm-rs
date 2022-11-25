@@ -3,11 +3,8 @@ use std::error;
 use clap::{Parser, Subcommand};
 use jsonrpc_core::futures;
 use spacesvm::{
-    api::{
-        client::{claim_tx, delete_tx, get_or_create_pk, set_tx, Client, Uri},
-        DecodeTxArgs, IssueTxArgs, ResolveArgs,
-    },
-    chain::tx::{decoder, unsigned::TransactionData},
+    api::client::{claim_tx, delete_tx, get_or_create_pk, set_tx, Client, Uri},
+    chain::tx::unsigned::TransactionData,
 };
 
 #[derive(Subcommand, Debug)]
@@ -47,20 +44,16 @@ struct Cli {
     command: Command,
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn error::Error>> {
+fn main() -> Result<(), Box<dyn error::Error>> {
     let cli = Cli::parse();
 
-    let secret_key = get_or_create_pk(&cli.private_key_file)?;
+    let private_key = get_or_create_pk(&cli.private_key_file)?;
     let uri = cli.endpoint.parse::<Uri>()?;
-    let mut client = Client::new(uri);
+    let mut client = Client::new(uri).set_private_key(private_key);
 
     if let Command::Get { space, key } = &cli.command {
-        let resp = futures::executor::block_on(client.resolve(ResolveArgs {
-            space: space.as_bytes().to_vec(),
-            key: key.as_bytes().to_vec(),
-        }))
-        .map_err(|e| e.to_string())?;
+        let resp =
+            futures::executor::block_on(client.resolve(space, key)).map_err(|e| e.to_string())?;
         log::debug!("resolve response: {:?}", resp);
 
         println!("{}", serde_json::to_string(&resp)?);
@@ -76,21 +69,13 @@ async fn main() -> Result<(), Box<dyn error::Error>> {
 
     // decode tx
     let tx_data = command_to_tx(cli.command)?;
-    let resp = futures::executor::block_on(client.decode_tx(DecodeTxArgs { tx_data }))
-        .map_err(|e| e.to_string())?;
+    let resp = futures::executor::block_on(client.decode_tx(tx_data)).map_err(|e| e.to_string())?;
 
     let typed_data = &resp.typed_data;
 
-    // create signature
-    let dh = decoder::hash_structured_data(typed_data)?;
-    let sig = secret_key.sign_digest(&dh.as_bytes())?;
-
     // issue tx
-    let resp = futures::executor::block_on(client.issue_tx(IssueTxArgs {
-        typed_data: resp.typed_data,
-        signature: sig.to_bytes().to_vec(),
-    }))
-    .map_err(|e| e.to_string())?;
+    let resp =
+        futures::executor::block_on(client.issue_tx(typed_data)).map_err(|e| e.to_string())?;
     println!("{}", serde_json::to_string(&resp)?);
 
     Ok(())

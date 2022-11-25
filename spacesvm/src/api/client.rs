@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::{Result, Write},
+    io::{Error, ErrorKind, Result, Write},
     path::Path,
 };
 
@@ -9,12 +9,19 @@ use crate::{
         DecodeTxArgs, DecodeTxResponse, IssueTxArgs, IssueTxResponse, PingResponse, ResolveArgs,
         ResolveResponse,
     },
-    chain::tx::{tx::TransactionType, unsigned::TransactionData},
+    chain::tx::{
+        decoder::{self, TypedData},
+        tx::TransactionType,
+        unsigned::TransactionData,
+    },
 };
-use avalanche_types::key;
+use avalanche_types::key::{
+    self,
+    secp256k1::{private_key::Key, signature::Sig},
+};
 use http::{Method, Request};
 use hyper::{body, client::HttpConnector, Body, Client as HyperClient};
-use jsonrpc_core::{Call, Id, MethodCall, Params, Version};
+use jsonrpc_core::{Call, Id, MethodCall, Params, Value, Version};
 use serde::de;
 
 pub use http::Uri;
@@ -23,13 +30,19 @@ pub use http::Uri;
 pub struct Client<C> {
     id: u64,
     client: HyperClient<C>,
-    pub uri: Uri,
+    endpoint: Uri,
+    private_key: Option<Key>,
 }
 
 impl Client<HttpConnector> {
-    pub fn new(uri: Uri) -> Self {
+    pub fn new(endpoint: Uri) -> Self {
         let client = HyperClient::new();
-        Self { id: 0, client, uri }
+        Self {
+            id: 0,
+            client,
+            endpoint,
+            private_key: None,
+        }
     }
 }
 
@@ -38,6 +51,16 @@ impl Client<HttpConnector> {
         let id = self.id;
         self.id = id + 1;
         Id::Num(id)
+    }
+
+    pub fn set_endpoint(mut self, endpoint: Uri) -> Self {
+        self.endpoint = endpoint;
+        self
+    }
+
+    pub fn set_private_key(mut self, private_key: Key) -> Self {
+        self.private_key = Some(private_key);
+        self
     }
 
     /// Returns a serialized json request as string and the request id.
@@ -55,6 +78,14 @@ impl Client<HttpConnector> {
         )
     }
 
+    /// Returns a recoverable signature from bytes.
+    pub fn sign_digest(&self, dh: &[u8]) -> Result<Sig> {
+        if let Some(pk) = &self.private_key {
+            pk.sign_digest(dh)?;
+        }
+        Err(Error::new(ErrorKind::Other, "private key not set"))
+    }
+
     /// Returns a PingResponse from client request.
     pub async fn ping(&mut self) -> Result<PingResponse> {
         let (_id, json_request) = self.raw_request("ping", &Params::None);
@@ -64,30 +95,37 @@ impl Client<HttpConnector> {
     }
 
     /// Returns a DecodeTxResponse from client request.
-    pub async fn decode_tx(&mut self, args: DecodeTxArgs) -> Result<DecodeTxResponse> {
-        let arg_bytes = serde_json::to_vec(&args)?;
-        let params: Params = serde_json::from_slice(&arg_bytes)?;
-        let (_id, json_request) = self.raw_request("decodeTx", &params);
+    pub async fn decode_tx(&mut self, tx_data: TransactionData) -> Result<DecodeTxResponse> {
+        let arg_value = serde_json::to_value(&DecodeTxArgs { tx_data })?;
+        let (_id, json_request) = self.raw_request("decodeTx", &Params::Array(vec![arg_value]));
         let resp = self.post_de::<DecodeTxResponse>(&json_request).await?;
 
         Ok(resp)
     }
 
     /// Returns a IssueTxResponse from client request.
-    pub async fn issue_tx(&mut self, args: IssueTxArgs) -> Result<IssueTxResponse> {
-        let arg_bytes = serde_json::to_vec(&args)?;
-        let params: Params = serde_json::from_slice(&arg_bytes)?;
-        let (_id, json_request) = self.raw_request("issueTx", &params);
+    pub async fn issue_tx(&mut self, typed_data: &TypedData) -> Result<IssueTxResponse> {
+        let dh = decoder::hash_structured_data(typed_data)?;
+        let sig = self.sign_digest(&dh.as_bytes())?.to_bytes().to_vec();
+        log::debug!("signature: {:?}", sig);
+
+        let arg_value = serde_json::to_value(&IssueTxArgs {
+            typed_data: typed_data.to_owned(),
+            signature: sig,
+        })?;
+        let (_id, json_request) = self.raw_request("issueTx", &Params::Array(vec![arg_value]));
         let resp = self.post_de::<IssueTxResponse>(&json_request).await?;
 
         Ok(resp)
     }
 
     /// Returns a ResolveResponse from client request.
-    pub async fn resolve(&mut self, args: ResolveArgs) -> Result<ResolveResponse> {
-        let arg_bytes = serde_json::to_vec(&args)?;
-        let params: Params = serde_json::from_slice(&arg_bytes)?;
-        let (_id, json_request) = self.raw_request("resolve", &params);
+    pub async fn resolve(&mut self, space: &str, key: &str) -> Result<ResolveResponse> {
+        let arg_value = serde_json::to_value(&ResolveArgs {
+            space: space.as_bytes().to_vec(),
+            key: key.as_bytes().to_vec(),
+        })?;
+        let (_id, json_request) = self.raw_request("issueTx", &Params::Array(vec![arg_value]));
         let resp = self.post_de::<ResolveResponse>(&json_request).await?;
 
         Ok(resp)
@@ -95,9 +133,10 @@ impl Client<HttpConnector> {
 
     /// Returns a deserialized response from client request.
     pub async fn post_de<T: de::DeserializeOwned>(&self, json: &str) -> Result<T> {
+        println!("json: {}", json);
         let req = Request::builder()
             .method(Method::POST)
-            .uri(self.uri.to_string())
+            .uri(self.endpoint.to_string())
             .header("content-type", "application/json-rpc")
             .body(Body::from(json.to_owned()))
             .map_err(|e| {
@@ -107,20 +146,30 @@ impl Client<HttpConnector> {
                 )
             })?;
 
-        let resp = self.client.request(req).await.map_err(|e| {
+        let mut resp = self.client.request(req).await.map_err(|e| {
             std::io::Error::new(
                 std::io::ErrorKind::Other,
                 format!("client post request failed: {}", e),
             )
         })?;
 
-        let bytes = body::to_bytes(resp.into_body())
+        let bytes = body::to_bytes(resp.body_mut())
             .await
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
-        let resp = serde_json::from_slice(&bytes).map_err(|e| {
+
+        // deserialize bytes to value
+        let v: Value = serde_json::from_slice(&bytes).map_err(|e| {
             std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("failed to create client request: {}", e),
+                format!("failed to deserialize response to value: {}", e),
+            )
+        })?;
+
+        // deserialize result to T
+        let resp = serde_json::from_value(v["result"].to_owned()).map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("failed to deserialize response: {}", e),
             )
         })?;
 

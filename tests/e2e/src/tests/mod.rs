@@ -7,7 +7,13 @@ use std::{
 
 use avalanche_network_runner_sdk::{BlockchainSpec, Client, GlobalConfig, StartRequest};
 use avalanche_types::subnet;
-use spacesvm;
+use spacesvm::{
+    self,
+    api::{
+        client::{claim_tx, get_or_create_pk, Uri},
+        DecodeTxArgs,
+    },
+};
 
 #[tokio::test]
 async fn e2e() {
@@ -47,7 +53,7 @@ async fn e2e() {
         // keep this in sync with "proto" crate
         // ref. https://github.com/ava-labs/avalanchego/blob/v1.9.2/version/constants.go#L15-L17
         let (exec_path, plugins_dir) =
-            avalanche_installer::avalanchego::download(None, None, Some("v1.9.2".to_string()))
+            avalanche_installer::avalanchego::download(None, None, Some("v1.9.3".to_string()))
                 .await
                 .unwrap();
         avalanchego_exec_path = exec_path;
@@ -92,7 +98,7 @@ async fn e2e() {
                 .unwrap(),
             ),
             blockchain_specs: vec![BlockchainSpec {
-                vm_name: String::from("minikvvm"),
+                vm_name: String::from("spacesvm"),
                 genesis: genesis_file_path.to_string(),
                 ..Default::default()
             }],
@@ -177,6 +183,35 @@ async fn e2e() {
         log::info!("{}: {}", node_name, iv.uri);
         rpc_eps.push(iv.uri.clone());
     }
+
+    let ep = format!(
+        "{}/{}",
+        rpc_eps[0].to_owned(),
+        spacesvm::vm::PUBLIC_API_ENDPOINT
+    );
+    let private_key = get_or_create_pk("/tmp/.spacesvm-cli-pk").expect("generate new private key");
+
+    let mut scli = spacesvm::api::client::Client::new(ep.parse::<Uri>().expect("valid endpoint"))
+        .set_private_key(private_key);
+    log::info!("ping request...");
+    let resp = scli.ping().await.expect("ping success");
+    log::info!("ping response from {}: {:?}", ep, resp);
+
+    log::info!("decode claim tx request...");
+    let resp = scli
+        .decode_tx(DecodeTxArgs {
+            tx_data: claim_tx("test".to_owned()),
+        })
+        .await
+        .expect("decodeTx success");
+    log::info!("decode claim response from {}: {:?}", ep, resp);
+
+    log::info!("issue claim tx request...");
+    let resp = scli
+        .issue_tx(&resp.typed_data)
+        .await
+        .expect("issue_tx success");
+    log::info!("issue claim tx response from {}: {:?}", ep, resp);
 
     if crate::get_network_runner_enable_shutdown() {
         log::info!("shutdown is enabled... stopping...");
