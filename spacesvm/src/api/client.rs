@@ -53,9 +53,8 @@ impl Client<HttpConnector> {
         Id::Num(id)
     }
 
-    pub fn set_endpoint(mut self, endpoint: Uri) -> Self {
+    pub fn set_endpoint(&mut self, endpoint: Uri) {
         self.endpoint = endpoint;
-        self
     }
 
     pub fn set_private_key(mut self, private_key: Key) -> Self {
@@ -81,7 +80,7 @@ impl Client<HttpConnector> {
     /// Returns a recoverable signature from bytes.
     pub fn sign_digest(&self, dh: &[u8]) -> Result<Sig> {
         if let Some(pk) = &self.private_key {
-            pk.sign_digest(dh)?;
+            return pk.sign_digest(dh);
         }
         Err(Error::new(ErrorKind::Other, "private key not set"))
     }
@@ -125,7 +124,7 @@ impl Client<HttpConnector> {
             space: space.as_bytes().to_vec(),
             key: key.as_bytes().to_vec(),
         })?;
-        let (_id, json_request) = self.raw_request("issueTx", &Params::Array(vec![arg_value]));
+        let (_id, json_request) = self.raw_request("resolve", &Params::Array(vec![arg_value]));
         let resp = self.post_de::<ResolveResponse>(&json_request).await?;
 
         Ok(resp)
@@ -133,7 +132,6 @@ impl Client<HttpConnector> {
 
     /// Returns a deserialized response from client request.
     pub async fn post_de<T: de::DeserializeOwned>(&self, json: &str) -> Result<T> {
-        println!("json: {}", json);
         let req = Request::builder()
             .method(Method::POST)
             .uri(self.endpoint.to_string())
@@ -221,8 +219,8 @@ pub fn get_or_create_pk(path: &str) -> Result<key::secp256k1::private_key::Key> 
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
 }
 
-#[tokio::test]
-async fn test_raw_request() {
+#[test]
+fn test_raw_request() {
     let mut cli = Client::new(Uri::from_static("http://test.url"));
     let (id, _) = cli.raw_request("ping", &Params::None);
     assert_eq!(id, jsonrpc_core::Id::Num(0));

@@ -1,15 +1,16 @@
 use std::{
     fs,
     path::Path,
+    str::FromStr,
     thread,
     time::{Duration, Instant},
 };
 
 use avalanche_network_runner_sdk::{BlockchainSpec, Client, GlobalConfig, StartRequest};
-use avalanche_types::subnet;
+use avalanche_types::{ids, subnet};
 use spacesvm::{
     self,
-    api::client::{claim_tx, get_or_create_pk, Uri},
+    api::client::{claim_tx, get_or_create_pk, set_tx, Uri},
 };
 
 #[tokio::test]
@@ -33,7 +34,7 @@ async fn e2e() {
     assert!(exists);
     assert!(Path::new(&vm_plugin_path).exists());
 
-    let vm_id = subnet::vm_name_to_id("minikvvm").unwrap();
+    let vm_id = subnet::vm_name_to_id("spacesvm").unwrap();
 
     let (mut avalanchego_exec_path, _) = crate::get_avalanchego_path();
     let plugins_dir = if !avalanchego_exec_path.is_empty() {
@@ -50,7 +51,7 @@ async fn e2e() {
         // keep this in sync with "proto" crate
         // ref. https://github.com/ava-labs/avalanchego/blob/v1.9.2/version/constants.go#L15-L17
         let (exec_path, plugins_dir) =
-            avalanche_installer::avalanchego::download(None, None, Some("v1.9.2".to_string()))
+            avalanche_installer::avalanchego::download(None, None, Some("v1.9.3".to_string()))
                 .await
                 .unwrap();
         avalanchego_exec_path = exec_path;
@@ -180,33 +181,68 @@ async fn e2e() {
         log::info!("{}: {}", node_name, iv.uri);
         rpc_eps.push(iv.uri.clone());
     }
+    let mut blockchain_id = ids::Id::empty();
+    for (k, v) in cluster_info.custom_chains.iter() {
+        log::info!("custom chain info: {}={:?}", k, v);
+        if v.chain_name == "spacesvm" {
+            blockchain_id = ids::Id::from_str(&v.chain_id).unwrap();
+            break;
+        }
+    }
 
-    let ep = format!(
-        "{}/{}",
-        rpc_eps[0].to_owned(),
-        spacesvm::vm::PUBLIC_API_ENDPOINT
-    );
+    log::info!("avalanchego RPC endpoints: {:?}", rpc_eps);
+
     let private_key = get_or_create_pk("/tmp/.spacesvm-cli-pk").expect("generate new private key");
+    let chain_url = format!("{}/ext/bc/{}/public", rpc_eps[0], blockchain_id);
+    let mut scli =
+        spacesvm::api::client::Client::new(chain_url.parse::<Uri>().expect("valid endpoint"))
+            .set_private_key(private_key);
+    for ep in rpc_eps.iter() {
+        let chain_url = format!("{}/ext/bc/{}/public", ep, blockchain_id)
+            .parse::<Uri>()
+            .expect("valid endpoint");
+        scli.set_endpoint(chain_url);
+        let resp = scli.ping().await.unwrap();
+        log::info!("ping response from {}: {:?}", ep, resp);
+        assert!(resp.success);
 
-    let mut scli = spacesvm::api::client::Client::new(ep.parse::<Uri>().expect("valid endpoint"))
-        .set_private_key(private_key);
-    log::info!("ping request...");
-    let resp = scli.ping().await.expect("ping success");
-    log::info!("ping response from {}: {:?}", ep, resp);
+        thread::sleep(Duration::from_millis(300));
+    }
+
+    scli.set_endpoint(chain_url.parse::<Uri>().expect("valid endpoint"));
 
     log::info!("decode claim tx request...");
     let resp = scli
         .decode_tx(claim_tx("test"))
         .await
         .expect("decodeTx success");
-    log::info!("decode claim response from {}: {:?}", ep, resp);
+    log::info!("decode claim response from {}: {:?}", chain_url, resp);
 
     log::info!("issue claim tx request...");
     let resp = scli
         .issue_tx(&resp.typed_data)
         .await
         .expect("issue_tx success");
-    log::info!("issue claim tx response from {}: {:?}", ep, resp);
+    log::info!("issue claim tx response from {}: {:?}", chain_url, resp);
+
+    log::info!("decode set tx request...");
+    let resp = scli
+        .decode_tx(set_tx("test", "foo", "bar"))
+        .await
+        .expect("decodeTx success");
+    log::info!("decode set response from {}: {:?}", chain_url, resp);
+
+    log::info!("issue set tx request...");
+    let resp = scli
+        .issue_tx(&resp.typed_data)
+        .await
+        .expect("issue_tx success");
+    log::info!("issue tx tx response from {}: {:?}", chain_url, resp);
+
+    log::info!("issue resolve request...");
+    let resp = scli.resolve("test", "foo").await.expect("resolve success");
+    log::info!("resolve response from {}: {:?}", chain_url, resp);
+    assert_eq!(std::str::from_utf8(&resp.value).unwrap(), "bar");
 
     if crate::get_network_runner_enable_shutdown() {
         log::info!("shutdown is enabled... stopping...");

@@ -43,8 +43,8 @@ struct Cli {
     #[command(subcommand)]
     command: Command,
 }
-
-fn main() -> Result<(), Box<dyn error::Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn error::Error>> {
     let cli = Cli::parse();
 
     let private_key = get_or_create_pk(&cli.private_key_file)?;
