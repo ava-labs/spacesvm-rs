@@ -138,7 +138,7 @@ async fn test_api() {
     let body = std::str::from_utf8(&resp.body()).unwrap();
     log::info!("ping response {}", body);
 
-    let tx_data = claim_tx("test_claim".to_owned());
+    let tx_data = claim_tx("test_claim");
     let arg_value = serde_json::to_value(&DecodeTxArgs { tx_data }).unwrap();
 
     let (_id, json_str) = client.raw_request("decodeTx", &Params::Array(vec![arg_value]));

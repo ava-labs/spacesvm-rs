@@ -177,29 +177,29 @@ impl Client<HttpConnector> {
     }
 }
 
-pub fn claim_tx(space: String) -> TransactionData {
+pub fn claim_tx(space: &str) -> TransactionData {
     TransactionData {
         typ: TransactionType::Claim,
-        space,
+        space: space.to_owned(),
         key: String::new(),
         value: vec![],
     }
 }
 
-pub fn set_tx(space: String, key: String, value: Vec<u8>) -> TransactionData {
+pub fn set_tx(space: &str, key: &str, value: &str) -> TransactionData {
     TransactionData {
         typ: TransactionType::Set,
-        space,
-        key,
-        value,
+        space: space.to_owned(),
+        key: key.to_owned(),
+        value: value.as_bytes().to_vec(),
     }
 }
 
-pub fn delete_tx(space: String, key: String) -> TransactionData {
+pub fn delete_tx(space: &str, key: &str) -> TransactionData {
     TransactionData {
         typ: TransactionType::Delete,
-        space,
-        key,
+        space: space.to_owned(),
+        key: key.to_owned(),
         value: vec![],
     }
 }

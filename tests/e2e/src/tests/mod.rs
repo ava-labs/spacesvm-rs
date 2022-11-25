@@ -9,10 +9,7 @@ use avalanche_network_runner_sdk::{BlockchainSpec, Client, GlobalConfig, StartRe
 use avalanche_types::subnet;
 use spacesvm::{
     self,
-    api::{
-        client::{claim_tx, get_or_create_pk, Uri},
-        DecodeTxArgs,
-    },
+    api::client::{claim_tx, get_or_create_pk, Uri},
 };
 
 #[tokio::test]
@@ -199,9 +196,7 @@ async fn e2e() {
 
     log::info!("decode claim tx request...");
     let resp = scli
-        .decode_tx(DecodeTxArgs {
-            tx_data: claim_tx("test".to_owned()),
-        })
+        .decode_tx(claim_tx("test"))
         .await
         .expect("decodeTx success");
     log::info!("decode claim response from {}: {:?}", ep, resp);

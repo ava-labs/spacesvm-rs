@@ -84,9 +84,9 @@ fn main() -> Result<(), Box<dyn error::Error>> {
 /// Takes a TX command and returns transaction data.
 fn command_to_tx(command: Command) -> std::io::Result<TransactionData> {
     match command {
-        Command::Claim { space } => Ok(claim_tx(space)),
-        Command::Set { space, key, value } => Ok(set_tx(space, key, value.as_bytes().to_vec())),
-        Command::Delete { space, key } => Ok(delete_tx(space, key)),
+        Command::Claim { space } => Ok(claim_tx(&space)),
+        Command::Set { space, key, value } => Ok(set_tx(&space, &key, &value)),
+        Command::Delete { space, key } => Ok(delete_tx(&space, &key)),
         _ => Err(std::io::Error::new(
             std::io::ErrorKind::Other,
             "not a supported tx",
