@@ -113,7 +113,10 @@ async fn test_api() {
     let client = spacesvm::api::client::Client::new(http::Uri::from_static("http://test.url"));
 
     // ping
-    let (_id, json_str) = client.raw_request("ping", &Params::None).await;
+    let (_id, json_str) = client
+        .raw_request("ping", &Params::None)
+        .await
+        .expect("raw_request success");
     let req = http::request::Builder::new()
         .body(json_str.as_bytes().to_vec())
         .unwrap();
@@ -141,7 +144,8 @@ async fn test_api() {
 
     let (_id, json_str) = client
         .raw_request("decodeTx", &Params::Array(vec![arg_value]))
-        .await;
+        .await
+        .expect("raw_request success");
     log::info!("decodeTx request: {}", json_str);
     let req = http::request::Builder::new()
         .body(json_str.as_bytes().to_vec())

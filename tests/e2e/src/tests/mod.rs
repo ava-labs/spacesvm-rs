@@ -217,7 +217,7 @@ async fn e2e() {
         .decode_tx(claim_tx("test"))
         .await
         .expect("decodeTx success");
-    log::info!("decode claim response from {}: {:?}", chain_url, resp);
+    log::info!("decode claim tx response from {}: {:?}", chain_url, resp);
 
     log::info!("issue claim tx request...");
     let resp = scli
@@ -231,14 +231,14 @@ async fn e2e() {
         .decode_tx(set_tx("test", "foo", "bar"))
         .await
         .expect("decodeTx success");
-    log::info!("decode set response from {}: {:?}", chain_url, resp);
+    log::info!("decode set tx response from {}: {:?}", chain_url, resp);
 
     log::info!("issue set tx request...");
     let resp = scli
         .issue_tx(&resp.typed_data)
         .await
         .expect("issue_tx success");
-    log::info!("issue tx tx response from {}: {:?}", chain_url, resp);
+    log::info!("issue set tx response from {}: {:?}", chain_url, resp);
 
     log::info!("issue resolve request...");
     let resp = scli.resolve("test", "foo").await.expect("resolve success");

@@ -28,7 +28,7 @@ use serde::de;
 pub use http::Uri;
 use tokio::sync::RwLock;
 
-/// HTTP client for interacting with the API.
+/// Thread safe HTTP client for interacting with the API.
 pub struct Client<C> {
     inner: Arc<RwLock<ClientInner<C>>>,
 }
@@ -73,7 +73,7 @@ impl Client<HttpConnector> {
     }
 
     /// Returns a serialized json request as string and the request id.
-    pub async fn raw_request(&self, method: &str, params: &Params) -> (Id, String) {
+    pub async fn raw_request(&self, method: &str, params: &Params) -> Result<(Id, String)> {
         let id = self.next_id().await;
         let request = jsonrpc_core::Request::Single(Call::MethodCall(MethodCall {
             jsonrpc: Some(Version::V2),
@@ -81,10 +81,14 @@ impl Client<HttpConnector> {
             params: params.to_owned(),
             id: id.clone(),
         }));
-        (
-            id,
-            serde_json::to_string(&request).expect("jsonrpc request should be serializable"),
-        )
+        let request = serde_json::to_string(&request).map_err(|e| {
+            Error::new(
+                ErrorKind::Other,
+                format!("jsonrpc request should be serializable: {}", e),
+            )
+        })?;
+
+        Ok((id, request))
     }
 
     /// Returns a recoverable signature from 32 byte SHA256 message.
@@ -98,7 +102,7 @@ impl Client<HttpConnector> {
 
     /// Returns a PingResponse from client request.
     pub async fn ping(&self) -> Result<PingResponse> {
-        let (_id, json_request) = self.raw_request("ping", &Params::None).await;
+        let (_id, json_request) = self.raw_request("ping", &Params::None).await?;
         let resp = self.post_de::<PingResponse>(&json_request).await?;
 
         Ok(resp)
@@ -109,7 +113,7 @@ impl Client<HttpConnector> {
         let arg_value = serde_json::to_value(&DecodeTxArgs { tx_data })?;
         let (_id, json_request) = self
             .raw_request("decodeTx", &Params::Array(vec![arg_value]))
-            .await;
+            .await?;
         let resp = self.post_de::<DecodeTxResponse>(&json_request).await?;
 
         Ok(resp)
@@ -127,7 +131,7 @@ impl Client<HttpConnector> {
         })?;
         let (_id, json_request) = self
             .raw_request("issueTx", &Params::Array(vec![arg_value]))
-            .await;
+            .await?;
         let resp = self.post_de::<IssueTxResponse>(&json_request).await?;
 
         Ok(resp)
@@ -141,7 +145,7 @@ impl Client<HttpConnector> {
         })?;
         let (_id, json_request) = self
             .raw_request("resolve", &Params::Array(vec![arg_value]))
-            .await;
+            .await?;
         let resp = self.post_de::<ResolveResponse>(&json_request).await?;
 
         Ok(resp)
@@ -241,9 +245,9 @@ pub fn get_or_create_pk(path: &str) -> Result<key::secp256k1::private_key::Key> 
 #[tokio::test]
 async fn test_raw_request() {
     let cli = Client::new(Uri::from_static("http://test.url"));
-    let (id, _) = cli.raw_request("ping", &Params::None).await;
+    let (id, _) = cli.raw_request("ping", &Params::None).await.unwrap();
     assert_eq!(id, jsonrpc_core::Id::Num(0));
-    let (id, req) = cli.raw_request("ping", &Params::None).await;
+    let (id, req) = cli.raw_request("ping", &Params::None).await.unwrap();
     assert_eq!(id, jsonrpc_core::Id::Num(1));
     assert_eq!(
         req,
