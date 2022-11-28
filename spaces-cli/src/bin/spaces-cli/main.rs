@@ -49,11 +49,14 @@ async fn main() -> Result<(), Box<dyn error::Error>> {
 
     let private_key = get_or_create_pk(&cli.private_key_file)?;
     let uri = cli.endpoint.parse::<Uri>()?;
-    let mut client = Client::new(uri).set_private_key(private_key);
+    let client = Client::new(uri);
+    client.set_private_key(private_key).await;
 
     if let Command::Get { space, key } = &cli.command {
-        let resp =
-            futures::executor::block_on(client.resolve(space, key)).map_err(|e| e.to_string())?;
+        let resp = client
+            .resolve(space, key)
+            .await
+            .map_err(|e| e.to_string())?;
         log::debug!("resolve response: {:?}", resp);
 
         println!("{}", serde_json::to_string(&resp)?);
@@ -61,7 +64,7 @@ async fn main() -> Result<(), Box<dyn error::Error>> {
     }
 
     if let Command::Ping {} = &cli.command {
-        let resp = futures::executor::block_on(client.ping()).map_err(|e| e.to_string())?;
+        let resp = client.ping().await.map_err(|e| e.to_string())?;
 
         println!("{}", serde_json::to_string(&resp)?);
         return Ok(());
@@ -74,8 +77,10 @@ async fn main() -> Result<(), Box<dyn error::Error>> {
     let typed_data = &resp.typed_data;
 
     // issue tx
-    let resp =
-        futures::executor::block_on(client.issue_tx(typed_data)).map_err(|e| e.to_string())?;
+    let resp = client
+        .issue_tx(typed_data)
+        .await
+        .map_err(|e| e.to_string())?;
     println!("{}", serde_json::to_string(&resp)?);
 
     Ok(())

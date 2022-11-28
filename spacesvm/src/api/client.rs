@@ -2,6 +2,7 @@ use std::{
     fs::File,
     io::{Error, ErrorKind, Result, Write},
     path::Path,
+    sync::Arc,
 };
 
 use crate::{
@@ -25,9 +26,14 @@ use jsonrpc_core::{Call, Id, MethodCall, Params, Value, Version};
 use serde::de;
 
 pub use http::Uri;
+use tokio::sync::RwLock;
 
-/// HTTP client for interacting with the API, assumes single threaded use.
+/// HTTP client for interacting with the API.
 pub struct Client<C> {
+    inner: Arc<RwLock<ClientInner<C>>>,
+}
+
+pub struct ClientInner<C> {
     id: u64,
     client: HyperClient<C>,
     endpoint: Uri,
@@ -38,33 +44,37 @@ impl Client<HttpConnector> {
     pub fn new(endpoint: Uri) -> Self {
         let client = HyperClient::new();
         Self {
-            id: 0,
-            client,
-            endpoint,
-            private_key: None,
+            inner: Arc::new(RwLock::new(ClientInner {
+                id: 0,
+                client,
+                endpoint,
+                private_key: None,
+            })),
         }
     }
 }
 
 impl Client<HttpConnector> {
-    fn next_id(&mut self) -> Id {
-        let id = self.id;
-        self.id = id + 1;
+    async fn next_id(&self) -> Id {
+        let mut client = self.inner.write().await;
+        let id = client.id;
+        client.id = id + 1;
         Id::Num(id)
     }
 
-    pub fn set_endpoint(&mut self, endpoint: Uri) {
-        self.endpoint = endpoint;
+    pub async fn set_endpoint(&self, endpoint: Uri) {
+        let mut inner = self.inner.write().await;
+        inner.endpoint = endpoint;
     }
 
-    pub fn set_private_key(mut self, private_key: Key) -> Self {
-        self.private_key = Some(private_key);
-        self
+    pub async fn set_private_key(&self, private_key: Key) {
+        let mut inner = self.inner.write().await;
+        inner.private_key = Some(private_key);
     }
 
     /// Returns a serialized json request as string and the request id.
-    pub fn raw_request(&mut self, method: &str, params: &Params) -> (Id, String) {
-        let id = self.next_id();
+    pub async fn raw_request(&self, method: &str, params: &Params) -> (Id, String) {
+        let id = self.next_id().await;
         let request = jsonrpc_core::Request::Single(Call::MethodCall(MethodCall {
             jsonrpc: Some(Version::V2),
             method: method.to_owned(),
@@ -77,54 +87,61 @@ impl Client<HttpConnector> {
         )
     }
 
-    /// Returns a recoverable signature from bytes.
-    pub fn sign_digest(&self, dh: &[u8]) -> Result<Sig> {
-        if let Some(pk) = &self.private_key {
+    /// Returns a recoverable signature from 32 byte SHA256 message.
+    pub async fn sign_digest(&self, dh: &[u8]) -> Result<Sig> {
+        let inner = self.inner.read().await;
+        if let Some(pk) = &inner.private_key {
             return pk.sign_digest(dh);
         }
         Err(Error::new(ErrorKind::Other, "private key not set"))
     }
 
     /// Returns a PingResponse from client request.
-    pub async fn ping(&mut self) -> Result<PingResponse> {
-        let (_id, json_request) = self.raw_request("ping", &Params::None);
+    pub async fn ping(&self) -> Result<PingResponse> {
+        let (_id, json_request) = self.raw_request("ping", &Params::None).await;
         let resp = self.post_de::<PingResponse>(&json_request).await?;
 
         Ok(resp)
     }
 
     /// Returns a DecodeTxResponse from client request.
-    pub async fn decode_tx(&mut self, tx_data: TransactionData) -> Result<DecodeTxResponse> {
+    pub async fn decode_tx(&self, tx_data: TransactionData) -> Result<DecodeTxResponse> {
         let arg_value = serde_json::to_value(&DecodeTxArgs { tx_data })?;
-        let (_id, json_request) = self.raw_request("decodeTx", &Params::Array(vec![arg_value]));
+        let (_id, json_request) = self
+            .raw_request("decodeTx", &Params::Array(vec![arg_value]))
+            .await;
         let resp = self.post_de::<DecodeTxResponse>(&json_request).await?;
 
         Ok(resp)
     }
 
     /// Returns a IssueTxResponse from client request.
-    pub async fn issue_tx(&mut self, typed_data: &TypedData) -> Result<IssueTxResponse> {
+    pub async fn issue_tx(&self, typed_data: &TypedData) -> Result<IssueTxResponse> {
         let dh = decoder::hash_structured_data(typed_data)?;
-        let sig = self.sign_digest(&dh.as_bytes())?.to_bytes().to_vec();
+        let sig = self.sign_digest(&dh.as_bytes()).await?.to_bytes().to_vec();
         log::debug!("signature: {:?}", sig);
 
         let arg_value = serde_json::to_value(&IssueTxArgs {
             typed_data: typed_data.to_owned(),
             signature: sig,
         })?;
-        let (_id, json_request) = self.raw_request("issueTx", &Params::Array(vec![arg_value]));
+        let (_id, json_request) = self
+            .raw_request("issueTx", &Params::Array(vec![arg_value]))
+            .await;
         let resp = self.post_de::<IssueTxResponse>(&json_request).await?;
 
         Ok(resp)
     }
 
     /// Returns a ResolveResponse from client request.
-    pub async fn resolve(&mut self, space: &str, key: &str) -> Result<ResolveResponse> {
+    pub async fn resolve(&self, space: &str, key: &str) -> Result<ResolveResponse> {
         let arg_value = serde_json::to_value(&ResolveArgs {
             space: space.as_bytes().to_vec(),
             key: key.as_bytes().to_vec(),
         })?;
-        let (_id, json_request) = self.raw_request("resolve", &Params::Array(vec![arg_value]));
+        let (_id, json_request) = self
+            .raw_request("resolve", &Params::Array(vec![arg_value]))
+            .await;
         let resp = self.post_de::<ResolveResponse>(&json_request).await?;
 
         Ok(resp)
@@ -132,9 +149,11 @@ impl Client<HttpConnector> {
 
     /// Returns a deserialized response from client request.
     pub async fn post_de<T: de::DeserializeOwned>(&self, json: &str) -> Result<T> {
+        let inner = self.inner.read().await;
+
         let req = Request::builder()
             .method(Method::POST)
-            .uri(self.endpoint.to_string())
+            .uri(inner.endpoint.to_string())
             .header("content-type", "application/json-rpc")
             .body(Body::from(json.to_owned()))
             .map_err(|e| {
@@ -144,7 +163,7 @@ impl Client<HttpConnector> {
                 )
             })?;
 
-        let mut resp = self.client.request(req).await.map_err(|e| {
+        let mut resp = inner.client.request(req).await.map_err(|e| {
             std::io::Error::new(
                 std::io::ErrorKind::Other,
                 format!("client post request failed: {}", e),
@@ -219,12 +238,12 @@ pub fn get_or_create_pk(path: &str) -> Result<key::secp256k1::private_key::Key> 
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
 }
 
-#[test]
-fn test_raw_request() {
-    let mut cli = Client::new(Uri::from_static("http://test.url"));
-    let (id, _) = cli.raw_request("ping", &Params::None);
+#[tokio::test]
+async fn test_raw_request() {
+    let cli = Client::new(Uri::from_static("http://test.url"));
+    let (id, _) = cli.raw_request("ping", &Params::None).await;
     assert_eq!(id, jsonrpc_core::Id::Num(0));
-    let (id, req) = cli.raw_request("ping", &Params::None);
+    let (id, req) = cli.raw_request("ping", &Params::None).await;
     assert_eq!(id, jsonrpc_core::Id::Num(1));
     assert_eq!(
         req,

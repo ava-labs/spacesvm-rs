@@ -15,7 +15,7 @@ name = "spacesvm"
 path = "src/bin/spaces/main.rs"
 
 [dependencies]
-avalanche-types = { version = "0.0.140", features = ["subnet"] }
+avalanche-types = { version = "0.0.143", features = ["subnet"] }
 byteorder = "1.4.3"
 chrono = "0.4.22"
 crossbeam-channel = "0.5.6"

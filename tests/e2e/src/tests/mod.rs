@@ -194,14 +194,14 @@ async fn e2e() {
 
     let private_key = get_or_create_pk("/tmp/.spacesvm-cli-pk").expect("generate new private key");
     let chain_url = format!("{}/ext/bc/{}/public", rpc_eps[0], blockchain_id);
-    let mut scli =
-        spacesvm::api::client::Client::new(chain_url.parse::<Uri>().expect("valid endpoint"))
-            .set_private_key(private_key);
+    let scli =
+        spacesvm::api::client::Client::new(chain_url.parse::<Uri>().expect("valid endpoint"));
+    scli.set_private_key(private_key).await;
     for ep in rpc_eps.iter() {
         let chain_url = format!("{}/ext/bc/{}/public", ep, blockchain_id)
             .parse::<Uri>()
             .expect("valid endpoint");
-        scli.set_endpoint(chain_url);
+        scli.set_endpoint(chain_url).await;
         let resp = scli.ping().await.unwrap();
         log::info!("ping response from {}: {:?}", ep, resp);
         assert!(resp.success);
@@ -209,7 +209,8 @@ async fn e2e() {
         thread::sleep(Duration::from_millis(300));
     }
 
-    scli.set_endpoint(chain_url.parse::<Uri>().expect("valid endpoint"));
+    scli.set_endpoint(chain_url.parse::<Uri>().expect("valid endpoint"))
+        .await;
 
     log::info!("decode claim tx request...");
     let resp = scli

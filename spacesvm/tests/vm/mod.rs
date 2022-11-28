@@ -26,10 +26,8 @@ async fn test_api() {
 
     // setup stop channel for grpc services.
     let (stop_ch_tx, stop_ch_rx): (Sender<()>, Receiver<()>) = tokio::sync::broadcast::channel(1);
-    let vm_server = avalanche_types::subnet::rpc::vm::server::Server::new(
-        Box::new(vm::ChainVm::new()),
-        stop_ch_tx,
-    );
+    let vm_server =
+        avalanche_types::subnet::rpc::vm::server::Server::new(Box::new(vm::ChainVm::new()), stop_ch_tx);
 
     // start Vm service
     let vm_addr = utils::new_socket_addr();
@@ -115,7 +113,7 @@ async fn test_api() {
     let mut client = spacesvm::api::client::Client::new(http::Uri::from_static("http://test.url"));
 
     // ping
-    let (_id, json_str) = client.raw_request("ping", &Params::None);
+    let (_id, json_str) = client.raw_request("ping", &Params::None).await;
     let req = http::request::Builder::new()
         .body(json_str.as_bytes().to_vec())
         .unwrap();
@@ -141,7 +139,9 @@ async fn test_api() {
     let tx_data = claim_tx("test_claim");
     let arg_value = serde_json::to_value(&DecodeTxArgs { tx_data }).unwrap();
 
-    let (_id, json_str) = client.raw_request("decodeTx", &Params::Array(vec![arg_value]));
+    let (_id, json_str) = client
+        .raw_request("decodeTx", &Params::Array(vec![arg_value]))
+        .await;
     log::info!("decodeTx request: {}", json_str);
     let req = http::request::Builder::new()
         .body(json_str.as_bytes().to_vec())
