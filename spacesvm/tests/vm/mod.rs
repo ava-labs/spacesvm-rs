@@ -26,8 +26,10 @@ async fn test_api() {
 
     // setup stop channel for grpc services.
     let (stop_ch_tx, stop_ch_rx): (Sender<()>, Receiver<()>) = tokio::sync::broadcast::channel(1);
-    let vm_server =
-        avalanche_types::subnet::rpc::vm::server::Server::new(Box::new(vm::ChainVm::new()), stop_ch_tx);
+    let vm_server = avalanche_types::subnet::rpc::vm::server::Server::new(
+        Box::new(vm::ChainVm::new()),
+        stop_ch_tx,
+    );
 
     // start Vm service
     let vm_addr = utils::new_socket_addr();
