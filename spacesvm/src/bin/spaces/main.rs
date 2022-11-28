@@ -45,7 +45,7 @@ async fn main() -> Result<()> {
     ) = tokio::sync::broadcast::channel(1);
 
     info!("starting spacesvm-rs");
-    let vm_server = subnet::rpc::vm::server::Server::new(Box::new(vm::ChainVm::new()), stop_ch_tx);
+    let vm_server = subnet::rpc::vm::server::Server::new(vm::ChainVm::new(), stop_ch_tx);
 
     subnet::rpc::plugin::serve(vm_server, stop_ch_rx)
         .await
