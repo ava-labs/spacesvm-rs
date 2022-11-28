@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 set -e
 
-# build spacesvm-rs binary
+# build spacesvm binary
 # ./scripts/build.release.sh
 #
 # download from github, keep network running
-# VM_PLUGIN_PATH=$(pwd)/target/release/spacesvm-rs ./scripts/tests.e2e.sh
+# VM_PLUGIN_PATH=$(pwd)/target/release/spacesvm ./scripts/tests.e2e.sh
 #
 # download from github, shut down network
-# NETWORK_RUNNER_ENABLE_SHUTDOWN=1 VM_PLUGIN_PATH=$(pwd)/target/release/spacesvm-rs ./scripts/tests.e2e.sh
+# NETWORK_RUNNER_ENABLE_SHUTDOWN=1 VM_PLUGIN_PATH=$(pwd)/target/release/spacesvm ./scripts/tests.e2e.sh
 #
 # use custom avalanchego binary
-# VM_PLUGIN_PATH=$(pwd)/target/release/timestampvm ./scripts/tests.e2e.sh ~/go/src/github.com/ava-labs/avalanchego/build/avalanchego
+# VM_PLUGIN_PATH=$(pwd)/target/release/spacesvm ./scripts/tests.e2e.sh ~/go/src/github.com/ava-labs/avalanchego/build/avalanchego
 #
 if ! [[ "$0" =~ scripts/tests.e2e.sh ]]; then
   echo "must be run from repository root"
